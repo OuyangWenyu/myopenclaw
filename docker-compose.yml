@@ -1,0 +1,44 @@
+services:
+  openclaw:
+    build:
+      context: ./openclaw
+      dockerfile: Dockerfile
+    container_name: openclaw
+    restart: unless-stopped
+    ports:
+      - "${OPENCLAW_PORT:-3000}:3000"
+    env_file:
+      - .env
+      - openclaw/.env
+      - .secrets/openclaw.env          # git-crypt 解密后存在
+    volumes:
+      # agent 配置（只读）
+      - ./openclaw/config:/app/config:ro
+      # 运行时数据 → 挂载到云盘软链接目录
+      - ./.data/openclaw:/data
+    networks:
+      - myopenclaw-net
+
+  hermes:
+    build:
+      context: ./hermes
+      dockerfile: Dockerfile
+    container_name: hermes
+    restart: unless-stopped
+    ports:
+      - "${HERMES_PORT:-3001}:3001"
+    env_file:
+      - .env
+      - hermes/.env
+      - .secrets/hermes.env            # git-crypt 解密后存在
+    volumes:
+      # agent 配置（只读）
+      - ./hermes/config:/app/config:ro
+      # 运行时数据 → 挂载到云盘软链接目录
+      - ./.data/hermes:/data
+    networks:
+      - myopenclaw-net
+
+networks:
+  myopenclaw-net:
+    driver: bridge

@@ -1,0 +1,19 @@
+# =============================================================
+# 云盘配置模板 — 复制为 .cloud.conf 并修改为本机实际路径
+# .cloud.conf 已被 .gitignore 排除，不会入 git
+# =============================================================
+
+# 选择使用的云盘提供商: google_drive | onedrive | custom
+CLOUD_PROVIDER=google_drive
+
+# Google Drive 本地同步根目录（macOS 默认路径）
+GOOGLE_DRIVE_PATH="${HOME}/Google Drive/我的云端硬盘"
+
+# OneDrive 本地同步根目录（macOS 默认路径）
+ONEDRIVE_PATH="${HOME}/OneDrive"
+
+# 自定义云盘路径（当 CLOUD_PROVIDER=custom 时生效）
+CUSTOM_CLOUD_PATH=""
+
+# 数据在云盘内的子目录（会自动创建）
+DATA_SUBDIR="myopenclaw/data"

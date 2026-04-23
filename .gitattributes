@@ -1,0 +1,7 @@
+# git-crypt 加密规则
+# .secrets/ 目录下所有文件（*.example 除外）均由 git-crypt 透明加密
+.secrets/** filter=git-crypt diff=git-crypt
+.secrets/*.env filter=git-crypt diff=git-crypt
+
+# 模板文件明文保存，不加密
+.secrets/*.example !filter !diff
