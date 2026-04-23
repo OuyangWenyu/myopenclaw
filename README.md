@@ -143,6 +143,75 @@ myopenclaw/
 
 **OpenClaw 备份**：`openclaw.json`、`agents/`、`flows/`、`extensions/`、`memory/main.sqlite`（热备份）
 
-**Data 备份**：`~/.myagentdata/` 整目录 rsync 快照。所有数据类应用统一放此目录的子目录下（如 `~/.myagentdata/aisecretary/`），无需额外配置即自动备份。
+**Data 备份**：`~/.myagentdata/` 整目录 rsync 快照。所有数据类应用统一放此目录的子目录下（如 `~/.myagentdata/aisecretary/`、`~/.myagentdata/dailyinfo/`），无需额外配置即自动备份。
 
 不备份：大型缓存、临时会话、auth token、日志等。
+
+---
+
+## dailyinfo 调度
+
+[dailyinfo](https://github.com/OuyangWenyu/dailyinfo) 是独立的 AI for Science 情报聚合仓（本机路径固定为 `/Users/owen/code/dailyinfo`，与 myopenclaw 是兄弟目录）。dailyinfo 自身只提供幂等 CLI，调度由本仓通过宿主机 launchd 托管。数据落在 `~/.myagentdata/dailyinfo/`，已被 `backup-cron` 自动覆盖，无需额外挂载。
+
+### 前置
+
+dailyinfo `run` 依赖 FreshRSS 容器常驻（由 dailyinfo 自己的 `docker-compose.yml` 管理，容器名 `dailyinfo_freshrss`，端口 `8081`）。**myopenclaw 的定时任务不会自动拉起它**。首次部署或停机后，去 dailyinfo 仓启一次即可：
+
+```bash
+cd /Users/owen/code/dailyinfo && uv run dailyinfo start
+```
+
+FreshRSS 配了 `restart: unless-stopped`，起一次之后宿主机重启也会自己恢复。容器挂了再手动 `dailyinfo start` 即可。
+
+### 调度表
+
+| 时间（Asia/Shanghai） | LaunchAgent Label | 命令 |
+|---|---|---|
+| 06:00 | `ai.dailyinfo.run-p1` | `uv run dailyinfo run -p 1`（RSS papers / AI news） |
+| 06:15 | `ai.dailyinfo.run-p2` | `uv run dailyinfo run -p 2`（code trending） |
+| 06:30 | `ai.dailyinfo.run-p3` | `uv run dailyinfo run -p 3`（university news） |
+| 07:00 | `ai.dailyinfo.push`   | `uv run dailyinfo push` |
+
+日志统一落在 `/Users/owen/code/dailyinfo/logs/dailyinfo-<cmd>.log`。
+
+### 安装 / 卸载
+
+```bash
+# 首次部署或新机器
+./scripts/launchd/install-dailyinfo.sh
+
+# 卸载（停止所有 dailyinfo 定时任务）
+./scripts/launchd/uninstall-dailyinfo.sh
+```
+
+install 脚本会自动解析 dailyinfo 仓路径（默认 `../dailyinfo`）和 `uv` 二进制路径，把 4 个 plist 模板渲染写到 `~/Library/LaunchAgents/` 并 `launchctl load -w`。若 dailyinfo 放在别处，用环境变量覆盖：
+
+```bash
+DAILYINFO_DIR=/path/to/dailyinfo ./scripts/launchd/install-dailyinfo.sh
+```
+
+### 失败排查
+
+失败优先级从低到高：
+
+1. 看日志（最常用）：
+   ```bash
+   tail -n 200 /Users/owen/code/dailyinfo/logs/dailyinfo-*.log
+   ```
+2. 看 launchd 上次退出码（非 0/1 才需要关注）：
+   ```bash
+   launchctl list | grep ai.dailyinfo
+   ```
+3. 进 dailyinfo 目录跑状态检查：
+   ```bash
+   cd /Users/owen/code/dailyinfo && uv run dailyinfo status
+   ```
+
+### 告警策略
+
+- `run` / `push` 返回 **退出码 0**（至少成功处理 1 份）和 **退出码 1**（当天已全部处理或无新内容）**都是正常状态**，不要作为失败告警。
+- 真正需要关注的是「连续若干天日志不再更新」「退出码 ≥ 2」「进程崩溃」这种硬故障。
+
+### 不在本仓维护的内容
+
+dailyinfo 的 secret（`OPENROUTER_API_KEY` / `DISCORD_BOT_TOKEN` / `DISCORD_CHANNEL_*`）、数据源配置（`config/sources.json`）、抓取 / AI 摘要 / 推送业务逻辑全部由 dailyinfo 仓自己管理，本仓只负责定时触发和备份覆盖。

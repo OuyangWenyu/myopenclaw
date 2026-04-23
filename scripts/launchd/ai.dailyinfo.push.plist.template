@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>ai.dailyinfo.push</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-lc</string>
+        <string>cd "__DAILYINFO_DIR__" &amp;&amp; "__UV_BIN__" run dailyinfo push</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__DAILYINFO_DIR__</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PATH</key>
+        <string>__PATH__</string>
+    </dict>
+
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>7</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <key>RunAtLoad</key>
+    <false/>
+
+    <key>StandardOutPath</key>
+    <string>__DAILYINFO_DIR__/logs/dailyinfo-push.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>__DAILYINFO_DIR__/logs/dailyinfo-push.log</string>
+</dict>
+</plist>
