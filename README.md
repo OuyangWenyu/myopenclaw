@@ -9,7 +9,7 @@
 | hermes | `nousresearch/hermes-agent:latest` | 8642 | Hermes gateway |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板 |
 | openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway |
-| backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每天 9:00 和 21:00）|
+| backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每周日凌晨 2:00）|
 
 数据目录映射：
 
