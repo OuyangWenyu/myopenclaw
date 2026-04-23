@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # =============================================================
-# restore.sh — 从云盘快照恢复 hermes / openclaw 数据
-# 用法: ./scripts/restore.sh [hermes|openclaw|all] [TIMESTAMP|latest]
+# restore.sh — 从云盘快照恢复 hermes / openclaw / ~/.myagentdata 数据
+# 用法: ./scripts/restore.sh [hermes|openclaw|data|all] [TIMESTAMP|latest]
 # 示例:
-#   ./scripts/restore.sh all latest          # 恢复两者最新快照
+#   ./scripts/restore.sh all latest          # 恢复全部最新快照
 #   ./scripts/restore.sh hermes latest       # 仅恢复 hermes 最新快照
-#   ./scripts/restore.sh openclaw 2026-04-23_090000  # 恢复指定快照
+#   ./scripts/restore.sh data 2026-04-23_090000  # 恢复指定快照
 # =============================================================
 set -euo pipefail
 
@@ -17,8 +17,8 @@ SERVICE="${1:-all}"
 SNAPSHOT="${2:-latest}"
 
 # ── 参数校验 ─────────────────────────────────────────────────
-if [[ ! "${SERVICE}" =~ ^(hermes|openclaw|all)$ ]]; then
-  echo "用法: $0 [hermes|openclaw|all] [TIMESTAMP|latest]"
+if [[ ! "${SERVICE}" =~ ^(hermes|openclaw|data|all)$ ]]; then
+  echo "用法: $0 [hermes|openclaw|data|all] [TIMESTAMP|latest]"
   exit 1
 fi
 
@@ -56,6 +56,7 @@ restore_service() {
   case "${svc}" in
     hermes)   dest="${HOME}/.hermes" ;;
     openclaw) dest="${HOME}/.openclaw" ;;
+    data)     dest="${HOME}/.myagentdata" ;;
   esac
 
   local src="${BACKUP_ROOT}/${svc}/${snapshot}"
@@ -98,6 +99,10 @@ fi
 
 if [[ "${SERVICE}" == "all" || "${SERVICE}" == "openclaw" ]]; then
   restore_service openclaw "${SNAPSHOT}"
+fi
+
+if [[ "${SERVICE}" == "all" || "${SERVICE}" == "data" ]]; then
+  restore_service data "${SNAPSHOT}"
 fi
 
 echo ""

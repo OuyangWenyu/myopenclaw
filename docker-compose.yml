@@ -84,6 +84,7 @@ services:
     volumes:
       - ${HOME}/.hermes:/root/.hermes:ro
       - ${HOME}/.openclaw:/root/.openclaw:ro
+      - ${HOME}/.myagentdata:/.myagentdata:ro
       - ${BACKUP_ROOT:-/tmp/myopenclaw-backups}:/backup:rw
       - ./hermes/scripts:/hermes-scripts:ro
       - ./openclaw/scripts:/openclaw-scripts:ro

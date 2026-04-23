@@ -1,6 +1,6 @@
 # myopenclaw
 
-用 Docker 运行 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 和 [OpenClaw](https://github.com/openclaw/openclaw)，数据留在本机（`~/.hermes`、`~/.openclaw`），配置用 Git 管理，用户数据定期快照备份到云盘。
+用 Docker 运行 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 和 [OpenClaw](https://github.com/openclaw/openclaw)，数据留在本机（`~/.hermes`、`~/.openclaw`、`~/.myagentdata`），配置用 Git 管理，用户数据定期快照备份到云盘。
 
 ## 服务说明
 
@@ -9,11 +9,13 @@
 | hermes | `nousresearch/hermes-agent:latest` | 8642 | Hermes gateway |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板 |
 | openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway |
-| backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每周日 2:00）|
+| backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每天 9:00 和 21:00）|
 
 数据目录映射：
+
 - `~/.hermes` → `/opt/data`（hermes 容器内）
 - `~/.openclaw` → `/home/node/.openclaw`（openclaw 容器内）
+- `~/.myagentdata` → `/.myagentdata`（backup-cron 容器只读挂载，用于备份）
 
 ---
 
@@ -53,12 +55,13 @@ cp .cloud.conf.example .cloud.conf
 ### 5. 从云盘快照恢复数据（如有）
 
 ```bash
-# 恢复 hermes 和 openclaw 的最新快照到 ~/.hermes 和 ~/.openclaw
+# 恢复全部最新快照（hermes、openclaw、~/.myagentdata）
 ./scripts/restore.sh all latest
 
 # 也可以只恢复某一个，或指定快照时间戳
 ./scripts/restore.sh hermes latest
 ./scripts/restore.sh openclaw 2026-04-23_090000
+./scripts/restore.sh data latest
 ```
 
 ### 6. 启动服务
@@ -99,7 +102,7 @@ docker compose logs -f openclaw-gateway
 docker compose exec backup-cron /scripts/backup-all-docker.sh
 ```
 
-快照保存在：`<云盘路径>/myopenclaw-backups/hermes/` 和 `.../openclaw/`
+快照保存在：`<云盘路径>/myopenclaw-backups/hermes/`、`.../openclaw/`、`.../data/`
 
 每个快照为独立时间戳目录，同时维护一个 `latest/` 软链接。超过 `BACKUP_KEEP_DAYS`（默认 30 天）的旧快照自动清除。
 
@@ -113,7 +116,7 @@ docker compose --profile cli run --rm openclaw-cli
 
 ## 目录结构
 
-```
+```ini
 myopenclaw/
 ├── docker-compose.yml          # 服务编排
 ├── .env.example                # 环境变量模板（端口、cron 等）
@@ -128,6 +131,8 @@ myopenclaw/
     ├── start.sh                # 启动服务
     ├── stop.sh                 # 停止服务
     ├── setup-cloud.sh          # 初始化云盘备份目录
+    ├── backup-data.sh          # ~/.myagentdata 通用快照脚本
+    ├── backup-all.sh           # 本机全量备份（不依赖容器）
     ├── backup-all-docker.sh    # 容器内备份（供 cron 调用）
     └── restore.sh              # 从快照恢复数据
 ```
@@ -137,5 +142,7 @@ myopenclaw/
 **Hermes 备份**：`config.yaml`、`SOUL.md`、`memories/`、`skills/`、`hooks/`、`cron/`
 
 **OpenClaw 备份**：`openclaw.json`、`agents/`、`flows/`、`extensions/`、`memory/main.sqlite`（热备份）
+
+**Data 备份**：`~/.myagentdata/` 整目录 rsync 快照。所有数据类应用统一放此目录的子目录下（如 `~/.myagentdata/aisecretary/`），无需额外配置即自动备份。
 
 不备份：大型缓存、临时会话、auth token、日志等。

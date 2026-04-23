@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # =============================================================
-# backup-all.sh — 快照备份 hermes + openclaw 数据到云盘
+# backup-all.sh — 快照备份 hermes + openclaw + ~/.myagentdata 数据到云盘
 # 用法: ./scripts/backup-all.sh
 # 依赖: .cloud.conf（复制自 .cloud.conf.example 并填写本机路径）
 # =============================================================
@@ -44,7 +44,7 @@ if [[ ! -d "${CLOUD_ROOT}" ]]; then
   exit 1
 fi
 
-mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw"
+mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/data"
 
 echo "📦 备份根目录: ${BACKUP_ROOT}"
 echo "⏰ 时间戳: ${TIMESTAMP}"
@@ -59,6 +59,12 @@ bash "${REPO_ROOT}/hermes/scripts/backup.sh" "${TIMESTAMP}" || echo "⚠️  her
 echo ""
 echo "▶ 备份 openclaw..."
 bash "${REPO_ROOT}/openclaw/scripts/backup.sh" "${TIMESTAMP}" || echo "⚠️  openclaw 备份失败，继续..."
+
+# ── aisecretary 备份 ─────────────────────────────────────────
+echo ""
+echo "▶ 备份 aisecretary..."
+DB_SRC="${HOME}/data/aisecretary/transactions.sqlite" \
+  bash "${REPO_ROOT}/aisecretary/scripts/backup.sh" "${TIMESTAMP}" || echo "⚠️  aisecretary 备份失败，继续..."
 
 echo ""
 echo "✅ 全部备份完成 → ${BACKUP_ROOT}"

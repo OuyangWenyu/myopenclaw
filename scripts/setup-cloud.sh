@@ -48,4 +48,5 @@ fi
 echo "📂 备份根目录: ${BACKUP_ROOT}"
 mkdir -p "${BACKUP_ROOT}/hermes"
 mkdir -p "${BACKUP_ROOT}/openclaw"
+mkdir -p "${BACKUP_ROOT}/data"
 echo "✅ 备份目录已就绪"
