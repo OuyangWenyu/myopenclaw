@@ -1,41 +1,97 @@
 services:
-  openclaw:
-    build:
-      context: ./openclaw
-      dockerfile: Dockerfile
-    container_name: openclaw
+  # ── Hermes gateway ───────────────────────────────────────────
+  hermes:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes
     restart: unless-stopped
+    command: gateway run
     ports:
-      - "${OPENCLAW_PORT:-3000}:3000"
-    env_file:
-      - .env
-      - openclaw/.env
-      - .secrets/openclaw.env          # git-crypt 解密后存在
+      - "${HERMES_PORT:-8642}:8642"
     volumes:
-      # agent 配置（只读）
-      - ./openclaw/config:/app/config:ro
-      # 运行时数据 → 挂载到云盘软链接目录
-      - ./.data/openclaw:/data
+      - ${HOME}/.hermes:/opt/data
+    shm_size: "1g"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
     networks:
       - myopenclaw-net
 
-  hermes:
-    build:
-      context: ./hermes
-      dockerfile: Dockerfile
-    container_name: hermes
+  # ── Hermes dashboard（可选，只读，与 gateway 同网络）─────────
+  hermes-dashboard:
+    image: nousresearch/hermes-agent:latest
+    container_name: hermes-dashboard
+    restart: unless-stopped
+    command: dashboard --host 0.0.0.0
+    ports:
+      - "${HERMES_DASHBOARD_PORT:-9119}:9119"
+    volumes:
+      - ${HOME}/.hermes:/opt/data
+    environment:
+      - GATEWAY_HEALTH_URL=http://hermes:8642
+    depends_on:
+      - hermes
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    networks:
+      - myopenclaw-net
+
+  # ── OpenClaw gateway ─────────────────────────────────────────
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    container_name: openclaw-gateway
     restart: unless-stopped
     ports:
-      - "${HERMES_PORT:-3001}:3001"
-    env_file:
-      - .env
-      - hermes/.env
-      - .secrets/hermes.env            # git-crypt 解密后存在
+      - "${OPENCLAW_PORT:-18789}:18789"
     volumes:
-      # agent 配置（只读）
-      - ./hermes/config:/app/config:ro
-      # 运行时数据 → 挂载到云盘软链接目录
-      - ./.data/hermes:/data
+      - ${HOME}/.openclaw:/home/node/.openclaw
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:18789/healthz"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "2.0"
+    networks:
+      - myopenclaw-net
+
+  # ── OpenClaw CLI（按需运行，不常驻）─────────────────────────
+  openclaw-cli:
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    container_name: openclaw-cli
+    profiles:
+      - cli
+    volumes:
+      - ${HOME}/.openclaw:/home/node/.openclaw
+    network_mode: "service:openclaw-gateway"
+    depends_on:
+      - openclaw-gateway
+
+  # ── 定时快照备份 ─────────────────────────────────────────────
+  backup-cron:
+    build:
+      context: ./docker/backup-cron
+      dockerfile: Dockerfile
+    container_name: backup-cron
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.hermes:/root/.hermes:ro
+      - ${HOME}/.openclaw:/root/.openclaw:ro
+      - ${BACKUP_ROOT}:/backup:rw
+      - ./hermes/scripts:/hermes-scripts:ro
+      - ./openclaw/scripts:/openclaw-scripts:ro
+      - ./scripts:/scripts:ro
+    environment:
+      - BACKUP_CRON=${BACKUP_CRON:-0 9,21 * * *}
+      - BACKUP_KEEP_DAYS=${BACKUP_KEEP_DAYS:-30}
+      - TZ=${TZ:-Asia/Shanghai}
     networks:
       - myopenclaw-net
 

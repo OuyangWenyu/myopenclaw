@@ -15,5 +15,5 @@ ONEDRIVE_PATH="${HOME}/OneDrive"
 # 自定义云盘路径（当 CLOUD_PROVIDER=custom 时生效）
 CUSTOM_CLOUD_PATH=""
 
-# 数据在云盘内的子目录（会自动创建）
-DATA_SUBDIR="myopenclaw/data"
+# 备份在云盘内的子目录（会自动创建）
+BACKUP_SUBDIR="myopenclaw-backups"
