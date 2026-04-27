@@ -41,6 +41,13 @@ fi
 
 mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw"
 
+# ── 确保工具配置目录存在（volume mount 需要）──────────────────
+mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode"
+if [[ ! -f "${HOME}/.config/opencode/opencode.json" ]]; then
+  cp "${REPO_ROOT}/hermes/config/opencode.json.example" "${HOME}/.config/opencode/opencode.json"
+  echo "   📝 已创建 opencode 配置: ~/.config/opencode/opencode.json"
+fi
+
 cd "${REPO_ROOT}"
 
 BUILD_FLAG=""

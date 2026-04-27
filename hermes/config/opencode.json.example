@@ -1,0 +1,25 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/glm-5.1",
+  "small_model": "opencode/gpt-5-nano",
+  "provider": {
+    "opencode": {
+      "options": {
+        "apiKey": "{file:/opt/data/secrets/opencode-api-key}"
+      }
+    },
+    "openrouter": {
+      "options": {
+        "apiKey": "{file:/opt/data/secrets/openrouter-api-key}"
+      }
+    },
+    "deepseek": {
+      "options": {
+        "apiKey": "{file:/opt/data/secrets/deepseek-api-key}"
+      }
+    }
+  },
+  "plugin": [
+    "oh-my-openagent@latest"
+  ]
+}

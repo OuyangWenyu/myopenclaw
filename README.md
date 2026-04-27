@@ -1,12 +1,12 @@
 # myopenclaw
 
-用 Docker 运行 [Hermes Agent](https://github.com/NousResearch/hermes-agent) 和 [OpenClaw](https://github.com/openclaw/openclaw)，数据留在本机（`~/.hermes`、`~/.openclaw`、`~/.myagentdata`），配置用 Git 管理，用户数据定期快照备份到云盘。
+用 Docker 运行 [Hermes Agent](https://github.com/NousResearch/hermes-agent)（含 [opencode](https://opencode.ai) + [GitHub CLI](https://cli.github.com)）和 [OpenClaw](https://github.com/openclaw/openclaw)，数据留在本机（`~/.hermes`、`~/.openclaw`、`~/.myagentdata`），配置用 Git 管理，用户数据定期快照备份到云盘。
 
 ## 服务说明
 
 | 服务 | 镜像 | 默认端口 | 说明 |
 |------|------|----------|------|
-| hermes | `nousresearch/hermes-agent:latest` | 8642 | Hermes gateway |
+| hermes | 自建镜像（基于 `nousresearch/hermes-agent:latest`，含 opencode + gh） | 8642 | Hermes gateway |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板 |
 | openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway |
 | backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每周日凌晨 2:00）|
@@ -16,6 +16,9 @@
 - `~/.hermes` → `/opt/data`（hermes 容器内）
 - `~/.openclaw` → `/home/node/.openclaw`（openclaw 容器内）
 - `~/.myagentdata` → `/.myagentdata`（backup-cron 容器只读挂载，用于备份）
+- `~/.config/gh` → `/opt/gh-config`（hermes 容器内，gh 认证和配置，宿主机持久化）
+- `~/.config/opencode` → `/opt/opencode-config`（hermes 容器内，opencode 配置，宿主机持久化）
+- `~/.hermes/secrets/` → `/opt/data/secrets/`（hermes 容器内，LLM 密钥文件，opencode.json 用 `{file:}` 引用）
 
 ---
 
@@ -38,6 +41,8 @@ cd myopenclaw
 ```bash
 cp .env.example .env
 # 按需修改端口等配置（通常不用改）
+# 如需 gh 认证，取消注释 GH_TOKEN 并填入 GitHub PAT（容器内自动映射为 GITHUB_TOKEN）
+# 如需 opencode，取消注释 OPENCODE_API_KEY 等密钥
 ```
 
 ### 4. 配置云盘路径
@@ -70,11 +75,40 @@ cp .cloud.conf.example .cloud.conf
 ./scripts/start.sh
 ```
 
-首次启动或更新镜像时加 `--build`：
+首次启动或更新镜像时加 `--build`（Hermes 自定义镜像变更后也需重新构建）：
 
 ```bash
 ./scripts/start.sh --build
 ```
+
+### 7. gh 认证（可选）
+
+Hermes 容器内已安装 GitHub CLI，需认证后方可使用。二选一：
+
+- **方式 A**：在 `.env` 中设置 `GH_TOKEN=github_pat_xxxx`（推荐）。容器内自动映射为 `GITHUB_TOKEN`，绕过 Hermes 安全黑名单传递给 bash 子进程。
+- **方式 B**：进入容器交互式登录
+  ```bash
+  docker compose exec hermes gh auth login
+  ```
+  认证状态保存在宿主机 `~/.config/gh/hosts.yml`，容器重建不丢失。
+
+### 8. opencode 配置（可选）
+
+opencode 默认使用 [OpenCode Zen](https://opencode.ai/zen) 的 GLM 5.1 模型。首次启动时会自动创建 `~/.config/opencode/opencode.json`（从 `hermes/config/opencode.json.example` 复制）。
+
+**密钥配置**：由于 Hermes 安全机制会拦截部分环境变量（OPENROUTER、DEEPSEEK、OPENAI 等），密钥统一存放在 `~/.hermes/secrets/` 目录下的文件中（容器内路径 `/opt/data/secrets/`），opencode.json 通过 `{file:路径}` 引用：
+
+```bash
+# 创建密钥文件
+echo -n "你的key" > ~/.hermes/secrets/opencode-api-key      # OpenCode Zen
+echo -n "你的key" > ~/.hermes/secrets/openrouter-api-key    # OpenRouter
+echo -n "你的key" > ~/.hermes/secrets/deepseek-api-key      # DeepSeek
+chmod 640 ~/.hermes/secrets/*
+```
+
+不在黑名单中的密钥（GH_TOKEN → GITHUB_TOKEN、OPENCODE_API_KEY、GLM_API_KEY、ANTHROPIC_API_KEY）通过 `.env` + `env_passthrough` 传递给 Hermes bash 子进程。
+
+被黑名单拦截的密钥（OPENROUTER、DEEPSEEK、OPENAI）必须走文件方式，写入 `~/.hermes/secrets/`。
 
 ---
 
@@ -122,8 +156,10 @@ myopenclaw/
 ├── .env.example                # 环境变量模板（端口、cron 等）
 ├── .cloud.conf.example         # 云盘路径模板（本机路径，不入 git）
 ├── docker/
-│   └── backup-cron/            # 定时备份容器（alpine + rsync + sqlite3）
+│   ├── backup-cron/            # 定时备份容器（alpine + rsync + sqlite3）
+│   └── hermes/                 # 自定义 Hermes 镜像（opencode + gh CLI）
 ├── hermes/
+│   ├── config/opencode.json.example  # opencode 配置模板（首次启动自动复制到 ~/.config/opencode/）
 │   └── scripts/backup.sh       # hermes 数据选择性快照脚本
 ├── openclaw/
 │   └── scripts/backup.sh       # openclaw 数据选择性快照脚本
@@ -145,7 +181,19 @@ myopenclaw/
 
 **Data 备份**：`~/.myagentdata/` 整目录 rsync 快照。所有数据类应用统一放此目录的子目录下（如 `~/.myagentdata/aisecretary/`、`~/.myagentdata/dailyinfo/`），无需额外配置即自动备份。
 
-不备份：大型缓存、临时会话、auth token、日志等。
+不备份：大型缓存、临时会话、auth token、日志等（`~/.config/gh`、`~/.config/opencode` 和 `~/.hermes/secrets/` 中的敏感内容不备份，需重新配置）。
+
+---
+
+## 安全边界
+
+Hermes 和 OpenClaw 在本项目中承担不同角色，密钥隔离策略也不同：
+
+**Hermes = 个人助手**。所有涉及个人身份和密钥的能力（GitHub 操作、LLM API Key、opencode 编码代理）都装在 Hermes 里。Hermes 的 `~/.hermes/secrets/` 存放个人密钥，`env_passthrough` 精确控制哪些变量能被 agent bash 子进程看到，Hermes 自身的 `redact_secrets` 机制在工具输出中自动脱敏。Hermes 适合单人使用，不暴露给多人环境。
+
+**OpenClaw = 协作网关**。OpenClaw 不持有个人密钥，可以安全地开放到多人场景（团队共享、群组 bot 等）。它的配置和 agent 定义与个人身份无关，适合做工作流编排和多人任务分发。
+
+简言之：**需要你的 key 的 → Hermes；可以给别人用的 → OpenClaw**。
 
 ---
 

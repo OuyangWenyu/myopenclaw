@@ -1,7 +1,10 @@
 services:
-  # ── Hermes gateway ───────────────────────────────────────────
+  # ── Hermes gateway（自定义镜像：含 opencode + gh CLI）───────
   hermes:
-    image: nousresearch/hermes-agent:latest
+    build:
+      context: ./docker/hermes
+      dockerfile: Dockerfile
+    image: myopenclaw/hermes:latest
     container_name: hermes
     restart: unless-stopped
     command: gateway run
@@ -9,6 +12,13 @@ services:
       - "${HERMES_PORT:-8642}:8642"
     volumes:
       - ${HOME}/.hermes:/opt/data
+      - ${HOME}/.config/gh:/opt/gh-config
+      - ${HOME}/.config/opencode:/opt/opencode-config
+    environment:
+      - GITHUB_TOKEN=${GH_TOKEN:-}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - GLM_API_KEY=${GLM_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     shm_size: "1g"
     deploy:
       resources:
