@@ -48,6 +48,13 @@ if [[ ! -f "${HOME}/.config/opencode/opencode.json" ]]; then
   echo "   📝 已创建 opencode 配置: ~/.config/opencode/opencode.json"
 fi
 
+# ── 确保 Claude Code 配置目录存在（volume mount 需要）──────────────
+mkdir -p "${HOME}/.claude"
+if [[ ! -f "${HOME}/.claude/settings.json" ]]; then
+  cp "${REPO_ROOT}/hermes/config/claude-settings.json.example" "${HOME}/.claude/settings.json"
+  echo "   📝 已创建 Claude Code 配置: ~/.claude/settings.json"
+fi
+
 cd "${REPO_ROOT}"
 
 BUILD_FLAG=""

@@ -1,12 +1,12 @@
 # myopenclaw
 
-用 Docker 运行 [Hermes Agent](https://github.com/NousResearch/hermes-agent)（含 [opencode](https://opencode.ai) + [GitHub CLI](https://cli.github.com)）和 [OpenClaw](https://github.com/openclaw/openclaw)，数据留在本机（`~/.hermes`、`~/.openclaw`、`~/.myagentdata`），配置用 Git 管理，用户数据定期快照备份到云盘。
+用 Docker 运行 [Hermes Agent](https://github.com/NousResearch/hermes-agent)（含 [opencode](https://opencode.ai) + [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview) + [GitHub CLI](https://cli.github.com)）和 [OpenClaw](https://github.com/openclaw/openclaw)，数据留在本机（`~/.hermes`、`~/.openclaw`、`~/.myagentdata`、`~/.claude`），配置用 Git 管理，用户数据定期快照备份到云盘。
 
 ## 服务说明
 
 | 服务 | 镜像 | 默认端口 | 说明 |
 |------|------|----------|------|
-| hermes | 自建镜像（基于 `nousresearch/hermes-agent:latest`，含 opencode + gh） | 8642 | Hermes gateway |
+| hermes | 自建镜像（基于 `nousresearch/hermes-agent:latest`，含 opencode + Claude Code + gh） | 8642 | Hermes gateway |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板 |
 | openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway |
 | backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每周日凌晨 2:00）|
@@ -18,6 +18,7 @@
 - `~/.myagentdata` → `/.myagentdata`（backup-cron 容器只读挂载，用于备份）
 - `~/.config/gh` → `/opt/gh-config`（hermes 容器内，gh 认证和配置，宿主机持久化）
 - `~/.config/opencode` → `/opt/opencode-config`（hermes 容器内，opencode 配置，宿主机持久化）
+- `~/.claude` → `/opt/claude-config`（hermes 容器内，Claude Code 配置和凭证，宿主机持久化）
 - `~/.hermes/secrets/` → `/opt/data/secrets/`（hermes 容器内，LLM 密钥文件，opencode.json 用 `{file:}` 引用）
 
 ---
@@ -96,19 +97,42 @@ Hermes 容器内已安装 GitHub CLI，需认证后方可使用。二选一：
 
 opencode 默认使用 [OpenCode Zen](https://opencode.ai/zen) 的 GLM 5.1 模型。首次启动时会自动创建 `~/.config/opencode/opencode.json`（从 `hermes/config/opencode.json.example` 复制）。
 
-**密钥配置**：由于 Hermes 安全机制会拦截部分环境变量（OPENROUTER、DEEPSEEK、OPENAI 等），密钥统一存放在 `~/.hermes/secrets/` 目录下的文件中（容器内路径 `/opt/data/secrets/`），opencode.json 通过 `{file:路径}` 引用：
+**密钥配置**：所有 API Key 统一在 `.env` 中配置。不在黑名单中的密钥（GH_TOKEN → GITHUB_TOKEN、OPENCODE_API_KEY、GLM_API_KEY、ANTHROPIC_API_KEY）通过 `env_passthrough` 直接传递给 bash 子进程。
+
+被 Hermes 黑名单拦截的密钥（DEEPSEEK、OPENROUTER、OPENAI）通过 `.env` 传入容器后，由 entrypoint 脚本自动写入 `/opt/data/secrets/` 文件，opencode.json 通过 `{file:路径}` 引用。无需手动创建 secrets 文件：
 
 ```bash
-# 创建密钥文件
-echo -n "你的key" > ~/.hermes/secrets/opencode-api-key      # OpenCode Zen
-echo -n "你的key" > ~/.hermes/secrets/openrouter-api-key    # OpenRouter
-echo -n "你的key" > ~/.hermes/secrets/deepseek-api-key      # DeepSeek
-chmod 640 ~/.hermes/secrets/*
+# .env 中直接填写即可
+DEEPSEEK_API_KEY=xxxxx
+OPENROUTER_API_KEY=xxxxx
+OPENAI_API_KEY=sk-...
 ```
 
-不在黑名单中的密钥（GH_TOKEN → GITHUB_TOKEN、OPENCODE_API_KEY、GLM_API_KEY、ANTHROPIC_API_KEY）通过 `.env` + `env_passthrough` 传递给 Hermes bash 子进程。
+### 9. Claude Code 配置
 
-被黑名单拦截的密钥（OPENROUTER、DEEPSEEK、OPENAI）必须走文件方式，写入 `~/.hermes/secrets/`。
+Hermes 容器内已安装 [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)，默认配置为使用智谱 GLM 模型。
+
+**密钥配置**：Claude Code 使用 `ANTHROPIC_API_KEY`，由 entrypoint 脚本自动从 `GLM_API_KEY` 映射。在 `.env` 中设置 `GLM_API_KEY` 即可：
+
+```bash
+# .env 中填写智谱 API Key
+GLM_API_KEY=xxxxx.xxxxx
+```
+
+**模型配置**：首次启动时，`start.sh` 会自动创建 `~/.claude/settings.json`（从 `hermes/config/claude-settings.json.example` 复制），内容如下：
+
+```json
+{
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/paas/v4",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.1"
+  }
+}
+```
+
+如需切换回真实 Anthropic API：清空 `GLM_API_KEY`，在 `.env` 中设置 `ANTHROPIC_API_KEY=sk-ant-...`，并修改 `~/.claude/settings.json` 移除 `ANTHROPIC_BASE_URL`。
 
 ---
 
@@ -157,9 +181,10 @@ myopenclaw/
 ├── .cloud.conf.example         # 云盘路径模板（本机路径，不入 git）
 ├── docker/
 │   ├── backup-cron/            # 定时备份容器（alpine + rsync + sqlite3）
-│   └── hermes/                 # 自定义 Hermes 镜像（opencode + gh CLI）
+│   └── hermes/                 # 自定义 Hermes 镜像（opencode + Claude Code + gh CLI）
 ├── hermes/
-│   ├── config/opencode.json.example  # opencode 配置模板（首次启动自动复制到 ~/.config/opencode/）
+│   ├── config/opencode.json.example       # opencode 配置模板（首次启动自动复制到 ~/.config/opencode/）
+│   ├── config/claude-settings.json.example # Claude Code 配置模板（首次启动自动复制到 ~/.claude/）
 │   └── scripts/backup.sh       # hermes 数据选择性快照脚本
 ├── openclaw/
 │   └── scripts/backup.sh       # openclaw 数据选择性快照脚本
