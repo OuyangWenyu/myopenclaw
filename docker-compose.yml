@@ -33,6 +33,37 @@ services:
     networks:
       - myopenclaw-net
 
+  # ── Hermes coder gateway（编程助手，GLM-5.1 + Claude Code）────
+  hermes-coder:
+    image: myopenclaw/hermes:latest
+    container_name: hermes-coder
+    restart: unless-stopped
+    command: gateway run --profile coder
+    ports:
+      - "${HERMES_CODER_PORT:-8643}:8642"
+    volumes:
+      - ${HOME}/.hermes:/opt/data
+      - ${HOME}/.config/gh:/opt/gh-config
+      - ${HOME}/.config/opencode:/opt/opencode-config
+      - ${HOME}/.claude:/opt/claude-config
+    environment:
+      - GITHUB_TOKEN=${GH_TOKEN:-}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - GLM_API_KEY=${GLM_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - HERMES_PROFILE=coder
+    shm_size: "1g"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+    networks:
+      - myopenclaw-net
+
   # ── Hermes dashboard（可选，只读，与 gateway 同网络）─────────
   hermes-dashboard:
     image: nousresearch/hermes-agent:latest
