@@ -105,9 +105,9 @@ launchctl list | awk 'NR==1 || /ai\.dailyinfo/' || true
 cat <<EOF
 
 ℹ️  调度表：
-    06:00  ai.dailyinfo.run-p1   uv run dailyinfo run -p 1
-    06:15  ai.dailyinfo.run-p2   uv run dailyinfo run -p 2
-    06:30  ai.dailyinfo.run-p3   uv run dailyinfo run -p 3
+    05:00  ai.dailyinfo.run-p1   uv run dailyinfo run -p 1
+    05:15  ai.dailyinfo.run-p2   uv run dailyinfo run -p 2
+    05:30  ai.dailyinfo.run-p3   uv run dailyinfo run -p 3
     07:00  ai.dailyinfo.push     uv run dailyinfo push
 
 📂 日志: ${DAILYINFO_DIR}/logs/dailyinfo-*.log
