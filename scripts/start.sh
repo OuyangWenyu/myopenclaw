@@ -55,6 +55,24 @@ if [[ ! -f "${HOME}/.claude/settings.json" ]]; then
   echo "   📝 已创建 Claude Code 配置: ~/.claude/settings.json"
 fi
 
+# ── 确保 OpenClaw 配置存在（首次启动从模板创建）──────────────────
+mkdir -p "${HOME}/.openclaw"
+if [[ ! -f "${HOME}/.openclaw/openclaw.json" ]]; then
+  cp "${REPO_ROOT}/openclaw/config/openclaw.json.example" "${HOME}/.openclaw/openclaw.json"
+  echo "   📝 已创建 OpenClaw 配置: ~/.openclaw/openclaw.json"
+fi
+
+# ── 确保 OpenClaw skills 目录存在并安装 paper-fetch ─────────────
+OPENCLAW_SKILLS_DIR="${HOME}/.openclaw/skills"
+mkdir -p "${OPENCLAW_SKILLS_DIR}"
+if [[ ! -d "${OPENCLAW_SKILLS_DIR}/paper-fetch/.git" ]]; then
+  echo "   📥 安装 paper-fetch skill（公开论文 PDF 下载器）..."
+  git clone https://github.com/Agents365-ai/paper-fetch.git "${OPENCLAW_SKILLS_DIR}/paper-fetch"
+  echo "   ✅ paper-fetch 已安装到 ~/.openclaw/skills/paper-fetch"
+else
+  echo "   ✅ paper-fetch skill 已存在，跳过安装"
+fi
+
 cd "${REPO_ROOT}"
 
 BUILD_FLAG=""

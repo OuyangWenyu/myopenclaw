@@ -25,40 +25,63 @@
 
 ## 首次使用（新机器）
 
-### 1. 前置要求
+### 前置要求
 
 - Docker Desktop 已安装并运行
 - 云盘客户端（Google Drive / OneDrive）已登录并完成本地同步
 
-### 2. 克隆仓库
+### 配置流程总览
+
+| 步骤 | 操作 | 自动/手动 |
+|------|------|-----------|
+| 1 | 克隆仓库 + 填写 `.env` + `.cloud.conf` | **手动** |
+| 2 | （可选）从云盘快照恢复历史数据 | 手动 |
+| 3 | 启动服务 `./scripts/start.sh` | **自动**：创建配置文件、安装 skill、拉起容器 |
+| 4 | （必须）填写 `.env` 中的 API Key | **手动** |
+| 5 | （按需）配置 OpenClaw 渠道（Discord / 飞书） | **手动** |
+| 6 | （按需）配置 Hermes 个性（SOUL.md、config.yaml） | **手动** |
+
+> 步骤 3 会自动完成：opencode.json、Claude Code settings.json、openclaw.json 从模板创建，paper-fetch skill 自动安装，API Key 物化到 secrets 文件。步骤 4-6 的内容因人而异，无法自动化。
+
+---
+
+### 1. 克隆仓库 + 基础配置
 
 ```bash
 git clone https://github.com/OuyangWenyu/myopenclaw.git
 cd myopenclaw
 ```
 
-### 3. 配置环境变量
+**配置环境变量**（必须）：
 
 ```bash
 cp .env.example .env
-# 按需修改端口等配置（通常不用改）
-# 如需 gh 认证，取消注释 GH_TOKEN 并填入 GitHub PAT（容器内自动映射为 GITHUB_TOKEN）
-# 如需 opencode，取消注释 OPENCODE_API_KEY 等密钥
 ```
 
-### 4. 配置云盘路径
+`.env` 中需要填写的项目（详见文件内注释）：
+
+| 变量 | 必填？ | 说明 |
+|------|--------|------|
+| `GLM_API_KEY` | 推荐 | 智谱 API Key，同时作为 Claude Code 的 `ANTHROPIC_API_KEY` 使用 |
+| `DEEPSEEK_API_KEY` | 推荐 | DeepSeek API Key，OpenClaw 默认模型（deepseek-v4-flash）使用 |
+| `GH_TOKEN` | 可选 | GitHub PAT，gh CLI 认证用 |
+| `OPENCODE_API_KEY` | 可选 | opencode 专用 Key（不填则走默认 GLM） |
+| `MOONSHOT_API_KEY` | 可选 | Moonshot API Key，OpenClaw 备份模型（kimi-k2.5）使用 |
+| `UNPAYWALL_EMAIL` | 可选 | Unpaywall 联系邮箱，提高 paper-fetch 论文下载命中率 |
+
+被 Hermes 黑名单拦截的密钥（DEEPSEEK、OPENROUTER、OPENAI）通过 `.env` 传入容器后，由 entrypoint 脚本自动写入 `/opt/data/secrets/` 文件，opencode.json 通过 `{file:路径}` 引用，无需手动创建。
+
+**配置云盘路径**（必须）：
 
 ```bash
 cp .cloud.conf.example .cloud.conf
 # 编辑 .cloud.conf，填写本机云盘实际路径
+./scripts/setup-cloud.sh   # 验证并初始化备份目录
 ```
 
-```bash
-# 验证云盘目录并初始化备份目录结构
-./scripts/setup-cloud.sh
-```
+### 2. 从云盘快照恢复数据（可选）
 
-### 5. 从云盘快照恢复数据（如有）
+新机器首次部署可跳过。从旧机器迁移时执行：
 
 ```bash
 # 恢复全部最新快照（hermes、openclaw、~/.myagentdata）
@@ -70,7 +93,9 @@ cp .cloud.conf.example .cloud.conf
 ./scripts/restore.sh data latest
 ```
 
-### 6. 启动服务
+> 如果恢复了 `~/.openclaw/openclaw.json`，步骤 3 不会覆盖它（start.sh 只在文件不存在时从模板创建）。
+
+### 3. 启动服务
 
 ```bash
 ./scripts/start.sh
@@ -82,57 +107,116 @@ cp .cloud.conf.example .cloud.conf
 ./scripts/start.sh --build
 ```
 
-### 7. gh 认证（可选）
+首次启动会自动完成：
 
-Hermes 容器内已安装 GitHub CLI，需认证后方可使用。二选一：
+| 自动操作 | 目标位置 |
+|----------|----------|
+| 创建 opencode 配置 | `~/.config/opencode/opencode.json`（从 `hermes/config/opencode.json.example`） |
+| 创建 Claude Code 配置 | `~/.claude/settings.json`（从 `hermes/config/claude-settings.json.example`） |
+| 创建 OpenClaw 配置 | `~/.openclaw/openclaw.json`（从 `openclaw/config/openclaw.json.example`） |
+| 安装 paper-fetch skill | `~/.openclaw/skills/paper-fetch`（自动 git clone） |
+| 物化被黑名单拦截的 API Key | 容器内 `/opt/data/secrets/`（deepseek、openrouter、openai） |
+| 映射 GLM_API_KEY → ANTHROPIC_API_KEY | 容器内环境变量，供 Claude Code 使用 |
 
-- **方式 A**：在 `.env` 中设置 `GH_TOKEN=github_pat_xxxx`（推荐）。容器内自动映射为 `GITHUB_TOKEN`，绕过 Hermes 安全黑名单传递给 bash 子进程。
+### 4. 填写 API Key（必须）
+
+在 `.env` 中填入你的 API Key 后，重启服务使其生效：
+
+```bash
+# 最小必填：让 OpenClaw 和 Claude Code 能调用 LLM
+DEEPSEEK_API_KEY=sk-...
+GLM_API_KEY=xxxxx.xxxxx
+
+# 重启让新 Key 生效
+docker compose up -d
+```
+
+### 5. 配置 OpenClaw 渠道（按需）
+
+OpenClaw 的渠道（Discord、飞书等）需要在 `~/.openclaw/openclaw.json` 中手动配置。`openclaw.json.example` 不含渠道配置，因为每个用户的 bot 凭证不同。
+
+**配置 Discord Bot**：
+
+1. 在 [Discord Developer Portal](https://discord.com/developers/applications) 创建 Bot，获取 Token
+2. 编辑 `~/.openclaw/openclaw.json`，在 `channels` 下添加：
+
+```json
+{
+  "channels": {
+    "discord": {
+      "enabled": true,
+      "token": "YOUR_DISCORD_BOT_TOKEN",
+      "dmPolicy": "allowlist",
+      "groupPolicy": "open",
+      "allowFrom": ["YOUR_DISCORD_USER_ID"],
+      "streaming": { "mode": "partial" }
+    }
+  }
+}
+```
+
+**配置飞书 Bot**：
+
+1. 在飞书开发者后台创建应用，获取 App ID 和 App Secret
+2. 在「事件与回调」→「订阅方式」中选择「使用长连接接收事件/回调」
+3. 编辑 `~/.openclaw/openclaw.json`，在 `channels` 下添加：
+
+```json
+{
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "appId": "YOUR_FEISHU_APP_ID",
+      "appSecret": "YOUR_FEISHU_APP_SECRET",
+      "domain": "feishu",
+      "connectionMode": "websocket",
+      "dmPolicy": "open",
+      "groupPolicy": "allowlist",
+      "groupAllowFrom": ["YOUR_FEISHU_GROUP_ID"],
+      "allowFrom": ["*"]
+    }
+  }
+}
+```
+
+配置完成后重启 OpenClaw：
+
+```bash
+docker compose restart openclaw-gateway
+```
+
+验证渠道是否连上：
+
+```bash
+docker compose logs --tail=20 openclaw-gateway
+# 看到 [discord] starting / [feishu] WebSocket client started 即成功
+```
+
+**OpenClaw 默认模型**：deepseek-v4-flash（主）→ kimi-k2.5（备份）。可在 `~/.openclaw/openclaw.json` 的 `agents.defaults.model` 中修改。
+
+### 6. 配置 Hermes 个性（按需）
+
+Hermes 的核心配置文件在 `~/.hermes/` 下，不在本仓库中管理（通过备份恢复）：
+
+| 文件 | 说明 | 如何获取 |
+|------|------|----------|
+| `config.yaml` | Hermes 网关和 agent 配置 | 手动编写，或从云盘备份恢复 |
+| `SOUL.md` | Hermes 人格/提示词 | 手动编写，或从云盘备份恢复 |
+
+如果是从云盘恢复的用户，步骤 2 已恢复这些文件。新用户需要自行创建或从 OpenClaw Web 面板（`http://localhost:18789`）引导配置。
+
+**gh CLI 认证**（可选）：Hermes 容器内已安装 GitHub CLI。二选一：
+
+- **方式 A**：在 `.env` 中设置 `GH_TOKEN=github_pat_xxxx`（推荐）。容器内自动映射为 `GITHUB_TOKEN`。
 - **方式 B**：进入容器交互式登录
   ```bash
   docker compose exec hermes gh auth login
   ```
   认证状态保存在宿主机 `~/.config/gh/hosts.yml`，容器重建不丢失。
 
-### 8. opencode 配置（可选）
+**opencode 配置**：首次启动自动创建 `~/.config/opencode/opencode.json`，默认使用 [OpenCode Zen](https://opencode.ai/zen) 的 GLM 5.1。API Key 通过 `.env` 传入，无需手动配置。
 
-opencode 默认使用 [OpenCode Zen](https://opencode.ai/zen) 的 GLM 5.1 模型。首次启动时会自动创建 `~/.config/opencode/opencode.json`（从 `hermes/config/opencode.json.example` 复制）。
-
-**密钥配置**：所有 API Key 统一在 `.env` 中配置。不在黑名单中的密钥（GH_TOKEN → GITHUB_TOKEN、OPENCODE_API_KEY、GLM_API_KEY、ANTHROPIC_API_KEY）通过 `env_passthrough` 直接传递给 bash 子进程。
-
-被 Hermes 黑名单拦截的密钥（DEEPSEEK、OPENROUTER、OPENAI）通过 `.env` 传入容器后，由 entrypoint 脚本自动写入 `/opt/data/secrets/` 文件，opencode.json 通过 `{file:路径}` 引用。无需手动创建 secrets 文件：
-
-```bash
-# .env 中直接填写即可
-DEEPSEEK_API_KEY=xxxxx
-OPENROUTER_API_KEY=xxxxx
-OPENAI_API_KEY=sk-...
-```
-
-### 9. Claude Code 配置
-
-Hermes 容器内已安装 [Claude Code](https://docs.anthropic.com/en/docs/claude-code/overview)，默认配置为使用智谱 GLM 模型。
-
-**密钥配置**：Claude Code 使用 `ANTHROPIC_API_KEY`，由 entrypoint 脚本自动从 `GLM_API_KEY` 映射。在 `.env` 中设置 `GLM_API_KEY` 即可：
-
-```bash
-# .env 中填写智谱 API Key
-GLM_API_KEY=xxxxx.xxxxx
-```
-
-**模型配置**：首次启动时，`start.sh` 会自动创建 `~/.claude/settings.json`（从 `hermes/config/claude-settings.json.example` 复制），内容如下：
-
-```json
-{
-  "env": {
-    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "glm-4.7",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "glm-4.7",
-    "ANTHROPIC_DEFAULT_OPUS_MODEL": "glm-5.1"
-  }
-}
-```
-
-如需切换回真实 Anthropic API：清空 `GLM_API_KEY`，在 `.env` 中设置 `ANTHROPIC_API_KEY=sk-ant-...`，并修改 `~/.claude/settings.json` 移除 `ANTHROPIC_BASE_URL`。
+**Claude Code 配置**：首次启动自动创建 `~/.claude/settings.json`，默认使用智谱 GLM 模型。如需切换回真实 Anthropic API：清空 `GLM_API_KEY`，在 `.env` 中设置 `ANTHROPIC_API_KEY=sk-ant-...`，并修改 `~/.claude/settings.json` 移除 `ANTHROPIC_BASE_URL`。
 
 ---
 
@@ -177,7 +261,7 @@ docker compose --profile cli run --rm openclaw-cli
 ```ini
 myopenclaw/
 ├── docker-compose.yml          # 服务编排
-├── .env.example                # 环境变量模板（端口、cron 等）
+├── .env.example                # 环境变量模板（API Key、端口、cron 等）
 ├── .cloud.conf.example         # 云盘路径模板（本机路径，不入 git）
 ├── docker/
 │   ├── backup-cron/            # 定时备份容器（alpine + rsync + sqlite3）
@@ -187,9 +271,10 @@ myopenclaw/
 │   ├── config/claude-settings.json.example # Claude Code 配置模板（首次启动自动复制到 ~/.claude/）
 │   └── scripts/backup.sh       # hermes 数据选择性快照脚本
 ├── openclaw/
+│   ├── config/openclaw.json.example       # OpenClaw 配置模板（首次启动自动复制到 ~/.openclaw/）
 │   └── scripts/backup.sh       # openclaw 数据选择性快照脚本
 └── scripts/
-    ├── start.sh                # 启动服务
+    ├── start.sh                # 启动服务（含自动配置 + skill 安装）
     ├── stop.sh                 # 停止服务
     ├── setup-cloud.sh          # 初始化云盘备份目录
     ├── backup-data.sh          # ~/.myagentdata 通用快照脚本

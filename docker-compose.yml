@@ -20,6 +20,7 @@ services:
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - GLM_API_KEY=${GLM_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       # Blocked by Hermes env blacklist, materialized to secrets files by entrypoint
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
@@ -97,6 +98,9 @@ services:
       - ${HOME}/.openclaw:/home/node/.openclaw
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - UNPAYWALL_EMAIL=${UNPAYWALL_EMAIL:-}
+      - PAPER_FETCH_NO_SCIHUB=${PAPER_FETCH_NO_SCIHUB:-}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:18789/healthz"]
       interval: 30s

@@ -38,7 +38,8 @@ mkdir -p "${SECRETS_DIR}"
 for pair in \
   "DEEPSEEK_API_KEY=deepseek-api-key" \
   "OPENROUTER_API_KEY=openrouter-api-key" \
-  "OPENAI_API_KEY=openai-api-key"; do
+  "OPENAI_API_KEY=openai-api-key" \
+  "OPENCODE_API_KEY=opencode-api-key"; do
   env_name="${pair%%=*}"
   file_name="${pair##*=}"
   if [[ -n "${!env_name:-}" ]]; then
