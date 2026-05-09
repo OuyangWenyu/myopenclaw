@@ -73,6 +73,20 @@ else
   echo "   ✅ paper-fetch skill 已存在，跳过安装"
 fi
 
+# ── 修复 OpenClaw 第三方插件的 module 解析 ──────────────────────
+# 第三方插件安装在 ~/.openclaw/extensions/ 下，但 openclaw 包本体
+# 在容器的 /app/ 目录，不在标准 node_modules 路径，导致
+# import "openclaw/plugin-sdk/core" 失败。创建 symlink 解决。
+for _ext_dir in "${HOME}/.openclaw/extensions"/*/; do
+  _ext_name="$(basename "${_ext_dir}")"
+  _nm_dir="${_ext_dir}node_modules"
+  if [[ -d "${_nm_dir}" && ! -e "${_nm_dir}/openclaw" ]]; then
+    mkdir -p "${_nm_dir}"
+    ln -s /app "${_nm_dir}/openclaw"
+    echo "   🔗 已为插件 ${_ext_name} 创建 openclaw SDK symlink"
+  fi
+done
+
 cd "${REPO_ROOT}"
 
 BUILD_FLAG=""
