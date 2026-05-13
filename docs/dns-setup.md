@@ -38,7 +38,7 @@ macOS 支持 `/etc/resolver/` 机制，可以按域名指定 DNS 服务器。本
 # /etc/resolver/ 下的每个文件对应一个域名及其子域名
 # 文件名 = 域名，内容 = nameserver 指令
 
-DOMAINS="alibabadns.com bigmodel.cn deepseek.com dingtalk.com feishu.cn gitcode.com moonshot.cn open.bigmodel.cn zhipu.ai"
+DOMAINS="alibabadns.com aliyunddos1022.com bigmodel.cn bytedns1.com cdngslb.com deepseek.com dingtalk.com eo.dnse1.com feishu.cn gitcode.com gtm-a4b8.com moonshot.cn open.bigmodel.cn yundunwaf3.com zhipu.ai"
 
 for domain in $DOMAINS; do
   echo "nameserver 223.5.5.5" | sudo tee /etc/resolver/$domain
@@ -53,7 +53,17 @@ sudo killall -HUP mDNSResponder
 
 ### CNAME 链问题
 
-钉钉的 `api.dingtalk.com` 解析过程包含多级 CNAME 跳转：
+中国服务的域名通常使用 CDN/GSLB，解析时经过多级 CNAME 跳转。CNAME 链中的某些中间域名不在服务主域名下，如果系统 DNS 无法解析这些外域，整个链路就会失败。
+
+| 服务 | CNAME 链经过的外域 | 说明 |
+|------|-------------------|------|
+| 钉钉 api.dingtalk.com | `gds.alibabadns.com` | 阿里云 GSLB |
+| DeepSeek api.deepseek.com | `eo.dnse1.com` | 火山引擎 CDN |
+| 飞书 open.feishu.cn | `bytedns1.com` → `cdngslb.com` | 字节 CDN → GSLB |
+| Moonshot api.moonshot.cn | `aliyunddos1022.com` | 阿里云 DDoS 防护 |
+| 智谱 open.bigmodel.cn | `yundunwaf3.com` → `gtm-a4b8.com` | 阿里云 WAF → GTM |
+
+以钉钉为例：
 
 ```
 api.dingtalk.com → v6-cname.dingtalk.com → region-cname.dingtalk.com
@@ -61,6 +71,8 @@ api.dingtalk.com → v6-cname.dingtalk.com → region-cname.dingtalk.com
 ```
 
 CNAME 链经过了 `gds.alibabadns.com`（阿里云 GSLB 内部域），它不在 `dingtalk.com` 域下，因此需要单独配置 `/etc/resolver/alibabadns.com`。**如果不配这个，即使 `dingtalk.com` 的 resolver 正确，`api.dingtalk.com` 仍然会解析失败。**
+
+`setup-dns.sh` 已包含所有已知的外域 resolver，新发现的 CNAME 外域也需加入。
 
 ### /etc/hosts 备份作用
 

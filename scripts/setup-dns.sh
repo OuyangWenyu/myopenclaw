@@ -14,17 +14,30 @@ set -euo pipefail
 NAMESERVER="223.5.5.5"
 
 # 需要配置 resolver 的域名列表
-# alibabadns.com — 钉钉 CNAME 链经过此域（关键！）
-# 其余为各服务主域名
+# ─ 服务主域名 ─
+# ─ CDN/GSLB 外域（CNAME 链经过这些域，境外 DNS 无法解析）──
+#   alibabadns.com  — 钉钉 api.dingtalk.com CNAME 链
+#   eo.dnse1.com    — DeepSeek api.deepseek.com CNAME 链（火山引擎 CDN）
+#   bytedns1.com    — 飞书 open.feishu.cn CNAME 链（字节 CDN）
+#   aliyunddos1022.com — Moonshot api.moonshot.cn CNAME 链（阿里云 DDoS 防护）
+#   yundunwaf3.com  — 智谱 open.bigmodel.cn CNAME 链（阿里云 WAF）
+#   cdngslb.com     — 飞书 CDN GSLB 二级跳转
+#   gtm-a4b8.com    — 智谱 GTM 跳转
 RESOLVER_DOMAINS=(
   alibabadns.com
+  aliyunddos1022.com
   bigmodel.cn
+  bytedns1.com
+  cdngslb.com
   deepseek.com
   dingtalk.com
+  eo.dnse1.com
   feishu.cn
   gitcode.com
+  gtm-a4b8.com
   moonshot.cn
   open.bigmodel.cn
+  yundunwaf3.com
   zhipu.ai
 )
 
