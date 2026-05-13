@@ -73,6 +73,30 @@ else
   echo "   ✅ paper-fetch skill 已存在，跳过安装"
 fi
 
+# ── 注入 OpenClaw GitHub token ──────────────────────────────────
+# 从 .env 读取 OPENCLAW_GH_TOKEN，替换 openclaw.json 中的占位符
+# MCP server 不继承容器环境变量，必须在 JSON 的 env 块中显式声明
+OPENCLAW_CONFIG="${HOME}/.openclaw/openclaw.json"
+if [[ -f "${OPENCLAW_CONFIG}" && -n "${OPENCLAW_GH_TOKEN:-}" ]]; then
+  if grep -q '__OPENCLAW_GH_TOKEN__' "${OPENCLAW_CONFIG}"; then
+    # 使用 python3 做 JSON 安全的字符串替换
+    python3 -c "
+import json, sys
+with open('${OPENCLAW_CONFIG}') as f:
+    d = json.load(f)
+github_mcp = d.get('mcp', {}).get('servers', {}).get('github', {})
+if 'env' in github_mcp and github_mcp['env'].get('GITHUB_PERSONAL_ACCESS_TOKEN') == '__OPENCLAW_GH_TOKEN__':
+    github_mcp['env']['GITHUB_PERSONAL_ACCESS_TOKEN'] = sys.argv[1]
+    with open('${OPENCLAW_CONFIG}', 'w') as f:
+        json.dump(d, f, indent=2, ensure_ascii=False)
+    print('done')
+else:
+    print('skip')
+" "${OPENCLAW_GH_TOKEN}"
+    echo "   🔑 已注入 OpenClaw GitHub token"
+  fi
+fi
+
 # ── 修复 OpenClaw 第三方插件的 module 解析 ──────────────────────
 # 第三方插件安装在 ~/.openclaw/extensions/ 下，但 openclaw 包本体
 # 在容器的 /app/ 目录，不在标准 node_modules 路径，导致
@@ -80,7 +104,7 @@ fi
 for _ext_dir in "${HOME}/.openclaw/extensions"/*/; do
   _ext_name="$(basename "${_ext_dir}")"
   _nm_dir="${_ext_dir}node_modules"
-  if [[ -d "${_nm_dir}" && ! -e "${_nm_dir}/openclaw" ]]; then
+  if [[ -d "${_nm_dir}" && ! -e "${_nm_dir}/openclaw" && ! -L "${_nm_dir}/openclaw" ]]; then
     mkdir -p "${_nm_dir}"
     ln -s /app "${_nm_dir}/openclaw"
     echo "   🔗 已为插件 ${_ext_name} 创建 openclaw SDK symlink"

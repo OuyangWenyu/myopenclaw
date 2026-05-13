@@ -35,13 +35,14 @@
 | 步骤 | 操作 | 自动/手动 |
 |------|------|-----------|
 | 1 | 克隆仓库 + 填写 `.env` + `.cloud.conf` | **手动** |
-| 2 | （可选）从云盘快照恢复历史数据 | 手动 |
-| 3 | 启动服务 `./scripts/start.sh` | **自动**：创建配置文件、安装 skill、拉起容器 |
-| 4 | （必须）填写 `.env` 中的 API Key | **手动** |
-| 5 | （按需）配置 OpenClaw 渠道（Discord / 飞书） | **手动** |
-| 6 | （按需）配置 Hermes 个性（SOUL.md、config.yaml） | **手动** |
+| 2 | （可选）配置中国域名 DNS 解析 `./scripts/setup-dns.sh` | **自动**：详见 [DNS 配置文档](docs/dns-setup.md) |
+| 3 | （可选）从云盘快照恢复历史数据 | 手动 |
+| 4 | 启动服务 `./scripts/start.sh` | **自动**：创建配置文件、安装 skill、拉起容器 |
+| 5 | （必须）填写 `.env` 中的 API Key | **手动** |
+| 6 | （按需）配置 OpenClaw 渠道（Discord / 飞书） | **手动** |
+| 7 | （按需）配置 Hermes 个性（SOUL.md、config.yaml） | **手动** |
 
-> 步骤 3 会自动完成：opencode.json、Claude Code settings.json、openclaw.json 从模板创建，paper-fetch skill 自动安装，API Key 物化到 secrets 文件。步骤 4-6 的内容因人而异，无法自动化。
+> 步骤 4 会自动完成：opencode.json、Claude Code settings.json、openclaw.json 从模板创建，paper-fetch skill 自动安装，API Key 物化到 secrets 文件。步骤 5-7 的内容因人而异，无法自动化。
 
 ---
 
