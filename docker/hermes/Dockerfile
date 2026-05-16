@@ -44,7 +44,7 @@ RUN apt-get update && \
 # Mounted from host via docker-compose volumes:
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)
 #   ~/.config/opencode    → /opt/opencode-config   (opencode preferences)
-#   ~/.config/lark-cli    → /opt/lark-config       (lark-cli auth + config)
+#   ~/.lark-cli           → /opt/lark-config       (lark-cli auth + config)
 #   ~/.claude             → /opt/claude-config     (Claude Code settings + credentials)
 RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config /opt/claude-config && \
     chown -R hermes:hermes /opt/gh-config /opt/opencode-config /opt/lark-config /opt/claude-config

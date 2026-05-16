@@ -37,7 +37,7 @@ docker compose --profile cli run --rm openclaw-cli
 
 **Four Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
 
-1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, and Claude Code CLI. Entry point is `entrypoint-wrapper.sh` which symlinks gh/Claude Code config dirs and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Claude Code is preconfigured to use Zhipu GLM models via `ANTHROPIC_BASE_URL`. Ports: 8642 (gateway), 9119 (dashboard via separate container).
+1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, Claude Code CLI, and lark-cli (Feishu CLI). Entry point is `entrypoint-wrapper.sh` which symlinks gh/Claude Code/lark-cli config dirs, auto-initializes lark-cli profiles from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Claude Code is preconfigured to use Zhipu GLM models via `ANTHROPIC_BASE_URL`. Ports: 8642 (gateway), 9119 (dashboard via separate container).
 
 2. **openclaw-gateway** — Stock `ghcr.io/openclaw/openclaw:latest` image. Port 18789. Has healthcheck via `/healthz`.
 
@@ -51,9 +51,9 @@ docker compose --profile cli run --rm openclaw-cli
 
 ## Key Design Decisions
 
-- **Secret isolation**: Hermes holds all personal keys; OpenClaw holds none. All keys are configured in `.env`. Keys blocked by Hermes's env blacklist (DEEPSEEK, OPENROUTER, OPENAI) are passed into the container via docker-compose, then materialized into `/opt/data/secrets/` files by the entrypoint wrapper (before Hermes starts), so opencode.json can reference them via `{file:}`. Keys not on the blacklist (GH_TOKEN→GITHUB_TOKEN, OPENCODE_API_KEY, GLM_API_KEY, ANTHROPIC_API_KEY) pass through `.env` + `env_passthrough`. For Claude Code, `GLM_API_KEY` is mapped to `ANTHROPIC_API_KEY` in the entrypoint wrapper (Zhipu key takes priority).
+- **Secret isolation**: Hermes holds all personal keys; OpenClaw holds none. All keys are configured in `.env`. Keys blocked by Hermes's env blacklist (DEEPSEEK, OPENROUTER, OPENAI) are passed into the container via docker-compose, then materialized into `/opt/data/secrets/` files by the entrypoint wrapper (before Hermes starts), so opencode.json can reference them via `{file:}`. Keys not on the blacklist (GH_TOKEN→GITHUB_TOKEN, OPENCODE_API_KEY, GLM_API_KEY, ANTHROPIC_API_KEY, LARK_CLI_APP_ID/SECRET, LARK_CLI_IDM_APP_ID/SECRET) pass through `.env` + `env_passthrough`. For Claude Code, `GLM_API_KEY` is mapped to `ANTHROPIC_API_KEY` in the entrypoint wrapper (Zhipu key takes priority).
 
-- **Tool config persistence**: Three tools use host-side config persistence via volume mounts + symlinks: gh (`~/.config/gh` → `/opt/gh-config`, symlinked), opencode (`~/.config/opencode` → `/opt/opencode-config`, via `OPENCODE_CONFIG_DIR`), Claude Code (`~/.claude` → `/opt/claude-config`, symlinked). First-run initialization in `start.sh` seeds config from `.example` templates.
+- **Tool config persistence**: Four tools use host-side config persistence via volume mounts + symlinks: gh (`~/.config/gh` → `/opt/gh-config`, symlinked), opencode (`~/.config/opencode` → `/opt/opencode-config`, via `OPENCODE_CONFIG_DIR`), Claude Code (`~/.claude` → `/opt/claude-config`, symlinked), lark-cli (`~/.lark-cli` → `/opt/lark-config`, symlinked). First-run initialization in `start.sh` seeds config from `.example` templates. lark-cli profiles are auto-initialized by `entrypoint-wrapper.sh` from `LARK_CLI_APP_ID/SECRET` and `LARK_CLI_IDM_APP_ID/SECRET` env vars; OAuth authorization (`lark-cli auth login`) must be done manually after first deploy.
 
 - **Two config files**: `.env` (ports, cron, non-sensitive keys) and `.cloud.conf` (cloud drive paths, machine-specific). Both are gitignored; `.example` templates are committed.
 

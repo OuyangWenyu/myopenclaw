@@ -14,7 +14,7 @@ services:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
-      - ${HOME}/.config/lark-cli:/opt/lark-config
+      - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/.claude:/opt/claude-config
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -26,6 +26,10 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
+      - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
+      - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
+      - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -49,7 +53,7 @@ services:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
-      - ${HOME}/.config/lark-cli:/opt/lark-config
+      - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/.claude:/opt/claude-config
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -59,6 +63,10 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
+      - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
+      - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
+      - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - HERMES_PROFILE=coder
     shm_size: "1g"
     deploy:
@@ -81,7 +89,7 @@ services:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
-      - ${HOME}/.config/lark-cli:/opt/lark-config
+      - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/.claude:/opt/claude-config
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -91,6 +99,10 @@ services:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
+      - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
+      - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
+      - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - HERMES_PROFILE=finance
       - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}
