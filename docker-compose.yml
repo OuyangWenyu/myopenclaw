@@ -1,5 +1,5 @@
 services:
-  # ── Hermes gateway（自定义镜像：含 opencode + gh CLI）───────
+  # ── Hermes gateway（自定义镜像：含 opencode + gh CLI + lark-cli）──
   hermes:
     build:
       context: ./docker/hermes
@@ -14,6 +14,7 @@ services:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
+      - ${HOME}/.config/lark-cli:/opt/lark-config
       - ${HOME}/.claude:/opt/claude-config
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -48,6 +49,7 @@ services:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
+      - ${HOME}/.config/lark-cli:/opt/lark-config
       - ${HOME}/.claude:/opt/claude-config
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -79,6 +81,7 @@ services:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
+      - ${HOME}/.config/lark-cli:/opt/lark-config
       - ${HOME}/.claude:/opt/claude-config
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}

@@ -1,5 +1,5 @@
 # =============================================================
-# Custom Hermes image with opencode + GitHub CLI
+# Custom Hermes image with opencode + GitHub CLI + Feishu CLI
 # Base: nousresearch/hermes-agent:latest (debian:13.4)
 # =============================================================
 FROM nousresearch/hermes-agent:latest
@@ -29,13 +29,25 @@ RUN npm install -g opencode-ai
 # @anthropic-ai/claude-code is the official npm package (Node.js 18+ required)
 RUN npm install -g @anthropic-ai/claude-code
 
+# ── Install Feishu/Lark CLI via npm ─────────────────────────
+# @larksuite/cli is the official Feishu CLI tool (200+ commands, 24 Agent Skills)
+# Two-step install: npm package + binary bootstrap via `install` command
+# curl is required by the postinstall script to download the lark binary
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    npm install -g @larksuite/cli && \
+    npx @larksuite/cli@latest install && \
+    apt-get purge -y curl && \
+    rm -rf /var/lib/apt/lists/*
+
 # ── Config directories for host-side persistence ────────────
 # Mounted from host via docker-compose volumes:
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)
 #   ~/.config/opencode    → /opt/opencode-config   (opencode preferences)
+#   ~/.config/lark-cli    → /opt/lark-config       (lark-cli auth + config)
 #   ~/.claude             → /opt/claude-config     (Claude Code settings + credentials)
-RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/claude-config && \
-    chown -R hermes:hermes /opt/gh-config /opt/opencode-config /opt/claude-config
+RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config /opt/claude-config && \
+    chown -R hermes:hermes /opt/gh-config /opt/opencode-config /opt/lark-config /opt/claude-config
 
 # opencode respects OPENCODE_CONFIG_DIR to find its config
 ENV OPENCODE_CONFIG_DIR=/opt/opencode-config

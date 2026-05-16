@@ -22,6 +22,10 @@ rm -rf /opt/data/.claude /root/.claude
 ln -sf /opt/claude-config /opt/data/.claude
 ln -sf /opt/claude-config /root/.claude
 
+# lark-cli reads config from $HOME/.config/lark-cli/ — symlink to host-mounted config dir
+ln -sf /opt/lark-config /opt/data/.config/lark-cli
+ln -sf /opt/lark-config /root/.config/lark-cli
+
 # For Claude Code with Zhipu GLM backend:
 # Claude Code reads ANTHROPIC_API_KEY; map GLM_API_KEY → ANTHROPIC_API_KEY
 # Priority: GLM_API_KEY > ANTHROPIC_API_KEY (Zhipu key takes precedence)
