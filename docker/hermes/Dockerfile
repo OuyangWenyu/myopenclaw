@@ -25,10 +25,6 @@ RUN apt-get update && \
 # opencode-ai is the official npm package (Node.js 18+ required, already in base)
 RUN npm install -g opencode-ai
 
-# ── Install Claude Code CLI via npm ────────────────────────
-# @anthropic-ai/claude-code is the official npm package (Node.js 18+ required)
-RUN npm install -g @anthropic-ai/claude-code
-
 # ── Install Feishu/Lark CLI via npm ─────────────────────────
 # @larksuite/cli is the official Feishu CLI tool (200+ commands, 24 Agent Skills)
 # Two-step install: npm package + binary bootstrap via `install` command
@@ -45,9 +41,8 @@ RUN apt-get update && \
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)
 #   ~/.config/opencode    → /opt/opencode-config   (opencode preferences)
 #   ~/.lark-cli           → /opt/lark-config       (lark-cli auth + config)
-#   ~/.claude             → /opt/claude-config     (Claude Code settings + credentials)
-RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config /opt/claude-config && \
-    chown -R hermes:hermes /opt/gh-config /opt/opencode-config /opt/lark-config /opt/claude-config
+RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config && \
+    chown -R hermes:hermes /opt/gh-config /opt/opencode-config /opt/lark-config
 
 # opencode respects OPENCODE_CONFIG_DIR to find its config
 ENV OPENCODE_CONFIG_DIR=/opt/opencode-config

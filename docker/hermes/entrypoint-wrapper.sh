@@ -16,12 +16,6 @@ mkdir -p /opt/data/.config /root/.config
 ln -sf /opt/gh-config /opt/data/.config/gh
 ln -sf /opt/gh-config /root/.config/gh
 
-# Claude Code reads config from $HOME/.claude/ — symlink to host-mounted config dir.
-# rm -rf before ln -sf: ln -sf won't replace an existing directory, only a symlink.
-rm -rf /opt/data/.claude /root/.claude
-ln -sf /opt/claude-config /opt/data/.claude
-ln -sf /opt/claude-config /root/.claude
-
 # lark-cli reads config from $HOME/.lark-cli/ (NOT .config/lark-cli/)
 # symlink to host-mounted config dir for persistence across container recreates
 mkdir -p /opt/lark-config
@@ -50,11 +44,6 @@ else
     echo "   📎 lark-cli 已绑定 Hermes 飞书应用" || \
     echo "   ⚠️  lark-cli 未配置，请设置 LARK_CLI_APP_ID/SECRET 或手动运行 lark-cli config init"
 fi
-
-# For Claude Code with Zhipu GLM backend:
-# Claude Code reads ANTHROPIC_API_KEY; map GLM_API_KEY → ANTHROPIC_API_KEY
-# Priority: GLM_API_KEY > ANTHROPIC_API_KEY (Zhipu key takes precedence)
-export ANTHROPIC_API_KEY="${GLM_API_KEY:-${ANTHROPIC_API_KEY:-}}"
 
 # ── Materialize env vars into secret files ────────────────────
 # Hermes security blacklist blocks certain env var names (DEEPSEEK, OPENROUTER,

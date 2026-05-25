@@ -44,7 +44,7 @@ if [[ ! -d "${CLOUD_ROOT}" ]]; then
   exit 1
 fi
 
-mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/data"
+mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude" "${BACKUP_ROOT}/data"
 
 echo "📦 备份根目录: ${BACKUP_ROOT}"
 echo "⏰ 时间戳: ${TIMESTAMP}"
@@ -59,6 +59,11 @@ bash "${REPO_ROOT}/hermes/scripts/backup.sh" "${TIMESTAMP}" || echo "⚠️  her
 echo ""
 echo "▶ 备份 openclaw..."
 bash "${REPO_ROOT}/openclaw/scripts/backup.sh" "${TIMESTAMP}" || echo "⚠️  openclaw 备份失败，继续..."
+
+# ── claude 备份 ──────────────────────────────────────────────
+echo ""
+echo "▶ 备份 claude..."
+bash "${REPO_ROOT}/claude/scripts/backup.sh" "${TIMESTAMP}" || echo "⚠️  claude 备份失败，继续..."
 
 # ── aisecretary 备份 ─────────────────────────────────────────
 echo ""

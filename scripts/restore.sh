@@ -17,8 +17,8 @@ SERVICE="${1:-all}"
 SNAPSHOT="${2:-latest}"
 
 # ── 参数校验 ─────────────────────────────────────────────────
-if [[ ! "${SERVICE}" =~ ^(hermes|openclaw|data|all)$ ]]; then
-  echo "用法: $0 [hermes|openclaw|data|all] [TIMESTAMP|latest]"
+if [[ ! "${SERVICE}" =~ ^(hermes|openclaw|claude|data|all)$ ]]; then
+  echo "用法: $0 [hermes|openclaw|claude|data|all] [TIMESTAMP|latest]"
   exit 1
 fi
 
@@ -56,6 +56,7 @@ restore_service() {
   case "${svc}" in
     hermes)   dest="${HOME}/.hermes" ;;
     openclaw) dest="${HOME}/.openclaw" ;;
+    claude)   dest="${HOME}/.claude" ;;
     data)     dest="${HOME}/.myagentdata" ;;
   esac
 
@@ -99,6 +100,10 @@ fi
 
 if [[ "${SERVICE}" == "all" || "${SERVICE}" == "openclaw" ]]; then
   restore_service openclaw "${SNAPSHOT}"
+fi
+
+if [[ "${SERVICE}" == "all" || "${SERVICE}" == "claude" ]]; then
+  restore_service claude "${SNAPSHOT}"
 fi
 
 if [[ "${SERVICE}" == "all" || "${SERVICE}" == "data" ]]; then

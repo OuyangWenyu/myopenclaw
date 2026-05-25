@@ -39,7 +39,7 @@ if [[ ! -d "${CLOUD_ROOT}" ]]; then
   exit 1
 fi
 
-mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw"
+mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude"
 
 # ── 确保工具配置目录存在（volume mount 需要）──────────────────
 mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode" "${HOME}/.lark-cli"
@@ -51,8 +51,20 @@ fi
 # ── 确保 Claude Code 配置目录存在（volume mount 需要）──────────────
 mkdir -p "${HOME}/.claude"
 if [[ ! -f "${HOME}/.claude/settings.json" ]]; then
-  cp "${REPO_ROOT}/hermes/config/claude-settings.json.example" "${HOME}/.claude/settings.json"
+  cp "${REPO_ROOT}/claude/config/settings.json.example" "${HOME}/.claude/settings.json"
   echo "   📝 已创建 Claude Code 配置: ~/.claude/settings.json"
+fi
+# 清理残留的符号链接（旧版 Hermes 容器泄漏到宿主机）
+if [[ -L "${HOME}/.claude/claude-config" ]]; then
+  rm -f "${HOME}/.claude/claude-config"
+  echo "   🧹 已清理残留符号链接: ~/.claude/claude-config"
+fi
+
+# ── 确保 cc-connect 配置目录存在（volume mount 需要）────────────
+mkdir -p "${HOME}/.cc-connect"
+if [[ ! -f "${HOME}/.cc-connect/config.toml" ]]; then
+  cp "${REPO_ROOT}/claude/config/cc-connect.toml.example" "${HOME}/.cc-connect/config.toml"
+  echo "   📝 已创建 cc-connect 配置: ~/.cc-connect/config.toml"
 fi
 
 # ── 确保 OpenClaw 配置存在（首次启动从模板创建）──────────────────
