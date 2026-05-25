@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # =============================================================
 # scripts/launchd/install-dailyinfo.sh
-# Render the 4 dailyinfo plist templates and load them via launchctl.
+# Render the 7 dailyinfo plist templates and load them via launchctl.
 #
 # Env overrides:
 #   DAILYINFO_DIR   Absolute path to the dailyinfo repo
@@ -73,7 +73,20 @@ if [[ -f "${DAILYINFO_DIR}/.env" ]]; then
     fi
 fi
 
-JOBS=(run-p1 run-p2 run-p3 push)
+# Jobs ordered by schedule time (generation first, then push).
+# Also clean up legacy single-push job if it exists.
+JOBS=(run-p1-arxiv run-p3 run-p2 run-p1 push-early push-papers push-arxiv)
+LEGACY_JOBS=(push)
+
+# Remove legacy jobs that have been replaced by category-specific ones.
+for job in "${LEGACY_JOBS[@]}"; do
+    dest="${LAUNCH_DIR}/ai.dailyinfo.${job}.plist"
+    if [[ -f "${dest}" ]]; then
+        launchctl unload -w "${dest}" >/dev/null 2>&1 || true
+        rm -f "${dest}"
+        echo "🗑  已移除旧版 ${dest}"
+    fi
+done
 
 for job in "${JOBS[@]}"; do
     tmpl="${SCRIPT_DIR}/ai.dailyinfo.${job}.plist.template"
@@ -104,11 +117,14 @@ launchctl list | awk 'NR==1 || /ai\.dailyinfo/' || true
 
 cat <<EOF
 
-ℹ️  调度表：
-    05:00  ai.dailyinfo.run-p1   uv run dailyinfo run -p 1
-    05:15  ai.dailyinfo.run-p2   uv run dailyinfo run -p 2
-    05:30  ai.dailyinfo.run-p3   uv run dailyinfo run -p 3
-    07:00  ai.dailyinfo.push     uv run dailyinfo push
+	ℹ️  调度表（北京时间）：
+    03:00  run-p1-arxiv   dailyinfo run -p 1 --categories arxiv
+    03:30  run-p3         dailyinfo run -p 3
+    03:45  run-p2         dailyinfo run -p 2
+    04:00  run-p1         dailyinfo run -p 1 --categories papers,ai_news
+    05:30  push-early     dailyinfo push --categories ai_news,code,resource
+    06:00  push-papers    dailyinfo push --categories papers
+    07:00  push-arxiv     dailyinfo push --categories arxiv
 
 📂 日志: ${DAILYINFO_DIR}/logs/dailyinfo-*.log
 

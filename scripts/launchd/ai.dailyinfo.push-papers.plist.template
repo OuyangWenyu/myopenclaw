@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>ai.dailyinfo.run-p1</string>
+    <string>ai.dailyinfo.push-papers</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
         <string>-lc</string>
-        <string>cd "__DAILYINFO_DIR__" &amp;&amp; "__UV_BIN__" run dailyinfo run -p 1 --categories papers,ai_news</string>
+        <string>cd "__DAILYINFO_DIR__" &amp;&amp; "__UV_BIN__" run dailyinfo push --categories papers</string>
     </array>
 
     <key>WorkingDirectory</key>
@@ -24,7 +24,7 @@
     <key>StartCalendarInterval</key>
     <dict>
         <key>Hour</key>
-        <integer>4</integer>
+        <integer>6</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
@@ -33,9 +33,9 @@
     <false/>
 
     <key>StandardOutPath</key>
-    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-p1.log</string>
+    <string>__DAILYINFO_DIR__/logs/dailyinfo-push-papers.log</string>
 
     <key>StandardErrorPath</key>
-    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-p1.log</string>
+    <string>__DAILYINFO_DIR__/logs/dailyinfo-push-papers.log</string>
 </dict>
 </plist>
