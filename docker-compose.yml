@@ -145,10 +145,12 @@ services:
     image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
     container_name: openclaw-gateway
     restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c", "/fix-host-paths.sh && exec /usr/local/bin/docker-entrypoint.sh node openclaw.mjs gateway --allow-unconfigured"]
     ports:
       - "${OPENCLAW_PORT:-18789}:18789"
     volumes:
       - ${HOME}/.openclaw:/home/node/.openclaw
+      - ./openclaw/scripts/fix-host-paths.sh:/fix-host-paths.sh:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
