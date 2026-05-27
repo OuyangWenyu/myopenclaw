@@ -108,6 +108,44 @@ TOML
     chown -R hermes:hermes /opt/data/.config/himalaya
     echo "   📧 himalaya 已自动配置 — ${EMAIL_ADDRESS}"
   fi
+
+  # ── Second email account (optional) ─────────────────────────
+  # Detects EMAIL2_* vars for a second mailbox (e.g., school/work email).
+  # EMAIL2_ACCOUNT_NAME sets the himalaya account name (default: "second").
+  if [[ -n "${EMAIL2_ADDRESS:-}" && -n "${EMAIL2_PASSWORD:-}" && -n "${EMAIL2_IMAP_HOST:-}" ]]; then
+    H2_ACCT="${EMAIL2_ACCOUNT_NAME:-second}"
+    H2_SMTP_PORT="${EMAIL2_SMTP_PORT:-587}"
+    # Pick TLS mode: port 465 → "tls" (SSL), otherwise "start-tls"
+    if [[ "${H2_SMTP_PORT}" == "465" ]]; then
+      H2_SMTP_ENCRYPTION="tls"
+    else
+      H2_SMTP_ENCRYPTION="start-tls"
+    fi
+    cat >> "${HIMALAYA_CONFIG}" << TOML
+
+[accounts.${H2_ACCT}]
+email = "${EMAIL2_ADDRESS}"
+display-name = "${EMAIL2_DISPLAY_NAME:-${EMAIL2_ADDRESS}}"
+default = false
+
+backend.type = "imap"
+backend.host = "${EMAIL2_IMAP_HOST}"
+backend.port = ${EMAIL2_IMAP_PORT:-993}
+backend.encryption.type = "tls"
+backend.login = "${EMAIL2_ADDRESS}"
+backend.auth.type = "password"
+backend.auth.raw = "${EMAIL2_PASSWORD}"
+
+message.send.backend.type = "smtp"
+message.send.backend.host = "${EMAIL2_SMTP_HOST:-smtp.example.com}"
+message.send.backend.port = ${H2_SMTP_PORT}
+message.send.backend.encryption.type = "${H2_SMTP_ENCRYPTION}"
+message.send.backend.login = "${EMAIL2_ADDRESS}"
+message.send.backend.auth.type = "password"
+message.send.backend.auth.raw = "${EMAIL2_PASSWORD}"
+TOML
+    echo "   📧 himalaya 已自动配置 — ${EMAIL2_ADDRESS} (account: ${H2_ACCT})"
+  fi
 fi
 
 # Hand off to original Hermes entrypoint (handles UID mapping + gosu)

@@ -256,6 +256,21 @@ EMAIL_SMTP_PORT=587
 
 使用方式：直接跟 Hermes 说「查收件箱」「搜来自 xxx 的邮件」「给 xxx 发封邮件」。
 
+**添加第二个邮箱**：要添加额外的邮箱（如学校/工作邮箱），直接在 `~/.hermes/.config/himalaya/config.toml` 末尾追加一个 `[accounts.xxx]` 段即可。新机器上可在 `~/.hermes/.env` 中用 `EMAIL2_*` 变量让 entrypoint 自动生成：
+
+```
+# EMAIL2_ADDRESS=wenyuouyang@dlut.edu.cn
+# EMAIL2_PASSWORD=你的密码
+# EMAIL2_IMAP_HOST=mail.dlut.edu.cn
+# EMAIL2_IMAP_PORT=993
+# EMAIL2_SMTP_HOST=mail.dlut.edu.cn
+# EMAIL2_SMTP_PORT=465
+# EMAIL2_ACCOUNT_NAME=dlut
+# EMAIL2_DISPLAY_NAME=Wenyu Ouyang
+```
+
+多账户使用：`himalaya envelope list -a dlut`（默认 `-a` 不加就是 QQ），Hermes 会自动根据上下文选账户。
+
 验证 himalaya 配置：`docker compose exec hermes himalaya envelope list --page-size 5`
 
 **gh CLI 认证**（可选）：Hermes 容器内已安装 GitHub CLI。二选一：
