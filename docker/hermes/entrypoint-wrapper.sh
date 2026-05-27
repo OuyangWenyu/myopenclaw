@@ -16,6 +16,11 @@ mkdir -p /opt/data/.config /root/.config
 ln -sf /opt/gh-config /opt/data/.config/gh
 ln -sf /opt/gh-config /root/.config/gh
 
+# himalaya email CLI — config lives on /opt/data volume (~/.hermes on host)
+# symlink for both hermes user and root (docker exec runs as root)
+mkdir -p /opt/data/.config/himalaya
+ln -sf /opt/data/.config/himalaya /root/.config/himalaya
+
 # lark-cli reads config from $HOME/.lark-cli/ (NOT .config/lark-cli/)
 # symlink to host-mounted config dir for persistence across container recreates
 mkdir -p /opt/lark-config
@@ -66,6 +71,44 @@ for pair in \
     echo "   🔑 ${env_name} → ${SECRETS_DIR}/${file_name}"
   fi
 done
+
+# ── Auto-configure himalaya from Hermes email settings ─────
+# Parses /opt/data/.env for EMAIL_* vars and generates ~/.config/himalaya/config.toml
+# Works whether the vars are commented out (email platform disabled) or active.
+HIMALAYA_CONFIG="/opt/data/.config/himalaya/config.toml"
+if [[ -f /opt/data/.env && ! -f "${HIMALAYA_CONFIG}" ]]; then
+  # Strip leading "#" so commented-out vars are also picked up
+  set -a
+  eval "$(sed 's/^#[[:space:]]*//' /opt/data/.env 2>/dev/null | grep -E '^EMAIL_' || true)"
+  set +a
+  if [[ -n "${EMAIL_ADDRESS:-}" && -n "${EMAIL_PASSWORD:-}" && -n "${EMAIL_IMAP_HOST:-}" ]]; then
+    mkdir -p "$(dirname "${HIMALAYA_CONFIG}")"
+    cat > "${HIMALAYA_CONFIG}" << TOML
+[accounts.default]
+email = "${EMAIL_ADDRESS}"
+display-name = "${EMAIL_ADDRESS}"
+default = true
+
+backend.type = "imap"
+backend.host = "${EMAIL_IMAP_HOST}"
+backend.port = ${EMAIL_IMAP_PORT:-993}
+backend.encryption.type = "tls"
+backend.login = "${EMAIL_ADDRESS}"
+backend.auth.type = "password"
+backend.auth.raw = "${EMAIL_PASSWORD}"
+
+message.send.backend.type = "smtp"
+message.send.backend.host = "${EMAIL_SMTP_HOST:-smtp.example.com}"
+message.send.backend.port = ${EMAIL_SMTP_PORT:-587}
+message.send.backend.encryption.type = "start-tls"
+message.send.backend.login = "${EMAIL_ADDRESS}"
+message.send.backend.auth.type = "password"
+message.send.backend.auth.raw = "${EMAIL_PASSWORD}"
+TOML
+    chown -R hermes:hermes /opt/data/.config/himalaya
+    echo "   📧 himalaya 已自动配置 — ${EMAIL_ADDRESS}"
+  fi
+fi
 
 # Hand off to original Hermes entrypoint (handles UID mapping + gosu)
 exec /opt/hermes/docker/entrypoint.sh "$@"

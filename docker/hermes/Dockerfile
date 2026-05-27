@@ -36,6 +36,17 @@ RUN apt-get update && \
     apt-get purge -y curl && \
     rm -rf /var/lib/apt/lists/*
 
+# ── Install himalaya (CLI email client) ─────────────────────
+# Pre-built static binary for Linux x86_64
+# Provides IMAP/SMTP email management from terminal (list, read, search, reply, etc.)
+# Used by the built-in email skill at /opt/hermes/skills/email/himalaya/
+RUN HIMALAYA_VER="1.2.0" && \
+    ARCH=$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/aarch64/') && \
+    wget -qO /tmp/himalaya.tgz "https://github.com/pimalaya/himalaya/releases/download/v${HIMALAYA_VER}/himalaya.${ARCH}-linux.tgz" && \
+    tar xzf /tmp/himalaya.tgz -C /usr/local/bin himalaya && \
+    chmod +x /usr/local/bin/himalaya && \
+    rm /tmp/himalaya.tgz
+
 # ── Config directories for host-side persistence ────────────
 # Mounted from host via docker-compose volumes:
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)
