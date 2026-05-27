@@ -67,6 +67,8 @@ open http://localhost:9090
 
 - **Container paths differ from host paths**: Inside backup-cron, hermes data is at `/root/.hermes` (HOME=/root), openclaw at `/root/.openclaw`, claude at `/root/.claude`, cc-connect at `/root/.cc-connect`. Inside hermes container, home is `/opt/data`. Inside claude-code container, home is `/home/node`. The entrypoint wrappers create symlinks so tools find their config at expected paths.
 
+- **Hermes email**: Configured via `~/.hermes/.env` (not project `.env`). QQ mail works with app password: `EMAIL_IMAP_HOST=imap.qq.com:993`, `EMAIL_SMTP_HOST=smtp.qq.com:587` (must use 587 — Hermes uses STARTTLS, not SSL). Server IP `58.254.165.67` must be in Astrill whitelist. Reference: https://hermes-agent.nousresearch.com/docs/zh-Hans/user-guide/messaging/email
+
 ## Network & DNS
 
 When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains, services fail with `ENOTFOUND` / `NameResolutionError`. The fix is per-domain DNS routing via macOS `/etc/resolver/`.
@@ -75,9 +77,9 @@ When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains,
 
 **Critical CNAME chain issue**: `api.dingtalk.com` resolves through a CNAME chain that passes through `gds.alibabadns.com` (Alibaba Cloud GSLB internal domain). This domain is outside `dingtalk.com`, so it needs its own `/etc/resolver/alibabadns.com` entry. Without it, `api.dingtalk.com` resolution fails even when `dingtalk.com` resolver is correct.
 
-**Resolver domains** (all → 223.5.5.5): Service domains: `bigmodel.cn`, `deepseek.com`, `dingtalk.com`, `feishu.cn`, `gitcode.com`, `moonshot.cn`, `open.bigmodel.cn`, `zhipu.ai`. CDN/GSLB external domains (required for CNAME chain resolution): `alibabadns.com` (DingTalk), `eo.dnse1.com` (DeepSeek/Volcengine CDN), `bytedns1.com` (Feishu/ByteDance CDN), `aliyunddos1022.com` (Moonshot/Alibaba DDoS), `yundunwaf3.com` (Zhipu/Alibaba WAF), `cdngslb.com` (CDN GSLB), `gtm-a4b8.com` (Zhipu GTM).
+**Resolver domains** (all → 223.5.5.5): Service domains: `bigmodel.cn`, `deepseek.com`, `dingtalk.com`, `feishu.cn`, `gitcode.com`, `moonshot.cn`, `open.bigmodel.cn`, `qq.com` (QQ mail), `zhipu.ai`. CDN/GSLB external domains (required for CNAME chain resolution): `alibabadns.com` (DingTalk), `eo.dnse1.com` (DeepSeek/Volcengine CDN), `bytedns1.com` (Feishu/ByteDance CDN), `aliyunddos1022.com` (Moonshot/Alibaba DDoS), `yundunwaf3.com` (Zhipu/Alibaba WAF), `cdngslb.com` (CDN GSLB), `gtm-a4b8.com` (Zhipu GTM).
 
-**`/etc/hosts` backup entries**: `open.bigmodel.cn`, `mcp.dingtalk.com`, `wss-open-connection.dingtalk.com`. These provide a safety net but IPs go stale (CDN rotation). Run `./scripts/setup-dns.sh` to refresh. Use python3 (not sed) to edit `openclaw.json` — sed with token special characters can corrupt the file.
+**`/etc/hosts` backup entries**: `open.bigmodel.cn`, `mcp.dingtalk.com`, `wss-open-connection.dingtalk.com`, `imap.qq.com`, `smtp.qq.com`. These provide a safety net but IPs go stale (CDN rotation). Run `./scripts/setup-dns.sh` to refresh. Use python3 (not sed) to edit `openclaw.json` — sed with token special characters can corrupt the file.
 
 **Setup script**: `./scripts/setup-dns.sh` — creates/updates `/etc/resolver/` entries and `/etc/hosts` backup IPs, then validates resolution. See `docs/dns-setup.md` for full documentation.
 

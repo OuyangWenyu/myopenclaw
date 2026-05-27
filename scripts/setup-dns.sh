@@ -39,6 +39,8 @@ RESOLVER_DOMAINS=(
   open.bigmodel.cn
   yundunwaf3.com
   zhipu.ai
+  # 邮箱
+  qq.com
 )
 
 # /etc/hosts 备份条目（这些域的 IP 可能随 CDN 变化，脚本自动获取最新 IP）
@@ -46,6 +48,8 @@ HOSTS_DOMAINS=(
   open.bigmodel.cn
   mcp.dingtalk.com
   wss-open-connection.dingtalk.com
+  imap.qq.com
+  smtp.qq.com
 )
 
 echo "🔧 中国域名 DNS 配置工具"
