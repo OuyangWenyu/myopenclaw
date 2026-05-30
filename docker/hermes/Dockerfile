@@ -63,9 +63,12 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # ── Install zotero-cli-cc (Zotero CLI) via uv ────────────────
 # uv tool install creates an isolated venv and exposes the `zot` binary.
-# Installed to /usr/local/bin so all users (hermes + root) can use it.
-RUN uv tool install --python-preference only-system zotero-cli-cc && \
-    ln -sf /root/.local/bin/zot /usr/local/bin/zot
+# UV_TOOL_DIR + UV_TOOL_BIN_DIR place the venv under /opt so both
+# root and hermes users can access it (defaults are under ~/.local).
+RUN UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/opt/uv-tools/bin \
+      uv tool install --python-preference only-system zotero-cli-cc && \
+    ln -sf /opt/uv-tools/bin/zot /usr/local/bin/zot && \
+    chmod -R a+rX /opt/uv-tools
 
 # ── Config directories for host-side persistence ────────────
 # Mounted from host via docker-compose volumes:
