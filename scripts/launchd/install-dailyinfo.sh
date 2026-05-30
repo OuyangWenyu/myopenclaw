@@ -75,8 +75,8 @@ fi
 
 # Jobs ordered by schedule time (generation first, then push).
 # Also clean up legacy single-push job if it exists.
-JOBS=(run-p1-arxiv run-p3 run-p2 run-p1 push-early push-papers push-arxiv)
-LEGACY_JOBS=(push)
+JOBS=(run-arxiv run-resource run-code run-papers run-ai_news push-early push-papers push-arxiv)
+LEGACY_JOBS=(run-p1-arxiv run-p1 run-p2 run-p3 push)
 
 # Remove legacy jobs that have been replaced by category-specific ones.
 for job in "${LEGACY_JOBS[@]}"; do
@@ -118,10 +118,11 @@ launchctl list | awk 'NR==1 || /ai\.dailyinfo/' || true
 cat <<EOF
 
 	ℹ️  调度表（北京时间）：
-    03:00  run-p1-arxiv   dailyinfo run -p 1 --categories arxiv
-    03:30  run-p3         dailyinfo run -p 3
-    03:45  run-p2         dailyinfo run -p 2
-    04:00  run-p1         dailyinfo run -p 1 --categories papers,ai_news
+    03:00  run-arxiv      dailyinfo run -p 3
+    03:30  run-resource   dailyinfo run -p 5
+    03:45  run-code       dailyinfo run -p 4
+    04:00  run-papers     dailyinfo run -p 1
+    04:30  run-ai_news    dailyinfo run -p 2
     05:30  push-early     dailyinfo push --categories ai_news,code,resource
     06:00  push-papers    dailyinfo push --categories papers
     07:00  push-arxiv     dailyinfo push --categories arxiv

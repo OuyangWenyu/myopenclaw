@@ -6,9 +6,9 @@
 set -euo pipefail
 
 LAUNCH_DIR="${HOME}/Library/LaunchAgents"
-JOBS=(run-p1-arxiv run-p3 run-p2 run-p1 push-early push-papers push-arxiv)
-# Also clean up legacy single-push job if it still exists.
-LEGACY_JOBS=(push)
+JOBS=(run-arxiv run-resource run-code run-papers run-ai_news push-early push-papers push-arxiv)
+# Also clean up legacy single-push job and old numbered jobs if they still exist.
+LEGACY_JOBS=(run-p1-arxiv run-p1 run-p2 run-p3 push)
 
 for job in "${LEGACY_JOBS[@]}"; do
     dest="${LAUNCH_DIR}/ai.dailyinfo.${job}.plist"
