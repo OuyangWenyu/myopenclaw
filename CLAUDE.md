@@ -37,6 +37,10 @@ docker compose exec hermes rclone ls gdrive:                    # List papers
 docker compose exec hermes rclone copy paper.pdf gdrive:         # Upload a paper
 docker compose exec hermes rclone deletefile gdrive:paper.pdf    # Delete a paper
 
+# Zotero CLI (zotero-cli-cc — Zotero literature management)
+docker compose exec hermes-coder zot stats                      # Zotero library statistics
+docker compose exec hermes-coder zot search "keyword" --limit 5 # Search papers
+
 # dailyinfo launchd scheduling
 ./scripts/launchd/install-dailyinfo.sh
 ./scripts/launchd/uninstall-dailyinfo.sh
@@ -46,7 +50,7 @@ docker compose exec hermes rclone deletefile gdrive:paper.pdf    # Delete a pape
 
 **Five Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
 
-1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), and lark-cli (Feishu CLI). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/lark-cli config dirs, auto-initializes lark-cli profiles and himalaya email config from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Three profiles: default (port 8642), coder (8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644). Dashboard on port 9119.
+1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Three profiles: default (port 8642), coder (8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644). Dashboard on port 9119.
 
 2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `node:22-slim` with Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Reuses the built-in `node` user (UID 1000). cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, maps `GLM_API_KEY → ANTHROPIC_API_KEY`, then runs `cc-connect` as the main process. Claude Code uses Zhipu GLM models via `ANTHROPIC_BASE_URL`. Port 9090 (cc-connect web admin).
 
@@ -76,7 +80,7 @@ docker compose exec hermes rclone deletefile gdrive:paper.pdf    # Delete a pape
 
 - **Google Drive (rclone)**: rclone v1.69.2 is installed in the hermes image for direct Google Drive API uploads. OAuth token stored in `~/.hermes/rclone/rclone.conf` (chmod 600, not in git). Remote `gdrive:` is scoped to a target folder via `root_folder_id`. Hermes uses `rclone copy <pdf> gdrive:` to upload papers. Full setup guide: `docs/google-drive-rclone.md`.
 
-- **Hermes coder Discord**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. The coder profile config at `~/.hermes/profiles/coder/config.yaml` is auto-created by `start.sh` on first run with deepseek-v4-pro as the default model. Has paper-fetch skill and rclone for paper download + Google Drive upload.
+- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. The coder profile config at `~/.hermes/profiles/coder/config.yaml` is auto-created by `start.sh` on first run with deepseek-v4-pro as the default model. Has paper-fetch skill and rclone for paper download + Google Drive upload, plus zotero-cli-cc for Zotero library management (SQLite reads + Web API writes). Zotero data dir (`~/Zotero`) is mounted read-only; writes go through the Zotero Web API. Full docs: `docs/zotero-cli-cc.md`.
 
 ## Network & DNS
 

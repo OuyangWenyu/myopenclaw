@@ -117,6 +117,33 @@ install_paper_fetch() {
 install_paper_fetch "${HOME}/.openclaw/skills" "~/.openclaw/skills"
 install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
 
+# ── 安装 zotero-cli-cc skill ────────────────────────────────────
+install_zotero_skill() {
+  local skills_dir="$1"
+  local label="$2"
+  mkdir -p "${skills_dir}"
+  # Check idempotently: .git exists AND SKILL.md at root (not monorepo subdir)
+  if [[ -d "${skills_dir}/zotero-cli-cc/.git" && -f "${skills_dir}/zotero-cli-cc/SKILL.md" ]]; then
+    echo "   ✅ zotero-cli-cc skill 已存在于 ${label}，跳过安装"
+    return
+  fi
+  echo "   📥 安装 zotero-cli-cc skill 到 ${label}（Zotero 文献管理）..."
+  if [[ -d "${skills_dir}/zotero-cli-cc" ]]; then
+    rm -rf "${skills_dir}/zotero-cli-cc"
+  fi
+  git clone --depth 1 https://github.com/Agents365-ai/zotero-cli-cc.git \
+    "${skills_dir}/zotero-cli-cc"
+  cd "${skills_dir}/zotero-cli-cc"
+  # Repo contains the skill at skill/zotero-cli-cc/; move to root
+  if [[ -d "skill/zotero-cli-cc" ]]; then
+    cp -r skill/zotero-cli-cc/* .
+    rm -rf skill
+  fi
+  cd - > /dev/null
+  echo "   ✅ zotero-cli-cc 已安装到 ${skills_dir}/zotero-cli-cc"
+}
+install_zotero_skill "${HOME}/.hermes/skills" "~/.hermes/skills"
+
 # ── 注入 OpenClaw GitHub token ──────────────────────────────────
 # 从 .env 读取 OPENCLAW_GH_TOKEN，替换 openclaw.json 中的占位符
 # MCP server 不继承容器环境变量，必须在 JSON 的 env 块中显式声明

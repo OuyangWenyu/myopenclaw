@@ -15,6 +15,7 @@ services:
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
+      - ${HOME}/Zotero:/opt/zotero-data:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -29,6 +30,11 @@ services:
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      # Zotero CLI (zotero-cli-cc)
+      - ZOT_DATA_DIR=/opt/zotero-data
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -53,6 +59,7 @@ services:
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
+      - ${HOME}/Zotero:/opt/zotero-data:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -70,6 +77,11 @@ services:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_ALLOWED_USERS=${DISCORD_ALLOWED_USERS:-}
       - DISCORD_REQUIRE_MENTION=true
+      # Zotero CLI (zotero-cli-cc)
+      - ZOT_DATA_DIR=/opt/zotero-data
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
     shm_size: "1g"
     deploy:
       resources:
@@ -92,6 +104,7 @@ services:
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
+      - ${HOME}/Zotero:/opt/zotero-data:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -105,6 +118,11 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=finance
+      # Zotero CLI (zotero-cli-cc)
+      - ZOT_DATA_DIR=/opt/zotero-data
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu

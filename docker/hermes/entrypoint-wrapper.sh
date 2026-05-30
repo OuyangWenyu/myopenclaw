@@ -26,6 +26,13 @@ ln -sf /opt/data/.config/himalaya /root/.config/himalaya
 mkdir -p /opt/lark-config
 ln -sf /opt/lark-config /root/.lark-cli
 
+# ── zotero-cli-cc config ──────────────────────────────────
+# zot reads config from ~/.config/zot/config.toml
+# Store on /opt/data volume so config survives rebuilds.
+# Symlink for both hermes user (/opt/data) and root.
+mkdir -p /opt/data/.config/zot
+ln -sf /opt/data/.config/zot /root/.config/zot
+
 # Auto-configure lark-cli if credentials are available via env vars
 # LARK_CLI_APP_ID / LARK_CLI_APP_SECRET — primary app (Hermes)
 # LARK_CLI_IDM_APP_ID / LARK_CLI_IDM_APP_SECRET — secondary app (爱码士)
@@ -146,6 +153,48 @@ message.send.backend.auth.raw = "${EMAIL2_PASSWORD}"
 TOML
     echo "   📧 himalaya 已自动配置 — ${EMAIL2_ADDRESS} (account: ${H2_ACCT})"
   fi
+fi
+
+# ── Auto-configure zotero-cli-cc from env vars ─────────
+# Generates ~/.config/zot/config.toml if ZOTERO_API_KEY is set.
+# ZOT_DATA_DIR env var (docker-compose) takes highest priority for data dir.
+# api_key/library_id in config.toml enable Web API writes.
+ZOT_CONFIG="/opt/data/.config/zot/config.toml"
+if [[ ! -f "${ZOT_CONFIG}" ]]; then
+  mkdir -p "$(dirname "${ZOT_CONFIG}")"
+  if [[ -n "${ZOTERO_API_KEY:-}" && -n "${ZOTERO_LIBRARY_ID:-}" ]]; then
+    cat > "${ZOT_CONFIG}" << TOML
+[zotero]
+data_dir = ''
+library_id = '${ZOTERO_LIBRARY_ID}'
+api_key = '${ZOTERO_API_KEY}'
+semantic_scholar_api_key = ''
+
+[output]
+default_format = 'table'
+limit = 50
+
+[export]
+default_style = 'bibtex'
+TOML
+    echo "   📚 zotero-cli-cc 已配置 — library ${ZOTERO_LIBRARY_ID}"
+  else
+    cat > "${ZOT_CONFIG}" << TOML
+[zotero]
+data_dir = ''
+library_id = ''
+api_key = ''
+
+[output]
+default_format = 'table'
+limit = 50
+
+[export]
+default_style = 'bibtex'
+TOML
+    echo "   📚 zotero-cli-cc 已配置（只读模式 — 未设置 ZOTERO_API_KEY）"
+  fi
+  chown -R hermes:hermes /opt/data/.config/zot
 fi
 
 # Hand off to original Hermes entrypoint (handles UID mapping + gosu)

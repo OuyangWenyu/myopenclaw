@@ -56,6 +56,17 @@ RUN RCLONE_VER="1.69.2" && \
     dpkg -i /tmp/rclone.deb && \
     rm /tmp/rclone.deb
 
+# ── Install uv (Python package manager) ──────────────────────
+# Copy the static binary from the official uv image — no pip/python3-pip needed.
+# https://docs.astral.sh/uv/guides/integration/docker/
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# ── Install zotero-cli-cc (Zotero CLI) via uv ────────────────
+# uv tool install creates an isolated venv and exposes the `zot` binary.
+# Installed to /usr/local/bin so all users (hermes + root) can use it.
+RUN uv tool install --python-preference only-system zotero-cli-cc && \
+    ln -sf /root/.local/bin/zot /usr/local/bin/zot
+
 # ── Config directories for host-side persistence ────────────
 # Mounted from host via docker-compose volumes:
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)
