@@ -66,6 +66,10 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=coder
+      # Discord (爱码士 coder)
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_ALLOWED_USERS=${DISCORD_ALLOWED_USERS:-}
+      - DISCORD_REQUIRE_MENTION=true
     shm_size: "1g"
     deploy:
       resources:

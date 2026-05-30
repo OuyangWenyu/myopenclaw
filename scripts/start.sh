@@ -74,16 +74,48 @@ if [[ ! -f "${HOME}/.openclaw/openclaw.json" ]]; then
   echo "   📝 已创建 OpenClaw 配置: ~/.openclaw/openclaw.json"
 fi
 
-# ── 确保 OpenClaw skills 目录存在并安装 paper-fetch ─────────────
-OPENCLAW_SKILLS_DIR="${HOME}/.openclaw/skills"
-mkdir -p "${OPENCLAW_SKILLS_DIR}"
-if [[ ! -d "${OPENCLAW_SKILLS_DIR}/paper-fetch/.git" ]]; then
-  echo "   📥 安装 paper-fetch skill（公开论文 PDF 下载器）..."
-  git clone https://github.com/Agents365-ai/paper-fetch.git "${OPENCLAW_SKILLS_DIR}/paper-fetch"
-  echo "   ✅ paper-fetch 已安装到 ~/.openclaw/skills/paper-fetch"
-else
-  echo "   ✅ paper-fetch skill 已存在，跳过安装"
+# ── 确保 Hermes coder profile 使用 deepseek-v4-pro ──────────────
+CODER_CONFIG="${HOME}/.hermes/profiles/coder/config.yaml"
+mkdir -p "$(dirname "${CODER_CONFIG}")"
+if [[ ! -f "${CODER_CONFIG}" ]]; then
+  cat > "${CODER_CONFIG}" << 'YAML'
+model:
+  default: deepseek-v4-pro
+  provider: deepseek
+  base_url: https://api.deepseek.com
+fallback_providers:
+- zai
+fallback_model:
+  provider: zai
+  model: glm-5.1
+YAML
+  echo "   📝 已创建 Hermes coder profile 配置（模型: deepseek-v4-pro）"
 fi
+
+# ── 确保 skills 目录存在并安装 paper-fetch ───────────────────────
+install_paper_fetch() {
+  local skills_dir="$1"
+  local label="$2"
+  mkdir -p "${skills_dir}"
+  # Check idempotently: .git exists AND SKILL.md at root (not monorepo subdir)
+  if [[ -d "${skills_dir}/paper-fetch/.git" && -f "${skills_dir}/paper-fetch/SKILL.md" ]]; then
+    echo "   ✅ paper-fetch skill 已存在于 ${label}，跳过安装"
+    return
+  fi
+  echo "   📥 安装 paper-fetch skill 到 ${label}（公开论文 PDF 下载器）..."
+  if [[ -d "${skills_dir}/paper-fetch" ]]; then
+    rm -rf "${skills_dir}/paper-fetch"
+  fi
+  git clone https://github.com/Agents365-ai/paper-fetch.git "${skills_dir}/paper-fetch"
+  # Repo is a monorepo; move inner skill to root if needed
+  if [[ -d "${skills_dir}/paper-fetch/skills/paper-fetch" ]]; then
+    cp -r "${skills_dir}/paper-fetch/skills/paper-fetch/"* "${skills_dir}/paper-fetch/"
+    rm -rf "${skills_dir}/paper-fetch/skills"
+  fi
+  echo "   ✅ paper-fetch 已安装到 ${skills_dir}/paper-fetch"
+}
+install_paper_fetch "${HOME}/.openclaw/skills" "~/.openclaw/skills"
+install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
 
 # ── 注入 OpenClaw GitHub token ──────────────────────────────────
 # 从 .env 读取 OPENCLAW_GH_TOKEN，替换 openclaw.json 中的占位符
