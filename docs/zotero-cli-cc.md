@@ -62,22 +62,47 @@ zot pdf ABC123 --outline          # 仅目录
 zot find-pdf ABC123
 ```
 
+## 自动安装与配置链
+
+`./scripts/start.sh` 启动时自动完成以下步骤，无需手动操作：
+
+```
+.env (ZOTERO_API_KEY, ZOTERO_LIBRARY_ID, GDRIVE_PAPERS_LOCAL_PATH)
+  │
+  ├─→ docker-compose.yml  将变量注入容器
+  │     ├─→ entrypoint-wrapper.sh  读取 env vars → 生成 /opt/data/.config/zot/config.toml
+  │     └─→ GDRIVE_PAPERS_LOCAL_PATH  传入容器（paper-to-zotero.py 使用）
+  │
+  └─→ start.sh  调用 install_paper_to_zotero_skill()
+        ├─→ ~/.hermes/skills/paper-to-zotero/        （全局 skill，所有 profile 可用）
+        └─→ ~/.hermes/profiles/coder/skills/research/paper-to-zotero/  （爱码士专属）
+              └─→ 自动 git init + commit（Hermes 只识别有 .git 的 skill 目录）
+```
+
+- **两个安装路径**：全局 `~/.hermes/skills/` 和 coder profile `~/.hermes/profiles/coder/skills/research/`。爱码士优先读 coder profile 路径
+- **`.git` 目录是必须的**：Hermes 只扫描带 `.git` 的目录作为 skill。`start.sh` 会自动 `git init` + `commit`
+- **Zotero 凭证**：在 `.env` 中配置后，`entrypoint-wrapper.sh` 自动生成 `config.toml`，`paper-to-zotero.py` 和 `zot` CLI 都从那里读取，Agent 无需向用户索要 key
+- **GDRIVE_PAPERS_LOCAL_PATH**：必须在 `.env` 中正确设置。注意 Google Drive 路径因机器而异（macOS 用户名不同、CloudStorage 路径不同等）。默认值从 `.cloud.conf` 推导不准确，建议手动确认
+- **`zotero-upload` 劫持风险**：如果爱码士在对话中自建了 Zotero 相关 skill（如 `zotero-upload`），会劫持所有 Zotero 请求。检查 `~/.hermes/profiles/coder/skills/research/` 下是否有非预期的 skill 目录
+
 ## 与 paper-fetch 的联动
 
-完整工作流（Hermes coder 可以自动执行）：
+完整工作流（Hermes coder 通过 paper-to-zotero skill 自动执行）：
 
-1. **搜索并下载论文** → paper-fetch 找到目标 PDF 并下载到 `/tmp/papers/`
+1. **搜索并下载论文** → paper-fetch 找到目标 PDF 并下载到 `/tmp/papers/`，导出 JSON 到文件
 2. **上传 Google Drive** → `rclone copy <pdf> gdrive:` 上传 PDF 到 Google Drive（主存储）
-3. **生成分享链接** → `rclone link gdrive:<file>` 获取 `https://drive.google.com/open?id=xxx`
-4. **创建 Zotero 条目** → `zot add --doi "..."` 导入元数据，获得 `KEY`
-5. **关联 Google Drive PDF** → `zot-link-gdrive.py <KEY> "<gdrive_url>"` 创建 linked_url 附件
+3. **创建 Zotero 条目 + linked_file 附件** → `paper-to-zotero.py <json> <local_path>` 一次性创建完整元数据条目和 linked_file 附件
 
-**注意**：PDF 以 Google Drive 为主存储（免费、不限量），Zotero 只存元数据索引。linked_url 附件在 Zotero 界面中显示为可点击的 PDF 子条目，点击直接跳转 Google Drive，不占用 Zotero 免费存储空间（300MB）。
+**元数据来源**：Crossref API（期刊论文，完整作者列表、摘要、期刊/卷/页码）→ arXiv API（预印本兜底）→ paper-fetch meta（最后兜底）。
+
+**附件类型**：`linked_file` 指向本地 Google Drive 路径（如 `~/Google Drive/我的云端硬盘/Documents/Papers/Zotero_Papers/file.pdf`）。Google Drive macOS 客户端以 stream 模式管理文件，在 Finder 里显示为占位符，点击时自动下载。不占用 Zotero 免费存储空间（300MB）。
+
+**注意**：PDF 以 Google Drive 为主存储（免费、不限量），Zotero 只存元数据索引。
 
 示例对话（爱码士 Discord）：
 > "帮我找 Attention Is All You Need 这篇论文，下载 PDF 并加到 Zotero"
 
-Hermes 自动执行：paper-fetch 下载 → rclone 上传 → rclone link → `zot add --doi` 创建条目 → `zot-link-gdrive.py` 关联 PDF。
+Hermes 自动执行：paper-fetch 下载 → rclone 上传 → `paper-to-zotero.py` 创建完整 Zotero 条目（含元数据和 linked_file 附件）。
 
 ## 验证
 

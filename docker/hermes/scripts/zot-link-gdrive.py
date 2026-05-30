@@ -1,5 +1,5 @@
 #!/opt/uv-tools/zotero-cli-cc/bin/python
-"""Create a linked_url attachment in Zotero pointing to a Google Drive file.
+"""Create a linked_file attachment in Zotero pointing to a Google Drive file.
 
 Reads Zotero credentials from /opt/data/.config/zot/config.toml
 Uses the pyzotero library shipped with zotero-cli-cc in /opt/uv-tools/.
@@ -43,8 +43,8 @@ def main():
         sys.exit(0)
 
     z = zt.Zotero(lib_id, "user", api_key)
-    tmpl = z.item_template("attachment", "linked_url")
-    tmpl["url"] = url
+    tmpl = z.item_template("attachment", "linked_file")
+    tmpl["path"] = url
     tmpl["title"] = title
     tmpl["parentItem"] = key
     resp = z.create_items([tmpl])

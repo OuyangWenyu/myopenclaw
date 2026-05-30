@@ -87,6 +87,12 @@ ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
 COPY scripts/zot-link-gdrive.py /opt/hermes/scripts/zot-link-gdrive.py
 RUN chmod +x /opt/hermes/scripts/zot-link-gdrive.py
 
+# ── Copy paper-to-zotero script ─────────────────────────────
+# Creates complete Zotero item (metadata + linked_file attachment).
+# Enriches metadata from Crossref/arXiv; writes linked_file path to Zotero.
+COPY scripts/paper-to-zotero.py /opt/hermes/scripts/paper-to-zotero.py
+RUN chmod +x /opt/hermes/scripts/paper-to-zotero.py
+
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the

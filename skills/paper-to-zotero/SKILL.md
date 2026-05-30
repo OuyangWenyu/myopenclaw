@@ -1,120 +1,66 @@
 ---
 name: paper-to-zotero
-description: Use whenever the user wants to download a paper AND add it to Zotero — given a DOI, arXiv ID, paper title, or citation. Trigger on phrases like "下载这篇论文并加到Zotero", "下载并同步到Zotero文库", "帮我找X论文加到文献库", "download and add to Zotero", "add this paper to my library", "download X paper and sync to Zotero", or any request that combines paper download with Zotero library management. This is the complete pipeline skill that orchestrates paper-fetch → Google Drive → Zotero.
+description: Use when the user wants to download a paper AND add it to Zotero — by DOI, arXiv ID, or paper title. Trigger on "下载并加到Zotero", "同步至Zotero", "同步到Zotero文库", "下载论文并导入", "加到文献库", "加到Zotero", "download and add to Zotero", "save paper to Zotero", "put this paper in my library", "download X paper and sync to Zotero", or ANY phrase that combines obtaining a paper (下载/找/获取/download/find/fetch/get) with Zotero/library (Zotero/文献库/library/references). This skill runs the COMPLETE automated pipeline: paper-fetch → Google Drive → Zotero linked_file. ALL tools and credentials are pre-configured — do NOT install packages, do NOT pip install, do NOT ask for API keys.
+homepage: https://github.com/Agents365-ai/myopenclaw
+metadata: {"author":"owen","version":"2.0","category":"research","tags":["paper","pdf","zotero","google-drive","literature"]}
 ---
 
 # Paper-to-Zotero Pipeline
 
-Download a paper PDF, upload it to Google Drive, and create a Zotero entry with a linked attachment. Google Drive is the PRIMARY PDF store; Zotero holds metadata with a clickable `linked_url` that opens the Drive file.
+IMPORTANT: Everything is pre-configured. Do NOT install anything, do NOT ask for credentials. Just run the commands below.
 
-## Prerequisites
+Download a paper, upload to Google Drive (primary PDF store), create a Zotero entry with full metadata + linked_file PDF attachment.
 
-- `paper-fetch` skill — downloads PDFs (already installed)
-- `zot` CLI — Zotero read/write (already installed)
-- `rclone` — Google Drive upload (already installed, remote `gdrive:`)
-- `zot-link-gdrive.py` — creates linked_url attachments (at `/opt/hermes/scripts/`)
+## Step 1: Download PDF
 
-## Complete Pipeline (5 steps)
+If the user gave a **paper title** (most common):
+```bash
+cd /opt/data/skills/paper-fetch && python3 scripts/fetch.py --title "<TITLE>" --out /tmp/papers --format json > /tmp/pf.json
+```
 
-Execute each step sequentially. Report progress to the user after each step.
+If they gave a **DOI**:
+```bash
+cd /opt/data/skills/paper-fetch && python3 scripts/fetch.py "<DOI>" --out /tmp/papers --format json > /tmp/pf.json
+```
 
-### Step 1: Download PDF with paper-fetch
+Check: `python3 -c "import json; d=json.load(open('/tmp/pf.json')); print(d['ok'])"` — must print `True`. If `False`, stop.
+
+## Step 2: Upload to Google Drive
 
 ```bash
-cd /opt/data/skills/paper-fetch
-python3 scripts/fetch.py "<DOI_OR_TITLE>" --out /tmp/papers
+BASENAME=$(python3 -c "import json; d=json.load(open('/tmp/pf.json')); print(d['data']['results'][0]['file'].split('/')[-1])")
+rclone copy "/tmp/papers/$BASENAME" gdrive:
 ```
 
-If they gave a title (not a DOI), use `--title`:
-```bash
-python3 scripts/fetch.py --title "Model Merging on Loss Landscape" --out /tmp/papers
-```
-
-The JSON output has `data.results[0].file` (relative PDF path) and `data.results[0].meta` (title, year, author).
-
-**Error handling**: If `ok` is `false`, tell the user which sources were tried and suggest the paper might be paywalled.
-
-### Step 2: Upload to Google Drive
+## Step 3: Create Zotero entry (metadata + linked_file PDF)
 
 ```bash
-rclone copy /tmp/papers/<filename> gdrive:
+/opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json "$GDRIVE_PAPERS_LOCAL_PATH/$BASENAME"
 ```
 
-`gdrive:` is pre-configured. The file goes into the scoped papers folder.
+This single command enriches metadata (Crossref → arXiv → paper-fetch fallback), creates the Zotero item with all fields, and attaches a linked_file PDF. Returns `{"ok": true, "zotero_key": "XXX", ...}`.
 
-### Step 3: Get shareable link
+## Step 4: Cleanup
 
 ```bash
-rclone link gdrive:<filename>
+rm "/tmp/papers/$BASENAME" /tmp/pf.json
 ```
 
-Returns `https://drive.google.com/open?id=...`. This is the URL that Zotero will link to.
+Report: `✅ 已添加: <title> | 📚 Zotero: <key>`
 
-### Step 4: Create Zotero metadata entry
+## Already in Zotero?
 
 ```bash
-zot add --doi "<DOI>"
+zot search "<DOI_OR_TITLE>"
 ```
 
-For arXiv papers, construct the canonical DOI: `10.48550/arXiv.<id>` (e.g., `10.48550/arXiv.1706.03762`).
-
-Returns `data.key` — the Zotero item key. If the paper is already in the library (search first with `zot search`), use the existing key and skip this step.
-
-### Step 5: Link Google Drive PDF to Zotero
-
+If found, only do Steps 1-2, then:
 ```bash
-/opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_KEY> "<GDRIVE_URL>" "Paper Title (PDF)"
+/opt/hermes/scripts/zot-link-gdrive.py <KEY> "$GDRIVE_PAPERS_LOCAL_PATH/$BASENAME" "$BASENAME"
 ```
 
-This creates a `linked_url` attachment — the PDF shows as a clickable link in Zotero, opening directly from Google Drive. Does NOT use Zotero cloud storage.
+## Notes
 
-**Dry-run first** (optional):
-```bash
-/opt/hermes/scripts/zot-link-gdrive.py --dry-run <ZOTERO_KEY> "<GDRIVE_URL>"
-```
-
-### Step 6: Cleanup
-
-```bash
-rm /tmp/papers/<filename>
-```
-
-## Complete Example
-
-```
-User: "下载 Attention Is All You Need 并加到 Zotero"
-
-Step 1:
-  cd /opt/data/skills/paper-fetch
-  python3 scripts/fetch.py "10.48550/arXiv.1706.03762" --out /tmp/papers
-  → FILE: /tmp/papers/Vaswani_2017_Attention_Is_All_You_Need.pdf
-
-Step 2:
-  rclone copy /tmp/papers/Vaswani_2017_Attention_Is_All_You_Need.pdf gdrive:
-
-Step 3:
-  rclone link gdrive:Vaswani_2017_Attention_Is_All_You_Need.pdf
-  → https://drive.google.com/open?id=abc123
-
-Step 4:
-  zot add --doi "10.48550/arXiv.1706.03762"
-  → KEY: ABC789
-
-Step 5:
-  /opt/hermes/scripts/zot-link-gdrive.py ABC789 "https://drive.google.com/open?id=abc123" "Attention Is All You Need"
-
-Step 6:
-  rm /tmp/papers/Vaswani_2017_Attention_Is_All_You_Need.pdf
-
-Report to user:
-  ✅ 已添加: Attention Is All You Need
-  📄 PDF: https://drive.google.com/open?id=abc123
-  📚 Zotero: ABC789
-```
-
-## Edge Cases
-
-- **Already in library**: Run `zot search "<DOI>"` first. If found, use existing key, only run Steps 1-3 (download + upload) and Step 5 (link).
-- **Download fails**: Tell user which sources were tried. Suggest ILL or institutional access. Do NOT proceed to Zotero steps.
-- **arXiv paper**: Use `10.48550/arXiv.<id>` as the DOI. Metadata resolution may show `no_match` — that's normal for arXiv, the basic fields (title from paper-fetch) are sufficient.
-- **Title-only request**: Use `paper-fetch --title "..."` to resolve to DOI first, then proceed.
+- paper-fetch `--out-file` flag does NOT exist — use `--format json > /tmp/pf.json` to capture output
+- arXiv papers use `10.48550/arXiv.<id>` format DOI — paper-fetch resolves this from `--title` automatically
+- `zot read <key>` queries local SQLite — API-created items may not appear until Zotero syncs

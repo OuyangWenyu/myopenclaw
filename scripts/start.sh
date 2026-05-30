@@ -41,6 +41,12 @@ fi
 
 mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude"
 
+# ── 自动推导 GDRIVE_PAPERS_LOCAL_PATH（若 .env 未设置）────────────
+if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
+  export GDRIVE_PAPERS_LOCAL_PATH="${CLOUD_ROOT}/Papers/Zotero_Papers"
+  echo "   📁 GDRIVE_PAPERS_LOCAL_PATH 自动推导: ${GDRIVE_PAPERS_LOCAL_PATH}"
+fi
+
 # ── 确保工具配置目录存在（volume mount 需要）──────────────────
 mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode" "${HOME}/.lark-cli"
 if [[ ! -f "${HOME}/.config/opencode/opencode.json" ]]; then
@@ -159,9 +165,20 @@ install_paper_to_zotero_skill() {
   fi
   echo "   📥 安装 paper-to-zotero skill 到 ${label}（paper-fetch → Drive → Zotero 完整工作流）..."
   cp "${src}/SKILL.md" "${skills_dir}/paper-to-zotero/SKILL.md"
+  # Initialize git repo if missing — Hermes only discovers skills with .git
+  if [[ ! -d "${skills_dir}/paper-to-zotero/.git" ]]; then
+    git -C "${skills_dir}/paper-to-zotero" init -q
+    git -C "${skills_dir}/paper-to-zotero" add SKILL.md
+    git -C "${skills_dir}/paper-to-zotero" -c user.email="skill@myopenclaw" -c user.name="myopenclaw" commit -qm "paper-to-zotero skill" --no-gpg-sign
+  elif ! git -C "${skills_dir}/paper-to-zotero" diff --quiet; then
+    git -C "${skills_dir}/paper-to-zotero" add SKILL.md
+    git -C "${skills_dir}/paper-to-zotero" -c user.email="skill@myopenclaw" -c user.name="myopenclaw" commit -qm "update paper-to-zotero skill" --no-gpg-sign
+  fi
   echo "   ✅ paper-to-zotero 已安装到 ${skills_dir}/paper-to-zotero"
 }
 install_paper_to_zotero_skill "${HOME}/.hermes/skills" "~/.hermes/skills"
+# Also install to coder profile's research skills（爱码士 Discord bot 使用的 skill 路径）
+install_paper_to_zotero_skill "${HOME}/.hermes/profiles/coder/skills/research" "coder profile"
 
 # ── 注入 OpenClaw GitHub token ──────────────────────────────────
 # 从 .env 读取 OPENCLAW_GH_TOKEN，替换 openclaw.json 中的占位符

@@ -35,6 +35,7 @@ services:
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -82,6 +83,7 @@ services:
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
     shm_size: "1g"
     deploy:
       resources:
@@ -123,6 +125,7 @@ services:
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
