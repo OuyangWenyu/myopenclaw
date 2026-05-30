@@ -24,6 +24,7 @@
 - `~/.config/gh` → `/opt/gh-config`（hermes 和 claude-code 容器内，gh 认证和配置，宿主机持久化）
 - `~/.config/opencode` → `/opt/opencode-config`（hermes 容器内，opencode 配置，宿主机持久化）
 - `~/.hermes/secrets/` → `/opt/data/secrets/`（hermes 容器内，LLM 密钥文件，opencode.json 用 `{file:}` 引用）
+- `~/.hermes/rclone/` → `/opt/data/rclone/`（hermes 容器内，rclone Google Drive 认证配置，不入 git）
 - `~/code` + `~/Code` → `/home/claude/code` + `/home/claude/Code`（claude-code 容器内，代码仓库）
 
 ---
@@ -449,12 +450,16 @@ FreshRSS 配了 `restart: unless-stopped`，起一次之后宿主机重启也会
 
 | 时间（Asia/Shanghai） | LaunchAgent Label | 命令 |
 |---|---|---|
-| 06:00 | `ai.dailyinfo.run-p1` | `uv run dailyinfo run -p 1`（RSS papers / AI news） |
-| 06:15 | `ai.dailyinfo.run-p2` | `uv run dailyinfo run -p 2`（code trending） |
-| 06:30 | `ai.dailyinfo.run-p3` | `uv run dailyinfo run -p 3`（university news） |
-| 07:00 | `ai.dailyinfo.push`   | `uv run dailyinfo push` |
+| 03:00 | `ai.dailyinfo.run-arxiv` | `uv run dailyinfo run -p 3`（arXiv 论文） |
+| 03:30 | `ai.dailyinfo.run-resource` | `uv run dailyinfo run -p 5`（资源汇总） |
+| 03:45 | `ai.dailyinfo.run-code` | `uv run dailyinfo run -p 4`（代码趋势） |
+| 04:00 | `ai.dailyinfo.run-papers` | `uv run dailyinfo run -p 1`（期刊论文） |
+| 04:30 | `ai.dailyinfo.run-ai_news` | `uv run dailyinfo run -p 2`（AI 资讯） |
+| 05:30 | `ai.dailyinfo.push-early` | `uv run dailyinfo push --categories ai_news,code,resource` |
+| 06:00 | `ai.dailyinfo.push-papers` | `uv run dailyinfo push --categories papers` |
+| 07:00 | `ai.dailyinfo.push-arxiv` | `uv run dailyinfo push --categories arxiv` |
 
-日志统一落在 `/Users/owen/code/dailyinfo/logs/dailyinfo-<cmd>.log`。
+日志统一落在 `/Users/owen/code/dailyinfo/logs/dailyinfo-*.log`。
 
 ### 安装 / 卸载
 
@@ -497,3 +502,34 @@ DAILYINFO_DIR=/path/to/dailyinfo ./scripts/launchd/install-dailyinfo.sh
 ### 不在本仓维护的内容
 
 dailyinfo 的 secret（`OPENROUTER_API_KEY` / `DISCORD_BOT_TOKEN` / `DISCORD_CHANNEL_*`）、数据源配置（`config/sources.json`）、抓取 / AI 摘要 / 推送业务逻辑全部由 dailyinfo 仓自己管理，本仓只负责定时触发和备份覆盖。
+
+---
+
+## Google Drive 论文集成
+
+Hermes 通过 [rclone](https://rclone.org) 直接上传论文 PDF 到 Google Drive 的目标文件夹。不走 volume mount（macOS File Provider API 对 Docker 写入的文件有限制），而是用 Google Drive API + OAuth 认证，权限限定到单个文件夹。
+
+### 安全模型
+
+- OAuth token 存储在 `~/.hermes/rclone/rclone.conf`（chmod 600，不入 git）
+- rclone remote 的 `root_folder_id` 限定到目标论文文件夹，无权访问 Google Drive 其他内容
+- Hermes 容器只有 `rclone` 命令行工具，无权访问 Google Drive 其他内容
+
+### 用法
+
+```bash
+docker compose exec hermes rclone ls gdrive:                  # 列出论文
+docker compose exec hermes rclone copy paper.pdf gdrive:       # 上传论文
+docker compose exec hermes rclone deletefile gdrive:paper.pdf  # 删除论文
+```
+
+`gdrive:` 被 `root_folder_id` 限定到目标文件夹，所有路径相对于该文件夹。
+
+### 首次配置
+
+完整指南见 [`docs/google-drive-rclone.md`](docs/google-drive-rclone.md)。简要步骤：
+
+1. [Google Cloud Console](https://console.cloud.google.com) → 启用 Drive API → 创建 OAuth client ID（Desktop app）
+2. 宿主机 `brew install rclone && rclone authorize drive` 获取 OAuth token
+3. 将 client_id、client_secret、token、root_folder_id 写入 `~/.hermes/rclone/rclone.conf`
+4. 重启容器后 `rclone ls gdrive:` 验证连通

@@ -15,6 +15,7 @@ services:
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
+
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
@@ -27,6 +28,7 @@ services:
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
+      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -51,6 +53,7 @@ services:
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
+
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
@@ -61,6 +64,7 @@ services:
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
+      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=coder
     shm_size: "1g"
     deploy:
@@ -84,6 +88,7 @@ services:
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
+
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
@@ -94,6 +99,7 @@ services:
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
+      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=finance
       - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}

@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>ai.dailyinfo.run-p2</string>
+    <string>ai.dailyinfo.run-code</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
         <string>-lc</string>
-        <string>cd "__DAILYINFO_DIR__" &amp;&amp; "__UV_BIN__" run dailyinfo run -p 2</string>
+        <string>cd "__DAILYINFO_DIR__" &amp;&amp; "__UV_BIN__" run dailyinfo run -p 4</string>
     </array>
 
     <key>WorkingDirectory</key>
@@ -33,9 +33,9 @@
     <false/>
 
     <key>StandardOutPath</key>
-    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-p2.log</string>
+    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-code.log</string>
 
     <key>StandardErrorPath</key>
-    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-p2.log</string>
+    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-code.log</string>
 </dict>
 </plist>

@@ -47,6 +47,15 @@ RUN HIMALAYA_VER="1.2.0" && \
     chmod +x /usr/local/bin/himalaya && \
     rm /tmp/himalaya.tgz
 
+# ── Install rclone (Google Drive / cloud storage CLI) ────────
+# Single binary for uploading papers to Google Drive via service account.
+# Uses rclone env vars (RCLONE_CONFIG_GDRIVE_*) for headless auth — no config file needed.
+RUN RCLONE_VER="1.69.2" && \
+    ARCH=$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/') && \
+    wget -qO /tmp/rclone.deb "https://downloads.rclone.org/v${RCLONE_VER}/rclone-v${RCLONE_VER}-linux-${ARCH}.deb" && \
+    dpkg -i /tmp/rclone.deb && \
+    rm /tmp/rclone.deb
+
 # ── Config directories for host-side persistence ────────────
 # Mounted from host via docker-compose volumes:
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)

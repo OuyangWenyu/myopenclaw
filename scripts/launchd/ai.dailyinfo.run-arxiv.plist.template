@@ -3,13 +3,13 @@
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>ai.dailyinfo.run-p1-arxiv</string>
+    <string>ai.dailyinfo.run-arxiv</string>
 
     <key>ProgramArguments</key>
     <array>
         <string>/bin/bash</string>
         <string>-lc</string>
-        <string>cd "__DAILYINFO_DIR__" &amp;&amp; "__UV_BIN__" run dailyinfo run -p 1 --categories arxiv</string>
+        <string>cd "__DAILYINFO_DIR__" &amp;&amp; "__UV_BIN__" run dailyinfo run -p 3</string>
     </array>
 
     <key>WorkingDirectory</key>
@@ -33,9 +33,9 @@
     <false/>
 
     <key>StandardOutPath</key>
-    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-p1-arxiv.log</string>
+    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-arxiv.log</string>
 
     <key>StandardErrorPath</key>
-    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-p1-arxiv.log</string>
+    <string>__DAILYINFO_DIR__/logs/dailyinfo-run-arxiv.log</string>
 </dict>
 </plist>
