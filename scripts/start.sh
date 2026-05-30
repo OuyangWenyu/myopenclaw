@@ -144,6 +144,25 @@ install_zotero_skill() {
 }
 install_zotero_skill "${HOME}/.hermes/skills" "~/.hermes/skills"
 
+# ── 安装 paper-to-zotero skill（项目自有 skill）────────────────────
+install_paper_to_zotero_skill() {
+  local skills_dir="$1"
+  local label="$2"
+  local src="${REPO_ROOT}/skills/paper-to-zotero"
+  mkdir -p "${skills_dir}/paper-to-zotero"
+  # Check idempotently: if SKILL.md hasn't changed, skip
+  if [[ -f "${skills_dir}/paper-to-zotero/SKILL.md" ]]; then
+    if cmp -s "${src}/SKILL.md" "${skills_dir}/paper-to-zotero/SKILL.md"; then
+      echo "   ✅ paper-to-zotero skill 已存在于 ${label}，跳过安装"
+      return
+    fi
+  fi
+  echo "   📥 安装 paper-to-zotero skill 到 ${label}（paper-fetch → Drive → Zotero 完整工作流）..."
+  cp "${src}/SKILL.md" "${skills_dir}/paper-to-zotero/SKILL.md"
+  echo "   ✅ paper-to-zotero 已安装到 ${skills_dir}/paper-to-zotero"
+}
+install_paper_to_zotero_skill "${HOME}/.hermes/skills" "~/.hermes/skills"
+
 # ── 注入 OpenClaw GitHub token ──────────────────────────────────
 # 从 .env 读取 OPENCLAW_GH_TOKEN，替换 openclaw.json 中的占位符
 # MCP server 不继承容器环境变量，必须在 JSON 的 env 块中显式声明
