@@ -81,6 +81,12 @@ RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config && \
 # opencode respects OPENCODE_CONFIG_DIR to find its config
 ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
 
+# ── Copy zot-link-gdrive bridge script ─────────────────────
+# Creates linked_url attachments in Zotero pointing to Google Drive PDFs.
+# Uses pyzotero from the zotero-cli-cc venv; reads credentials from config.toml.
+COPY scripts/zot-link-gdrive.py /opt/hermes/scripts/zot-link-gdrive.py
+RUN chmod +x /opt/hermes/scripts/zot-link-gdrive.py
+
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the

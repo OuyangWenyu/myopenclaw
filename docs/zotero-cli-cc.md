@@ -66,15 +66,18 @@ zot find-pdf ABC123
 
 完整工作流（Hermes coder 可以自动执行）：
 
-1. **搜索论文** → paper-fetch 找到目标 PDF 并下载
-2. **创建 Zotero 条目** → `zot add --doi "..."` 导入元数据
-3. **附加 PDF** → `zot attach <key> <pdf_path>` 将 PDF 关联到条目
-4. **上传 Google Drive** → `rclone copy <pdf> gdrive:` （已有流程）
+1. **搜索并下载论文** → paper-fetch 找到目标 PDF 并下载到 `/tmp/papers/`
+2. **上传 Google Drive** → `rclone copy <pdf> gdrive:` 上传 PDF 到 Google Drive（主存储）
+3. **生成分享链接** → `rclone link gdrive:<file>` 获取 `https://drive.google.com/open?id=xxx`
+4. **创建 Zotero 条目** → `zot add --doi "..."` 导入元数据，获得 `KEY`
+5. **关联 Google Drive PDF** → `zot-link-gdrive.py <KEY> "<gdrive_url>"` 创建 linked_url 附件
+
+**注意**：PDF 以 Google Drive 为主存储（免费、不限量），Zotero 只存元数据索引。linked_url 附件在 Zotero 界面中显示为可点击的 PDF 子条目，点击直接跳转 Google Drive，不占用 Zotero 免费存储空间（300MB）。
 
 示例对话（爱码士 Discord）：
 > "帮我找 Attention Is All You Need 这篇论文，下载 PDF 并加到 Zotero"
 
-Hermes 自动执行：paper-fetch 下载 → `zot add --doi` 创建条目 → `zot attach` 附加 PDF → rclone 上传备份。
+Hermes 自动执行：paper-fetch 下载 → rclone 上传 → rclone link → `zot add --doi` 创建条目 → `zot-link-gdrive.py` 关联 PDF。
 
 ## 验证
 

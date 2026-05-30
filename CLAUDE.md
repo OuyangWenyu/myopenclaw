@@ -41,6 +41,19 @@ docker compose exec hermes rclone deletefile gdrive:paper.pdf    # Delete a pape
 docker compose exec hermes-coder zot stats                      # Zotero library statistics
 docker compose exec hermes-coder zot search "keyword" --limit 5 # Search papers
 
+# Paper pipeline (paper-fetch → Google Drive → Zotero linked_url attachment)
+# The full workflow to download a paper and add it to Zotero with a Google Drive PDF link:
+docker compose exec hermes-coder bash -c "
+  cd /opt/data/skills/paper-fetch &&
+  python3 scripts/fetch.py '<DOI>' --out /tmp/papers
+"                                                                     # Step 1: Download PDF
+docker compose exec hermes rclone copy /tmp/papers/<file> gdrive:     # Step 2: Upload to Drive
+docker compose exec hermes rclone link gdrive:<file>                  # Step 3: Get share link
+docker compose exec hermes-coder zot add --doi '<DOI>'                # Step 4: Create metadata
+docker compose exec hermes-coder \
+  /opt/hermes/scripts/zot-link-gdrive.py <KEY> '<GDRIVE_URL>'         # Step 5: Link PDF
+rm /tmp/papers/<file>                                                 # Step 6: Cleanup
+
 # dailyinfo launchd scheduling
 ./scripts/launchd/install-dailyinfo.sh
 ./scripts/launchd/uninstall-dailyinfo.sh
@@ -80,7 +93,7 @@ docker compose exec hermes-coder zot search "keyword" --limit 5 # Search papers
 
 - **Google Drive (rclone)**: rclone v1.69.2 is installed in the hermes image for direct Google Drive API uploads. OAuth token stored in `~/.hermes/rclone/rclone.conf` (chmod 600, not in git). Remote `gdrive:` is scoped to a target folder via `root_folder_id`. Hermes uses `rclone copy <pdf> gdrive:` to upload papers. Full setup guide: `docs/google-drive-rclone.md`.
 
-- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. The coder profile config at `~/.hermes/profiles/coder/config.yaml` is auto-created by `start.sh` on first run with deepseek-v4-pro as the default model. Has paper-fetch skill and rclone for paper download + Google Drive upload, plus zotero-cli-cc for Zotero library management (SQLite reads + Web API writes). Zotero data dir (`~/Zotero`) is mounted read-only; writes go through the Zotero Web API. Full docs: `docs/zotero-cli-cc.md`.
+- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. The coder profile config at `~/.hermes/profiles/coder/config.yaml` is auto-created by `start.sh` on first run with deepseek-v4-pro as the default model. Has paper-fetch skill and rclone for paper download + Google Drive upload, plus zotero-cli-cc for Zotero library management (SQLite reads + Web API writes). Zotero data dir (`~/Zotero`) is mounted read-only; writes go through the Zotero Web API. PDFs are stored in Google Drive (not Zotero cloud) and linked to Zotero entries via `linked_url` attachments created by `zot-link-gdrive.py`. Full workflow: paper-fetch download → rclone upload → rclone link → zot add → zot-link-gdrive. Full docs: `docs/zotero-cli-cc.md`.
 
 ## Network & DNS
 
