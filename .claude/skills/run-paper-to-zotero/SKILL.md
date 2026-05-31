@@ -5,59 +5,34 @@ description: Use when the user wants to download a paper and add it to Zotero �
 
 # Paper-to-Zotero Pipeline
 
-Downloads a paper PDF, uploads to Google Drive, and creates a complete Zotero entry with rich metadata and a `linked_file` PDF attachment. Everything is pre-configured — do NOT install packages or ask for credentials.
+Downloads a paper PDF, uploads to Google Drive, and creates a complete Zotero entry with rich metadata and a `linked_file` PDF attachment — all in one command. Everything is pre-configured — do NOT install packages or ask for credentials.
 
 ## Prerequisites (auto-verified)
 
 ```bash
-docker compose exec hermes-coder test -x /opt/hermes/scripts/paper-to-zotero.py
+docker compose exec hermes-coder test -x /opt/hermes/scripts/run-paper-pipeline.sh
 docker compose exec hermes-coder test -f /opt/data/skills/paper-fetch/scripts/fetch.py
 docker compose exec hermes-coder which rclone
 ```
 
-## Run
-
-One-shot via the smoke driver:
+## Run (one-shot)
 
 ```bash
-bash .claude/skills/run-paper-to-zotero/smoke.sh "<DOI>"
+docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh "<DOI_OR_TITLE>"
 ```
 
-Or manual 4-step pipeline:
+For a DOI: pass the DOI directly. For a paper title: pass the title string. The script auto-detects which format you gave.
 
-### Step 1: Download PDF
-
+For a dry run (preview without actually creating the Zotero entry):
 ```bash
-docker compose exec hermes-coder bash -c "
-  cd /opt/data/skills/paper-fetch &&
-  python3 scripts/fetch.py --title '<PAPER_TITLE>' --out /tmp/papers --format json > /tmp/pf.json
-"
+docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh --dry-run "<DOI>"
 ```
 
-For a DOI: omit `--title` and pass the DOI string directly.
-
-Check: `docker compose exec hermes-coder python3 -c "import json; d=json.load(open('/tmp/pf.json')); print(d['ok'])"` — must be `True`.
-
-### Step 2: Upload to Google Drive
-
-```bash
-BASENAME=$(docker compose exec hermes-coder python3 -c "import json; print(json.load(open('/tmp/pf.json'))['data']['results'][0]['file'].split('/')[-1])")
-docker compose exec hermes-coder rclone copy "/tmp/papers/$BASENAME" gdrive:
-```
-
-### Step 3: Create Zotero entry
-
-```bash
-docker compose exec hermes-coder /opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json
-```
-
-Auto-constructs the local Google Drive path from `$GDRIVE_PAPERS_LOCAL_PATH` + filename from JSON. Returns `{"ok": true, "zotero_key": "XXX", "attachment_key": "YYY", ...}`.
-
-### Step 4: Cleanup
-
-```bash
-docker compose exec hermes-coder rm -f "/tmp/papers/$BASENAME" /tmp/pf.json
-```
+The command runs all 4 steps atomically:
+1. paper-fetch downloads the PDF
+2. rclone uploads to Google Drive
+3. paper-to-zotero.py creates the Zotero entry with rich metadata + linked_file
+4. Cleanup of temp files
 
 ## Already in library?
 
@@ -65,7 +40,7 @@ docker compose exec hermes-coder rm -f "/tmp/papers/$BASENAME" /tmp/pf.json
 docker compose exec hermes-coder zot search "<DOI_OR_TITLE>"
 ```
 
-If found, do only Steps 1-2 (download + upload), then:
+If found, download + upload the PDF manually, then link to the existing Zotero entry:
 
 ```bash
 docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <EXISTING_KEY> "<filename>"
@@ -73,8 +48,6 @@ docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <EXISTIN
 
 ## Gotchas
 
-- **paper-fetch outputs streaming events to stderr** — only the final line (with `--format json`) goes to stdout. The JSON in `/tmp/pf.json` is the result object.
-- **paper-fetch `--out-file` does not exist** — use `--format json > /tmp/pf.json` instead.
-- **arXiv papers need `10.48550/arXiv.<id>` DOI format** — paper-fetch resolves this automatically from `--title`, but if you have a raw arXiv ID, wrap it: `10.48550/arXiv.2605.26324`.
-- **Zotero items created via Web API are not immediately visible in `zot read`** — `zot read` queries the local SQLite database; API-created items need a sync cycle. Use the pyzotero API to verify immediately.
-- **Container filesystem is ephemeral** — `/tmp/pf.json` must be written inside the container, not on the host.
+- arXiv papers use `10.48550/arXiv.<id>` DOI format — paper-fetch resolves this from a title automatically.
+- Zotero items created via Web API are not immediately visible in `zot read` — `zot read` queries the local SQLite database; API-created items need a sync cycle.
+- Container filesystem is ephemeral — the script writes and cleans up `/tmp` inside the container.

@@ -42,16 +42,12 @@ docker compose exec hermes-coder zot stats                      # Zotero library
 docker compose exec hermes-coder zot search "keyword" --limit 5 # Search papers
 
 # Paper pipeline (paper-fetch → Google Drive → Zotero linked_file)
-# Complete workflow to download a paper and add it to Zotero with rich metadata
-# and a linked_file attachment pointing to the local Google Drive PDF.
-docker compose exec hermes-coder bash -c "
-  cd /opt/data/skills/paper-fetch &&
-  python3 scripts/fetch.py '<DOI>' --out /tmp/papers --format json > /tmp/pf.json
-"                                                                     # Step 1: Download PDF
-docker compose exec hermes-coder rclone copy /tmp/papers/<file> gdrive: # Step 2: Upload to Drive
-docker compose exec hermes-coder \
-  /opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json                 # Step 3: Create Zotero item
-rm /tmp/papers/<file> /tmp/pf.json                                    # Step 4: Cleanup
+# One-shot: download PDF + upload to Drive + create Zotero entry with metadata + cleanup
+docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh '<DOI>'
+docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh --dry-run '<DOI>'  # Preview only
+
+# Already in Zotero? Link an uploaded PDF to an existing entry
+docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_KEY> '<filename>'
 
 # dailyinfo launchd scheduling
 ./scripts/launchd/install-dailyinfo.sh

@@ -94,6 +94,12 @@ RUN chmod +x /opt/hermes/scripts/zot-link-gdrive.py
 COPY scripts/paper-to-zotero.py /opt/hermes/scripts/paper-to-zotero.py
 RUN chmod +x /opt/hermes/scripts/paper-to-zotero.py
 
+# ── Copy paper pipeline one-shot script ─────────────────────
+# Atomic pipeline: paper-fetch → rclone → paper-to-zotero → cleanup.
+# Single command replaces the 4-step manual orchestration.
+COPY scripts/run-paper-pipeline.sh /opt/hermes/scripts/run-paper-pipeline.sh
+RUN chmod +x /opt/hermes/scripts/run-paper-pipeline.sh
+
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the
