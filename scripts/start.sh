@@ -16,6 +16,16 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   exit 1
 fi
 
+# Read GDRIVE_PAPERS_LOCAL_PATH from .env (can't source directly — cron expressions break bash)
+if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
+  GDRIVE_PAPERS_LOCAL_PATH=$(grep '^GDRIVE_PAPERS_LOCAL_PATH=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)
+  GDRIVE_PAPERS_LOCAL_PATH="${GDRIVE_PAPERS_LOCAL_PATH/#\~/$HOME}"
+  if [[ -n "${GDRIVE_PAPERS_LOCAL_PATH}" ]]; then
+    export GDRIVE_PAPERS_LOCAL_PATH
+    echo "   📁 GDRIVE_PAPERS_LOCAL_PATH 已从 .env 读取"
+  fi
+fi
+
 # ── 从 .cloud.conf 解析 BACKUP_ROOT ─────────────────────────
 CONF_FILE="${REPO_ROOT}/.cloud.conf"
 if [[ ! -f "${CONF_FILE}" ]]; then

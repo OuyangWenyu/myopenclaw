@@ -91,7 +91,7 @@ zot find-pdf ABC123
 
 1. **搜索并下载论文** → paper-fetch 找到目标 PDF 并下载到 `/tmp/papers/`，导出 JSON 到文件
 2. **上传 Google Drive** → `rclone copy <pdf> gdrive:` 上传 PDF 到 Google Drive（主存储）
-3. **创建 Zotero 条目 + linked_file 附件** → `paper-to-zotero.py <json> <local_path>` 一次性创建完整元数据条目和 linked_file 附件
+3. **创建 Zotero 条目 + linked_file 附件** → `paper-to-zotero.py <json>` 一次性创建完整元数据条目和 linked_file 附件（路径自动从 `$GDRIVE_PAPERS_LOCAL_PATH` + JSON 中的文件名拼接）
 
 **元数据来源**：Crossref API（期刊论文，完整作者列表、摘要、期刊/卷/页码）→ arXiv API（预印本兜底）→ paper-fetch meta（最后兜底）。
 

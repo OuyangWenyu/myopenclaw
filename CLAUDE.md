@@ -48,10 +48,9 @@ docker compose exec hermes-coder bash -c "
   cd /opt/data/skills/paper-fetch &&
   python3 scripts/fetch.py '<DOI>' --out /tmp/papers --format json > /tmp/pf.json
 "                                                                     # Step 1: Download PDF
-docker compose exec hermes rclone copy /tmp/papers/<file> gdrive:     # Step 2: Upload to Drive
+docker compose exec hermes-coder rclone copy /tmp/papers/<file> gdrive: # Step 2: Upload to Drive
 docker compose exec hermes-coder \
-  /opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json \
-  "\$GDRIVE_PAPERS_LOCAL_PATH/<file>"                                 # Step 3: Create Zotero item
+  /opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json                 # Step 3: Create Zotero item
 rm /tmp/papers/<file> /tmp/pf.json                                    # Step 4: Cleanup
 
 # dailyinfo launchd scheduling

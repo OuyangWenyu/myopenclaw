@@ -82,7 +82,8 @@ RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config && \
 ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
 
 # ── Copy zot-link-gdrive bridge script ─────────────────────
-# Creates linked_url attachments in Zotero pointing to Google Drive PDFs.
+# Creates linked_file attachments in Zotero pointing to Google Drive PDFs.
+# Path auto-constructed from $GDRIVE_PAPERS_LOCAL_PATH + filename.
 # Uses pyzotero from the zotero-cli-cc venv; reads credentials from config.toml.
 COPY scripts/zot-link-gdrive.py /opt/hermes/scripts/zot-link-gdrive.py
 RUN chmod +x /opt/hermes/scripts/zot-link-gdrive.py

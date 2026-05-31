@@ -214,13 +214,12 @@ def main():
         dry_run = True
         args.remove("--dry-run")
 
-    if len(args) < 2:
-        print("Usage: paper-to-zotero [--dry-run] <paper_fetch_json> "
-              "<gdrive_local_path>", file=sys.stderr)
+    if len(args) < 1:
+        print("Usage: paper-to-zotero [--dry-run] <paper_fetch_json>",
+              file=sys.stderr)
         sys.exit(2)
 
     pf_path = args[0]
-    local_path = args[1]
 
     # Read paper-fetch output
     with open(pf_path) as f:
@@ -236,6 +235,19 @@ def main():
     pf_meta = result.get("meta", {})
     title = pf_meta.get("title", result.get("doi", "Unknown"))
 
+    # Auto-construct Google Drive local path from env var + filename
+    gdrive_base = os.environ.get("GDRIVE_PAPERS_LOCAL_PATH", "")
+    if not gdrive_base:
+        print("Error: GDRIVE_PAPERS_LOCAL_PATH not set", file=sys.stderr)
+        sys.exit(4)
+
+    pf_filename = os.path.basename(result.get("file", ""))
+    if not pf_filename:
+        print("Error: no filename in paper-fetch JSON", file=sys.stderr)
+        sys.exit(5)
+
+    local_path = os.path.join(gdrive_base, pf_filename)
+
     # Read Zotero config
     config = tomllib.load(open("/opt/data/.config/zot/config.toml", "rb"))
     lib_id = config["zotero"]["library_id"]
@@ -243,7 +255,7 @@ def main():
 
     if not lib_id or not api_key:
         print("Error: Zotero API credentials not configured", file=sys.stderr)
-        sys.exit(4)
+        sys.exit(6)
 
     # Build item data
     item_data, extra_fields = build_item(doi, pf_meta)
@@ -281,13 +293,13 @@ def main():
         failed = resp.get("failed", {})
         err_msg = failed.get("0", {}).get("message", str(resp))
         print(f"Error creating Zotero item: {err_msg}", file=sys.stderr)
-        sys.exit(5)
+        sys.exit(7)
 
     parent_key = list(created.values())[0]
 
     # Create linked_file attachment
     attach_tmpl = z.item_template("attachment", "linked_file")
-    attach_tmpl["title"] = f"{os.path.basename(local_path)}"
+    attach_tmpl["title"] = pf_filename
     attach_tmpl["parentItem"] = parent_key
     attach_tmpl["path"] = local_path
 

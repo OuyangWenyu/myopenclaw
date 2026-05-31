@@ -48,12 +48,10 @@ docker compose exec hermes-coder rclone copy "/tmp/papers/$BASENAME" gdrive:
 ### Step 3: Create Zotero entry
 
 ```bash
-docker compose exec hermes-coder bash -c "
-  /opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json \"\$GDRIVE_PAPERS_LOCAL_PATH/\$BASENAME\"
-"
+docker compose exec hermes-coder /opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json
 ```
 
-Returns `{"ok": true, "zotero_key": "XXX", "attachment_key": "YYY", ...}`.
+Auto-constructs the local Google Drive path from `$GDRIVE_PAPERS_LOCAL_PATH` + filename from JSON. Returns `{"ok": true, "zotero_key": "XXX", "attachment_key": "YYY", ...}`.
 
 ### Step 4: Cleanup
 
@@ -70,7 +68,7 @@ docker compose exec hermes-coder zot search "<DOI_OR_TITLE>"
 If found, do only Steps 1-2 (download + upload), then:
 
 ```bash
-docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <EXISTING_KEY> "\$GDRIVE_PAPERS_LOCAL_PATH/<filename>" "<filename>"
+docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <EXISTING_KEY> "<filename>"
 ```
 
 ## Gotchas

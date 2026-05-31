@@ -35,10 +35,10 @@ rclone copy "/tmp/papers/$BASENAME" gdrive:
 ## Step 3: Create Zotero entry (metadata + linked_file PDF)
 
 ```bash
-/opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json "$GDRIVE_PAPERS_LOCAL_PATH/$BASENAME"
+/opt/hermes/scripts/paper-to-zotero.py /tmp/pf.json
 ```
 
-This single command enriches metadata (Crossref → arXiv → paper-fetch fallback), creates the Zotero item with all fields, and attaches a linked_file PDF. Returns `{"ok": true, "zotero_key": "XXX", ...}`.
+This single command reads the paper-fetch JSON, auto-constructs the local Google Drive path from `$GDRIVE_PAPERS_LOCAL_PATH` + filename, enriches metadata (Crossref → arXiv → paper-fetch fallback), creates the Zotero item with all fields, and attaches a linked_file PDF. Returns `{"ok": true, "zotero_key": "XXX", ...}`.
 
 ## Step 4: Cleanup
 
@@ -56,7 +56,7 @@ zot search "<DOI_OR_TITLE>"
 
 If found, only do Steps 1-2, then:
 ```bash
-/opt/hermes/scripts/zot-link-gdrive.py <KEY> "$GDRIVE_PAPERS_LOCAL_PATH/$BASENAME" "$BASENAME"
+/opt/hermes/scripts/zot-link-gdrive.py <KEY> "$BASENAME"
 ```
 
 ## Notes

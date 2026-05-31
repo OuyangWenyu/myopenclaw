@@ -69,10 +69,7 @@ echo ""
 
 # ── Step 3: Create Zotero entry ──────────────────────────────────
 echo "4. Creating Zotero entry..."
-GDRIVE_PATH="${GDRIVE_PAPERS_LOCAL_PATH:-$HOME/Google Drive/我的云端硬盘/Papers/Zotero_Papers}"
-RESULT=$(docker compose exec -T hermes-coder bash -c "
-  /opt/hermes/scripts/paper-to-zotero.py /tmp/pf_smoke.json '${GDRIVE_PATH}/${BASENAME}'
-")
+RESULT=$(docker compose exec -T hermes-coder /opt/hermes/scripts/paper-to-zotero.py /tmp/pf_smoke.json)
 echo "$RESULT" | python3 -m json.tool 2>/dev/null || echo "$RESULT"
 
 ZOTERO_KEY=$(echo "$RESULT" | python3 -c "import json,sys; print(json.load(sys.stdin)['zotero_key'])")
