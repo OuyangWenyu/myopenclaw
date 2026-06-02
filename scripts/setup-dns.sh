@@ -23,6 +23,8 @@ NAMESERVER="223.5.5.5"
 #   yundunwaf3.com  — 智谱 open.bigmodel.cn CNAME 链（阿里云 WAF）
 #   cdngslb.com     — 飞书 CDN GSLB 二级跳转
 #   gtm-a4b8.com    — 智谱 GTM 跳转
+#   queniuyk.com    — 飞书 open.feishu.cn CNAME 终端（金山云 CDN）
+#   queniuck.com    — 飞书 msg-frontier.feishu.cn CNAME 终端
 RESOLVER_DOMAINS=(
   alibabadns.com
   aliyunddos1022.com
@@ -41,6 +43,8 @@ RESOLVER_DOMAINS=(
   zhipu.ai
   # 邮箱
   qq.com
+  queniuyk.com
+  queniuck.com
 )
 
 # /etc/hosts 备份条目（这些域的 IP 可能随 CDN 变化，脚本自动获取最新 IP）
