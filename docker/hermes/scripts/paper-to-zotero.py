@@ -235,18 +235,15 @@ def main():
     pf_meta = result.get("meta", {})
     title = pf_meta.get("title", result.get("doi", "Unknown"))
 
-    # Auto-construct Google Drive local path from env var + filename
-    gdrive_base = os.environ.get("GDRIVE_PAPERS_LOCAL_PATH", "")
-    if not gdrive_base:
-        print("Error: GDRIVE_PAPERS_LOCAL_PATH not set", file=sys.stderr)
-        sys.exit(4)
-
     pf_filename = os.path.basename(result.get("file", ""))
     if not pf_filename:
         print("Error: no filename in paper-fetch JSON", file=sys.stderr)
         sys.exit(5)
 
-    local_path = os.path.join(gdrive_base, pf_filename)
+    # Use Zotero's attachments: scheme — resolves relative to each
+    # computer's Linked Attachment Base Directory (set in Zotero prefs).
+    # This makes linked_file paths portable across OSes and user accounts.
+    attachment_path = f"attachments:{pf_filename}"
 
     # Read Zotero config
     config = tomllib.load(open("/opt/data/.config/zot/config.toml", "rb"))
@@ -269,7 +266,7 @@ def main():
         print(f"  Date: {item_data.get('date', '')}")
         print(f"  Abstract: {'yes' if item_data.get('abstractNote') else 'no'}")
         print(f"  Extra: {list(extra_fields.keys())}")
-        print(f"  Attachment: linked_file → {local_path}")
+        print(f"  Attachment: linked_file → {attachment_path}")
         sys.exit(0)
 
     # Create Zotero item
@@ -301,7 +298,7 @@ def main():
     attach_tmpl = z.item_template("attachment", "linked_file")
     attach_tmpl["title"] = pf_filename
     attach_tmpl["parentItem"] = parent_key
-    attach_tmpl["path"] = local_path
+    attach_tmpl["path"] = attachment_path
 
     attach_resp = z.create_items([attach_tmpl])
     attach_created = attach_resp.get("success", {})
@@ -316,7 +313,7 @@ def main():
         "attachment_key": attach_key,
         "title": title,
         "doi": doi,
-        "pdf_path": local_path,
+        "pdf_path": attachment_path,
     }))
 
 

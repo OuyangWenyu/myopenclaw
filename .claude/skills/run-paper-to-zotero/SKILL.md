@@ -5,49 +5,22 @@ description: Use when the user wants to download a paper and add it to Zotero �
 
 # Paper-to-Zotero Pipeline
 
-Downloads a paper PDF, uploads to Google Drive, and creates a complete Zotero entry with rich metadata and a `linked_file` PDF attachment — all in one command. Everything is pre-configured — do NOT install packages or ask for credentials.
+YOU MUST run EXACTLY ONE command. Do NOT manually download, upload, or create Zotero entries. Do NOT use curl, wget, rclone, or the Zotero API directly.
 
-## Prerequisites (auto-verified)
-
-```bash
-docker compose exec hermes-coder test -x /opt/hermes/scripts/run-paper-pipeline.sh
-docker compose exec hermes-coder test -f /opt/data/skills/paper-fetch/scripts/fetch.py
-docker compose exec hermes-coder which rclone
-```
-
-## Run (one-shot)
+## The ONLY command you may run:
 
 ```bash
 docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh "<DOI_OR_TITLE>"
 ```
 
-For a DOI: pass the DOI directly. For a paper title: pass the title string. The script auto-detects which format you gave.
+If the user gave a DOI: pass the DOI string. If they gave a paper title: pass the title. The script auto-detects the format. The single command does all 4 steps: paper-fetch download → rclone upload → paper-to-zotero metadata + linked_file → cleanup.
 
-For a dry run (preview without actually creating the Zotero entry):
-```bash
-docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh --dry-run "<DOI>"
-```
+## What you MUST NOT do:
 
-The command runs all 4 steps atomically:
-1. paper-fetch downloads the PDF
-2. rclone uploads to Google Drive
-3. paper-to-zotero.py creates the Zotero entry with rich metadata + linked_file
-4. Cleanup of temp files
+- DO NOT download PDFs manually (no curl, wget, python fetch)
+- DO NOT upload to Google Drive manually (no rclone copy)
+- DO NOT create Zotero entries manually (no pyzotero, zot add, Web API)
+- DO NOT create attachments manually
+- DO NOT run manual steps inside the container
 
-## Already in library?
-
-```bash
-docker compose exec hermes-coder zot search "<DOI_OR_TITLE>"
-```
-
-If found, download + upload the PDF manually, then link to the existing Zotero entry:
-
-```bash
-docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <EXISTING_KEY> "<filename>"
-```
-
-## Gotchas
-
-- arXiv papers use `10.48550/arXiv.<id>` DOI format — paper-fetch resolves this from a title automatically.
-- Zotero items created via Web API are not immediately visible in `zot read` — `zot read` queries the local SQLite database; API-created items need a sync cycle.
-- Container filesystem is ephemeral — the script writes and cleans up `/tmp` inside the container.
+If the command fails: report the error to the user. Do NOT attempt manual workarounds.

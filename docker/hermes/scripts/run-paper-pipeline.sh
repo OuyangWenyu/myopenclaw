@@ -28,9 +28,20 @@ fi
 # DOI 格式: 以 "10." 开头
 is_doi() { [[ "$1" =~ ^10\. ]]; }
 
-PAPERS_DIR="/tmp/papers"
-PF_JSON="/tmp/pf_pipeline.json"
-mkdir -p "$PAPERS_DIR"
+# arXiv ID 格式: "arxiv:" 前缀 + 数字.数字 (如 arxiv:2605.28713)
+# 或纯 arXiv ID: 4-5位数字.5位数字 (如 2605.28713)
+if [[ "$input" =~ ^arxiv:([0-9]+\.[0-9]+) ]]; then
+    # arxiv:2605.28713 → 10.48550/arXiv.2605.28713
+    input="10.48550/arXiv.${BASH_REMATCH[1]}"
+    echo "   🔍 检测到 arXiv ID → DOI: $input"
+elif [[ "$input" =~ ^([0-9]{4,5}\.[0-9]{4,6}(v[0-9]+)?)$ ]]; then
+    # 2605.28713 or 2605.28713v1 → 10.48550/arXiv.2605.28713
+    input="10.48550/arXiv.${BASH_REMATCH[1]}"
+    echo "   🔍 检测到 arXiv ID → DOI: $input"
+fi
+
+PAPERS_DIR=$(mktemp -d /tmp/paper-pipeline-XXXXXX)
+PF_JSON=$(mktemp /tmp/pf_pipeline-XXXXXX.json)
 
 echo "📄 论文流水线开始"
 echo "   输入: $input"
@@ -66,7 +77,7 @@ echo ""
 
 # ── Step 2: 上传到 Google Drive ───────────────────────────────
 echo "2️⃣  上传到 Google Drive..."
-rclone copy "/tmp/papers/$basename" gdrive:
+rclone copy "$PAPERS_DIR/$basename" gdrive:
 echo "   ✅ $basename → gdrive:"
 echo ""
 
@@ -86,7 +97,8 @@ echo ""
 
 # ── Step 4: 清理临时文件 ─────────────────────────────────────
 echo "4️⃣  清理临时文件..."
-rm -f "/tmp/papers/$basename" "$PF_JSON"
+rm -f "$PAPERS_DIR/$basename" "$PF_JSON"
+rmdir "$PAPERS_DIR" 2>/dev/null || true
 echo "   ✅ 完成"
 echo ""
 

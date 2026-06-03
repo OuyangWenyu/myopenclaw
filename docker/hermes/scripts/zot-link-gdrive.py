@@ -30,12 +30,9 @@ def main():
     key = sys.argv[1]
     filename = sys.argv[2]
 
-    gdrive_base = os.environ.get("GDRIVE_PAPERS_LOCAL_PATH", "")
-    if not gdrive_base:
-        print("Error: GDRIVE_PAPERS_LOCAL_PATH not set", file=sys.stderr)
-        sys.exit(4)
-
-    local_path = os.path.join(gdrive_base, filename)
+    # Use Zotero's attachments: scheme — resolves relative to each
+    # computer's Linked Attachment Base Directory (set in Zotero prefs).
+    attachment_path = f"attachments:{filename}"
 
     config = tomllib.load(open("/opt/data/.config/zot/config.toml", "rb"))
     lib_id = config["zotero"]["library_id"]
@@ -47,19 +44,19 @@ def main():
         sys.exit(3)
 
     if dry_run:
-        print(f"[dry-run] Would link: {local_path} → Zotero item {key} (filename: {filename})")
+        print(f"[dry-run] Would link: {attachment_path} → Zotero item {key} (filename: {filename})")
         sys.exit(0)
 
     z = zt.Zotero(lib_id, "user", api_key)
     tmpl = z.item_template("attachment", "linked_file")
-    tmpl["path"] = local_path
+    tmpl["path"] = attachment_path
     tmpl["title"] = filename
     tmpl["parentItem"] = key
     resp = z.create_items([tmpl])
     created = resp.get("success", {})
     if created:
         attach_key = list(created.values())[0]
-        print(f"✅ Linked: {local_path} → Zotero item {key} (attachment: {attach_key})")
+        print(f"✅ Linked: {attachment_path} → Zotero item {key} (attachment: {attach_key})")
     else:
         failed = resp.get("failed", {})
         err_msg = failed.get("0", {}).get("message", str(resp))
