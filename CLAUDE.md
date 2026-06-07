@@ -32,6 +32,11 @@ docker compose --profile cli run --rm openclaw-cli
 # cc-connect web admin
 open http://localhost:9090
 
+# Claude Code development environment (Python 3.12 + uv + build-essential)
+docker compose exec claude-code python3 --version    # Python 3.12.x
+docker compose exec claude-code uv --version          # uv package manager
+docker compose exec claude-code git clone https://github.com/OuyangWenyu/torchhydro.git ~/code/OuyangWenyu/torchhydro  # Private repo clone (GITHUB_TOKEN auth)
+
 # Google Drive papers (rclone — scoped to target folder)
 docker compose exec hermes rclone ls gdrive:                    # List papers
 docker compose exec hermes rclone copy paper.pdf gdrive:         # Upload a paper
@@ -60,7 +65,7 @@ docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_
 
 1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Three profiles: default (port 8642), coder (8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644). Dashboard on port 9119.
 
-2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `node:22-slim` with Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Reuses the built-in `node` user (UID 1000). cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, maps `GLM_API_KEY → ANTHROPIC_API_KEY`, then runs `cc-connect` as the main process. Claude Code uses Zhipu GLM models via `ANTHROPIC_BASE_URL`. Port 9090 (cc-connect web admin).
+2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-pro` as the default model. Port 9090 (cc-connect web admin).
 
 3. **openclaw-gateway** — Stock `ghcr.io/openclaw/openclaw:latest` image. Port 18789. Has healthcheck via `/healthz`.
 
@@ -74,7 +79,7 @@ docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_
 
 ## Key Design Decisions
 
-- **Secret isolation**: Hermes holds its own keys; Claude Code holds its own keys; OpenClaw holds none. All keys are configured in `.env`. Hermes keys blocked by its env blacklist (DEEPSEEK, OPENROUTER, OPENAI) are passed into the container via docker-compose, then materialized into `/opt/data/secrets/` files by the entrypoint wrapper (before Hermes starts), so opencode.json can reference them via `{file:}`. Keys not on the blacklist (GH_TOKEN→GITHUB_TOKEN, OPENCODE_API_KEY, LARK_CLI_APP_ID/SECRET, LARK_CLI_IDM_APP_ID/SECRET) pass through `.env` + `env_passthrough`. Claude Code keys (GLM_API_KEY, ANTHROPIC_API_KEY, CC_CONNECT_FEISHU_APP_ID/SECRET) are passed directly to the claude-code container.
+- **Secret isolation**: Hermes holds its own keys; Claude Code holds its own keys; OpenClaw holds none. All keys are configured in `.env`. Hermes keys blocked by its env blacklist (DEEPSEEK, OPENROUTER, OPENAI) are passed into the container via docker-compose, then materialized into `/opt/data/secrets/` files by the entrypoint wrapper (before Hermes starts), so opencode.json can reference them via `{file:}`. Keys not on the blacklist (GH_TOKEN→GITHUB_TOKEN, OPENCODE_API_KEY, LARK_CLI_APP_ID/SECRET, LARK_CLI_IDM_APP_ID/SECRET) pass through `.env` + `env_passthrough`. Claude Code keys (DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, GITHUB_TOKEN, CC_CONNECT_FEISHU_APP_ID/SECRET) are passed directly to the claude-code container. `ANTHROPIC_API_KEY` is set from `DEEPSEEK_API_KEY` by the entrypoint; `ANTHROPIC_BASE_URL` defaults to DeepSeek's Anthropic-compatible endpoint (`https://api.deepseek.com/anthropic`).
 
 - **Tool config persistence**: Host-side config persistence via volume mounts + symlinks: gh (`~/.config/gh` → `/opt/gh-config`, symlinked in both Hermes and claude-code), opencode (`~/.config/opencode` → `/opt/opencode-config`, via `OPENCODE_CONFIG_DIR`), Claude Code (`~/.claude` → `/opt/claude-config`, symlinked), cc-connect (`~/.cc-connect` → `/opt/cc-config`, symlinked), lark-cli (`~/.lark-cli` → `/opt/lark-config`, symlinked), himalaya (`~/.hermes/.config/himalaya/` on `/opt/data` volume, auto-generated by entrypoint wrapper from `EMAIL_*` vars in `~/.hermes/.env`, symlinked to `/root/.config/himalaya` for root access). First-run initialization in `start.sh` seeds config from `.example` templates. cc-connect config uses `${VAR_NAME}` for env var substitution, filled at runtime by cc-connect itself. lark-cli profiles are auto-initialized by `entrypoint-wrapper.sh` from `LARK_CLI_APP_ID/SECRET` and `LARK_CLI_IDM_APP_ID/SECRET` env vars; OAuth authorization (`lark-cli auth login`) must be done manually after first deploy.
 
