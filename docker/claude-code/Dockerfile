@@ -8,8 +8,9 @@ FROM ubuntu:24.04
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         git wget ca-certificates curl xz-utils \
-        python3 python3-pip python3-venv \
+        python3 python3-dev python3-pip python3-venv \
         build-essential \
+        libgeos-dev libproj-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN ln -sf /usr/bin/python3 /usr/bin/python

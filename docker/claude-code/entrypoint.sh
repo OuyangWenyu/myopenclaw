@@ -27,15 +27,25 @@ ln -sf /opt/cc-config /root/.cc-connect
 export ANTHROPIC_API_KEY="${DEEPSEEK_API_KEY:-${ANTHROPIC_API_KEY:-}}"
 export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-https://api.deepseek.com/anthropic}"
 
-# ── Git credential helper for private repos ──────────────────
+# ── Git credential helpers for private repos ─────────────────
 if [ -n "${GITHUB_TOKEN:-}" ]; then
-    cat > /opt/claude-code/git-credential-helper.sh << CREDEOF
+    cat > /opt/claude-code/git-credential-github.sh << CREDEOF
 #!/bin/bash
 echo "username=oauth2"
 echo "password=${GITHUB_TOKEN}"
 CREDEOF
-    chmod 700 /opt/claude-code/git-credential-helper.sh
-    git config --global credential.helper /opt/claude-code/git-credential-helper.sh
+    chmod 700 /opt/claude-code/git-credential-github.sh
+    git config --global credential.https://github.com.helper /opt/claude-code/git-credential-github.sh
+fi
+
+if [ -n "${GITCODE_TOKEN:-}" ]; then
+    cat > /opt/claude-code/git-credential-gitcode.sh << CREDEOF
+#!/bin/bash
+echo "username=oauth2"
+echo "password=${GITCODE_TOKEN}"
+CREDEOF
+    chmod 700 /opt/claude-code/git-credential-gitcode.sh
+    git config --global credential.https://gitcode.com.helper /opt/claude-code/git-credential-gitcode.sh
 fi
 
 # ── uv self-update ───────────────────────────────────────────

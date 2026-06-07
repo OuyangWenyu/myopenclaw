@@ -183,6 +183,7 @@ services:
       - CC_CONNECT_FEISHU_APP_ID=${CC_CONNECT_FEISHU_APP_ID:-}
       - CC_CONNECT_FEISHU_APP_SECRET=${CC_CONNECT_FEISHU_APP_SECRET:-}
       - GITHUB_TOKEN=${GH_TOKEN:-}
+      - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - TZ=${TZ:-Asia/Shanghai}
     ports:
       - "${CC_CONNECT_PORT:-9090}:9090"
