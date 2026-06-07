@@ -177,10 +177,12 @@ services:
       - ${HOME}/code:/home/node/code
       - ${HOME}/Code:/home/node/Code
     environment:
-      - GLM_API_KEY=${GLM_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.deepseek.com/anthropic}
       - CC_CONNECT_FEISHU_APP_ID=${CC_CONNECT_FEISHU_APP_ID:-}
       - CC_CONNECT_FEISHU_APP_SECRET=${CC_CONNECT_FEISHU_APP_SECRET:-}
+      - GITHUB_TOKEN=${GH_TOKEN:-}
       - TZ=${TZ:-Asia/Shanghai}
     ports:
       - "${CC_CONNECT_PORT:-9090}:9090"
