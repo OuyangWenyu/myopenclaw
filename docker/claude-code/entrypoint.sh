@@ -100,19 +100,55 @@ const path = "/home/node/.claude/settings.json";
 let settings = {};
 try { settings = JSON.parse(fs.readFileSync(path, "utf8")); } catch(e) {}
 let changed = false;
+
+// Extra marketplaces
 if (!settings.extraKnownMarketplaces) {
-    settings.extraKnownMarketplaces = {
-        ecc: { source: { source: "github", repo: "affaan-m/everything-claude-code" } }
+    settings.extraKnownMarketplaces = {};
+}
+if (!settings.extraKnownMarketplaces.ecc) {
+    settings.extraKnownMarketplaces.ecc = {
+        source: { source: "github", repo: "affaan-m/everything-claude-code" }
     };
     changed = true;
 }
-if (!settings.enabledPlugins) {
-    settings.enabledPlugins = { "ecc@ecc": true };
+if (!settings.extraKnownMarketplaces["pm-skills"]) {
+    settings.extraKnownMarketplaces["pm-skills"] = {
+        source: { source: "github", repo: "phuryn/pm-skills" }
+    };
     changed = true;
 }
+
+// Enabled plugins
+if (!settings.enabledPlugins) {
+    settings.enabledPlugins = {};
+}
+if (!settings.enabledPlugins["ecc@ecc"]) {
+    settings.enabledPlugins["ecc@ecc"] = true;
+    changed = true;
+}
+
+const pmPlugins = [
+    "pm-toolkit",
+    "pm-product-strategy",
+    "pm-product-discovery",
+    "pm-market-research",
+    "pm-data-analytics",
+    "pm-marketing-growth",
+    "pm-go-to-market",
+    "pm-execution",
+    "pm-ai-shipping"
+];
+for (const p of pmPlugins) {
+    const key = p + "@pm-skills";
+    if (!settings.enabledPlugins[key]) {
+        settings.enabledPlugins[key] = true;
+        changed = true;
+    }
+}
+
 if (changed) {
     fs.writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
-    console.log("🔧 settings.json: 已注册 ECC marketplace + plugin");
+    console.log("🔧 settings.json: 已注册 ECC + pm-skills marketplace + 9 plugins");
 }
 '
 
