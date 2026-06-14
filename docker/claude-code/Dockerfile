@@ -34,14 +34,14 @@ RUN ARCH=$(dpkg --print-architecture) && \
     rm -rf /tmp/gh*
 
 # ── Claude Code CLI + cc-connect ─────────────────────────────────
-RUN npm install -g @anthropic-ai/claude-code cc-connect
+RUN npm install -g @anthropic-ai/claude-code cc-connect @stupidloud/codegraph gitcode-cli
 
 # ── 创建 node 用户（UID 1000，兼容现有卷挂载）────────────────────
 RUN id -u node 2>/dev/null || useradd -m -s /bin/bash node
 
 # ── Config directories for host-side persistence ──────────────────
-RUN mkdir -p /opt/claude-config /opt/gh-config /opt/cc-config && \
-    chown -R node:node /opt/claude-config /opt/gh-config /opt/cc-config
+RUN mkdir -p /opt/claude-config /opt/gh-config /opt/cc-config /opt/gitcode-config && \
+    chown -R node:node /opt/claude-config /opt/gh-config /opt/cc-config /opt/gitcode-config
 
 # ── Code 目录（子目录由 entrypoint 在卷挂载后创建）───────────────
 RUN mkdir -p /home/node/code && chown node:node /home/node/code

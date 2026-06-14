@@ -22,6 +22,11 @@ rm -rf /home/node/.cc-connect /root/.cc-connect
 ln -sf /opt/cc-config /home/node/.cc-connect
 ln -sf /opt/cc-config /root/.cc-connect
 
+# gitcode-cli reads config from $HOME/.gitcode/
+rm -rf /home/node/.gitcode /root/.gitcode
+ln -sf /opt/gitcode-config /home/node/.gitcode
+ln -sf /opt/gitcode-config /root/.gitcode
+
 # ── API key mapping: DeepSeek → Anthropic ─────────────────────
 # Claude Code reads ANTHROPIC_API_KEY; map DEEPSEEK_API_KEY → ANTHROPIC_API_KEY
 export ANTHROPIC_API_KEY="${DEEPSEEK_API_KEY:-${ANTHROPIC_API_KEY:-}}"
@@ -46,7 +51,21 @@ echo "password=${GITCODE_TOKEN}"
 CREDEOF
     chmod 700 /opt/claude-code/git-credential-gitcode.sh
     git config --global credential.https://gitcode.com.helper /opt/claude-code/git-credential-gitcode.sh
+
+    # gitcode-cli config（与 git credential helper 共用 GITCODE_TOKEN）
+    mkdir -p /opt/gitcode-config
+    cat > /opt/gitcode-config/config.json << GITCODEEOF
+{
+  "host": "gitcode.com",
+  "token": "${GITCODE_TOKEN}"
+}
+GITCODEEOF
+    chmod 600 /opt/gitcode-config/config.json
 fi
+
+# ── gitcode-cli skill（从 npm 全局安装路径同步到 Claude Code skills）──
+mkdir -p /opt/claude-config/skills/gitcode
+cp -r /usr/local/lib/node_modules/gitcode-cli/skills/gitcode-cli/* /opt/claude-config/skills/gitcode/
 
 # ── uv self-update ───────────────────────────────────────────
 uv self update --quiet 2>/dev/null || true
@@ -62,6 +81,7 @@ echo "🚀 claude-code 容器启动"
 echo "   📎 Claude Code 配置: /opt/claude-config"
 echo "   📎 cc-connect 配置:  /opt/cc-config"
 echo "   📎 gh CLI 配置:      /opt/gh-config"
+echo "   📎 gitcode-cli 配置:  /opt/gitcode-config"
 echo "   🐍 Python:           $(python3 --version 2>/dev/null || echo 'N/A')"
 echo "   📦 uv:               $(uv --version 2>/dev/null || echo 'N/A')"
 
