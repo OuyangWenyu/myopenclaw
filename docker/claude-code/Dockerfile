@@ -36,6 +36,9 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # ── Claude Code CLI + cc-connect ─────────────────────────────────
 RUN npm install -g @anthropic-ai/claude-code cc-connect @stupidloud/codegraph gitcode-cli
 
+# ── Playwright 浏览器（Chromium）供 MCP browser 工具使用 ──────────
+RUN npx playwright install --with-deps chromium
+
 # ── 创建 node 用户（UID 1000，兼容现有卷挂载）────────────────────
 RUN id -u node 2>/dev/null || useradd -m -s /bin/bash node
 

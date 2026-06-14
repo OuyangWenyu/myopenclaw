@@ -95,13 +95,15 @@ fi
 
 # ── 确保 marketplace + plugin 注册（延迟执行，等 cc-connect 完成 settings.json 初始化）──
 (
-    sleep 5
+    sleep 10
     node -e '
 const fs = require("fs");
 const path = "/home/node/.claude/settings.json";
 let settings = {};
-try { settings = JSON.parse(fs.readFileSync(path, "utf8")); } catch(e) {}
+try { settings = JSON.parse(fs.readFileSync(path, "utf8")); } catch(e) { console.error("ERROR reading settings.json:", e.message); }
 let changed = false;
+
+try {
 
 // Extra marketplaces
 if (!settings.extraKnownMarketplaces) {
@@ -148,9 +150,44 @@ for (const p of pmPlugins) {
     }
 }
 
+// Permissions (cc-connect needs auto-accept for Bash + MCP tools)
+if (!settings.permissions) {
+    settings.permissions = {};
+}
+if (!settings.permissions.allow) {
+    settings.permissions.allow = [
+        "Bash(*)",
+        "mcp__codegraph__codegraph_search",
+        "mcp__codegraph__codegraph_context",
+        "mcp__codegraph__codegraph_callers",
+        "mcp__codegraph__codegraph_callees",
+        "mcp__codegraph__codegraph_impact",
+        "mcp__codegraph__codegraph_node",
+        "mcp__codegraph__codegraph_status",
+        "mcp__playwright__*"
+    ];
+    changed = true;
+}
+
+// MCP servers
+if (!settings.mcpServers) {
+    settings.mcpServers = {};
+}
+if (!settings.mcpServers.codegraph) {
+    settings.mcpServers.codegraph = {
+        command: "codegraph",
+        args: ["serve", "--mcp"]
+    };
+    changed = true;
+}
+
 if (changed) {
     fs.writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
-    console.log("🔧 settings.json: 已注册 ECC + pm-skills marketplace + 9 plugins");
+    console.log("🔧 settings.json: 已注册 ECC + pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
+}
+
+} catch(e) {
+    console.error("🔧 settings.json restore failed:", e.message);
 }
 '
 ) &
