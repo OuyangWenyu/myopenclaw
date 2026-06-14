@@ -93,8 +93,10 @@ if [ ! -f /home/node/.claude/ecc/install-state.json ]; then
     echo "✅ ECC 安装完成"
 fi
 
-# ── 确保 marketplace + plugin 注册（幂等）────────────────────
-node -e '
+# ── 确保 marketplace + plugin 注册（延迟执行，等 cc-connect 完成 settings.json 初始化）──
+(
+    sleep 5
+    node -e '
 const fs = require("fs");
 const path = "/home/node/.claude/settings.json";
 let settings = {};
@@ -151,5 +153,6 @@ if (changed) {
     console.log("🔧 settings.json: 已注册 ECC + pm-skills marketplace + 9 plugins");
 }
 '
+) &
 
 exec cc-connect
