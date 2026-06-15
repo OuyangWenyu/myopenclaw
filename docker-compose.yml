@@ -60,10 +60,12 @@ services:
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
+      - ${HOME}/.gitcode:/opt/gitcode-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
+      - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}

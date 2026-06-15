@@ -23,7 +23,7 @@ RUN apt-get update && \
 
 # ── Install opencode (AI coding agent) via npm ──────────────
 # opencode-ai is the official npm package (Node.js 18+ required, already in base)
-RUN npm install -g opencode-ai
+RUN npm install -g opencode-ai gitcode-cli
 
 # ── Install Feishu/Lark CLI via npm ─────────────────────────
 # @larksuite/cli is the official Feishu CLI tool (200+ commands, 24 Agent Skills)
@@ -75,8 +75,8 @@ RUN UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/opt/uv-tools/bin \
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)
 #   ~/.config/opencode    → /opt/opencode-config   (opencode preferences)
 #   ~/.lark-cli           → /opt/lark-config       (lark-cli auth + config)
-RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config && \
-    chown -R hermes:hermes /opt/gh-config /opt/opencode-config /opt/lark-config
+RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config /opt/gitcode-config && \
+    chown -R hermes:hermes /opt/gh-config /opt/opencode-config /opt/lark-config /opt/gitcode-config
 
 # opencode respects OPENCODE_CONFIG_DIR to find its config
 ENV OPENCODE_CONFIG_DIR=/opt/opencode-config

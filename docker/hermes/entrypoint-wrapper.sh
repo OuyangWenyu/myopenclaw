@@ -33,6 +33,33 @@ ln -sf /opt/lark-config /root/.lark-cli
 mkdir -p /opt/data/.config/zot
 ln -sf /opt/data/.config/zot /root/.config/zot
 
+# ── gitcode-cli config ──────────────────────────────────────
+# gc reads config from $HOME/.gitcode/config.json
+# Symlink to host-mounted config dir (shared with claude-code container)
+rm -rf /opt/data/.gitcode /root/.gitcode
+ln -sf /opt/gitcode-config /opt/data/.gitcode
+ln -sf /opt/gitcode-config /root/.gitcode
+
+# Auto-init config.json from GITCODE_TOKEN if not already present
+# (normally already created by claude-code entrypoint; this is a fallback)
+if [ -n "${GITCODE_TOKEN:-}" ] && [ ! -f /opt/gitcode-config/config.json ]; then
+  mkdir -p /opt/gitcode-config
+  cat > /opt/gitcode-config/config.json << GCEOF
+{"host": "gitcode.com", "token": "${GITCODE_TOKEN}"}
+GCEOF
+  chmod 600 /opt/gitcode-config/config.json
+  echo "   🔑 gitcode-cli 已自动配置"
+fi
+
+# ── gitcode-cli skill → Hermes skills ─────────────────────────
+# Copy the gitcode-cli skill from npm global install to hermes skills dir
+# so Hermes knows to use `gc` for GitCode operations (reuse claude-code pattern)
+if [ ! -d /opt/data/skills/gitcode ]; then
+  mkdir -p /opt/data/skills/gitcode
+  cp -r /usr/local/lib/node_modules/gitcode-cli/skills/gitcode-cli/* /opt/data/skills/gitcode/
+  echo "   📦 gitcode-cli skill 已安装"
+fi
+
 # Auto-configure lark-cli if credentials are available via env vars
 # LARK_CLI_APP_ID / LARK_CLI_APP_SECRET — primary app (Hermes)
 # LARK_CLI_IDM_APP_ID / LARK_CLI_IDM_APP_SECRET — secondary app (爱码士)
