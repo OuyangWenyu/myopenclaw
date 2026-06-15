@@ -75,7 +75,7 @@ fi
 
 # Jobs ordered by schedule time (generation first, then push).
 # Also clean up legacy single-push job if it exists.
-JOBS=(run-arxiv run-resource run-code run-papers run-ai_news push-early push-papers push-arxiv)
+JOBS=(freshrss run-arxiv run-resource run-code run-papers run-ai_news push-early push-papers push-arxiv)
 LEGACY_JOBS=(run-p1-arxiv run-p1 run-p2 run-p3 push)
 
 # Remove legacy jobs that have been replaced by category-specific ones.
@@ -118,6 +118,7 @@ launchctl list | awk 'NR==1 || /ai\.dailyinfo/' || true
 cat <<EOF
 
 	ℹ️  调度表（北京时间）：
+    login  freshrss       docker compose up -d freshrss（登录即启 + 每小时兜底）
     03:00  run-arxiv      dailyinfo run -p 3
     03:30  run-resource   dailyinfo run -p 5
     03:45  run-code       dailyinfo run -p 4

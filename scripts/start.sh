@@ -239,4 +239,7 @@ echo "🚀 启动服务..."
 echo "   备份目录: ${BACKUP_ROOT}"
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
+# 确保 dailyinfo 的 FreshRSS 也在运行
+(cd "${HOME}/code/dailyinfo" && docker compose up -d freshrss) || true
+
 docker compose ps
