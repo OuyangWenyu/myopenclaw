@@ -8,6 +8,9 @@
 
 # ── 运行时数据（在宿主机 ~/.hermes、~/.openclaw、~/.claude、~/.cc-connect，不在本仓库）──
 
+# ── Code intelligence index (auto-generated) ─────────────────────
+.codegraph/
+
 # ── macOS ────────────────────────────────────────────────────────
 .DS_Store
 

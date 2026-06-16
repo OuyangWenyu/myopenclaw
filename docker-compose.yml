@@ -21,6 +21,7 @@ services:
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       # Blocked by Hermes env blacklist, materialized to secrets files by entrypoint
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
@@ -67,6 +68,8 @@ services:
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -113,6 +116,8 @@ services:
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
