@@ -182,6 +182,54 @@ TOML
   fi
 fi
 
+# ── Auto-detect sent/drafts/trash folder names ─────────────
+# himalaya v1.2.0 uses `folder.aliases.sent` (dotted key) to know where to
+# save sent-mail copies. Without this, `message.send.save-copy` (default: true)
+# fails with "Folder not exist" because the default sent folder name "Sent"
+# rarely matches real servers (QQ→"Sent Messages", Coremail→"Sent Items", etc.).
+# Detect actual folder names via `himalaya folder list` and add aliases.
+if command -v himalaya &>/dev/null && [[ -f "${HIMALAYA_CONFIG}" ]]; then
+  # Get account names from config: lines like [accounts.xxx]
+  HIMALAYA_ACCOUNTS="$(grep -oP '^\[accounts\.\K[^]]+' "${HIMALAYA_CONFIG}" 2>/dev/null || true)"
+  for H_ACCT in ${HIMALAYA_ACCOUNTS}; do
+    # Skip if this account already has folder.aliases.sent configured
+    if grep -qA50 "^\[accounts\.${H_ACCT}\]" "${HIMALAYA_CONFIG}" 2>/dev/null | \
+       grep -q "^folder\.aliases\.sent\s*=" 2>/dev/null; then
+      continue
+    fi
+    # List folders and detect sent/drafts/trash names
+    H_FOLDERS="$(himalaya folder list -a "${H_ACCT}" 2>/dev/null || true)"
+    if [[ -z "${H_FOLDERS}" ]]; then
+      continue
+    fi
+    H_SENT="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'sent')"
+    H_DRAFTS="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'draft')"
+    H_TRASH="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'trash\|deleted')"
+    if [[ -n "${H_SENT}" ]]; then
+      # Append folder.aliases as dotted keys after the account section.
+      # We find the line after the last setting of this account (before next
+      # [accounts.xxx] or end of file) and insert there.
+      H_NEXT_SECTION="$(grep -n "^\[accounts\." "${HIMALAYA_CONFIG}" | grep -A1 "^[0-9]*:\[accounts\.${H_ACCT}\]" | tail -1 | cut -d: -f1)"
+      if [[ -n "${H_NEXT_SECTION}" ]]; then
+        # Insert before the next section
+        sed -i "${H_NEXT_SECTION}i\\
+folder.aliases.sent = \"${H_SENT}\"${H_DRAFTS:+\\
+folder.aliases.drafts = \"${H_DRAFTS}\"}${H_TRASH:+\\
+folder.aliases.trash = \"${H_TRASH}\"}\\
+" "${HIMALAYA_CONFIG}"
+      else
+        # No next section — append at end of file
+        cat >> "${HIMALAYA_CONFIG}" << TOML
+folder.aliases.sent = "${H_SENT}"${H_DRAFTS:+
+folder.aliases.drafts = "${H_DRAFTS}"}${H_TRASH:+
+folder.aliases.trash = "${H_TRASH}"}
+TOML
+      fi
+      echo "   📧 himalaya folder.aliases → ${H_ACCT}: sent=${H_SENT}${H_DRAFTS:+, drafts=${H_DRAFTS}}${H_TRASH:+, trash=${H_TRASH}}"
+    fi
+  done
+fi
+
 # ── Auto-configure cardamum (CLI contact manager) ─────────
 # cardamum uses ~/.config/cardamum/config.toml (pimalaya_config default).
 # Hermes terminal HOME = /opt/data/home (not /opt/data), so config goes there.
@@ -218,13 +266,50 @@ fi
 
 chown -R hermes:hermes "${CONTACTS_DIR}" "${CARDAMUM_CONFIG_DIR}"
 
-# Symlink for root access (docker exec runs as root)
+# Symlink for root access (docker exec runs as root) — must exist before
+# running cardamum commands below so they find the config.
 mkdir -p /root/.config
 ln -sf "${CARDAMUM_CONFIG_DIR}" /root/.config/cardamum
 
 # Clean up old incorrect config paths from previous entrypoint versions
 rm -f /opt/data/home/.config/cardamum.toml /root/.config/cardamum.toml 2>/dev/null || true
 rm -rf /opt/data/.config/cardamum 2>/dev/null || true
+
+# Auto-create addressbook if vdir is empty (fresh machine / first run).
+# cardamum addressbook create generates a UUID directory; we capture it
+# and write it as addressbook.default so Hermes can use `card list`
+# without hardcoding the ID.
+if ! grep -q "^addressbook.default" "${CARDAMUM_CONFIG}" 2>/dev/null && \
+   command -v cardamum &>/dev/null; then
+  # Check if any addressbook already exists in the vdir
+  EXISTING_AB="$(ls -d "${CONTACTS_DIR}"/*/displayname 2>/dev/null || true)"
+  if [[ -z "${EXISTING_AB}" ]]; then
+    # No addressbook yet — create one
+    AB_CREATE_OUT="$(cardamum -c "${CARDAMUM_CONFIG}" addressbook create "contacts" 2>&1 || true)"
+    echo "   📇 ${AB_CREATE_OUT}"
+  fi
+  # Discover the addressbook UUID and persist it as the default
+  AB_ID="$(cardamum -c "${CARDAMUM_CONFIG}" addressbook list 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)"
+  if [[ -n "${AB_ID}" ]]; then
+    if grep -q "^\[addressbook\]" "${CARDAMUM_CONFIG}" 2>/dev/null; then
+      if grep -q "^default = " "${CARDAMUM_CONFIG}" 2>/dev/null; then
+        # Replace existing default (handles UUID changes from recreate)
+        sed -i "s/^default = .*/default = \"${AB_ID}\"/" "${CARDAMUM_CONFIG}"
+        echo "   📇 cardamum addressbook.default → ${AB_ID}"
+      else
+        sed -i "/^\[addressbook\]/a default = \"${AB_ID}\"" "${CARDAMUM_CONFIG}"
+        echo "   📇 cardamum addressbook.default = ${AB_ID}"
+      fi
+    else
+      cat >> "${CARDAMUM_CONFIG}" << TOML
+
+[addressbook]
+default = "${AB_ID}"
+TOML
+      echo "   📇 cardamum addressbook.default = ${AB_ID}"
+    fi
+  fi
+fi
 
 # ── Auto-configure zotero-cli-cc from env vars ─────────
 # Generates ~/.config/zot/config.toml if ZOTERO_API_KEY is set.
