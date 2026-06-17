@@ -49,8 +49,8 @@ if [[ -d "${HERMES_DATA}/skills" ]]; then
   rsync -a --exclude=".bundled_manifest" "${HERMES_DATA}/skills/" "${DEST}/skills/"
 fi
 
-# hooks/ 和 cron/
-for dir in hooks cron; do
+# hooks/, cron/, .contacts/ (cardamum vdir)
+for dir in hooks cron .contacts; do
   if [[ -d "${HERMES_DATA}/${dir}" ]]; then
     rsync -a "${HERMES_DATA}/${dir}/" "${DEST}/${dir}/"
   fi

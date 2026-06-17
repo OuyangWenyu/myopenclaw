@@ -2,6 +2,16 @@
 # Custom Hermes image with opencode + GitHub CLI + Feishu CLI
 # Base: nousresearch/hermes-agent:latest (debian:13.4)
 # =============================================================
+
+# ── Stage 1: Build cardamum from source (master) ───────────────
+# v0.2.0-dev has cards create <id> <VCARD> — vCard passed directly,
+# no EDITOR hack needed. Stable enough for CLI use.
+FROM rust:1.96-slim-bookworm AS cardamum-builder
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && \
+    rm -rf /var/lib/apt/lists/*
+RUN cargo install --git https://github.com/pimalaya/cardamum.git --rev 1090cad2bdaa cardamum
+
+# ── Stage 2: Hermes custom image ──────────────────────────────
 FROM nousresearch/hermes-agent:latest
 
 # Base image runs as root initially (entrypoint does gosu drop),
@@ -46,6 +56,13 @@ RUN HIMALAYA_VER="1.2.0" && \
     tar xzf /tmp/himalaya.tgz -C /usr/local/bin himalaya && \
     chmod +x /usr/local/bin/himalaya && \
     rm /tmp/himalaya.tgz
+
+# ── Install cardamum (CLI contact manager) ────────────────────
+# Built from source (master) — v0.1.0 is the only binary release and
+# uses the old EDITOR-based cards create flow. v0.2.0 accepts vCard
+# content directly as a positional argument, no EDITOR needed.
+# Multi-stage: compile in Rust builder, copy binary to final image.
+COPY --from=cardamum-builder /usr/local/cargo/bin/cardamum /usr/local/bin/cardamum
 
 # ── Install rclone (Google Drive / cloud storage CLI) ────────
 # Single binary for uploading papers to Google Drive via service account.
