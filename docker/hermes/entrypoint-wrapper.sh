@@ -182,6 +182,28 @@ TOML
   fi
 fi
 
+# ── Auto-configure cardamum (CLI contact manager) ─────────
+# Uses vdir backend — contacts stored as .vcf files in /opt/data/.contacts/
+# Persists on host ~/.hermes/.contacts/ via the hermes data volume mount.
+# Symlink for root access (docker exec runs as root).
+mkdir -p /opt/data/.contacts
+ln -sf /opt/data/.contacts /root/.local/share/vdirsyncer/contacts 2>/dev/null || true
+ln -sf /opt/data/.contacts /opt/data/.local/share/vdirsyncer/contacts 2>/dev/null || true
+
+CARDAMUM_CONFIG="/opt/data/.config/cardamum/config.toml"
+if [[ ! -f "${CARDAMUM_CONFIG}" ]]; then
+  mkdir -p "$(dirname "${CARDAMUM_CONFIG}")"
+  cat > "${CARDAMUM_CONFIG}" << TOML
+[accounts.default]
+default = true
+vdir.home-dir = "/opt/data/.contacts"
+TOML
+  chown -R hermes:hermes /opt/data/.config/cardamum /opt/data/.contacts
+  echo "   📇 cardamum 已自动配置 — vdir: /opt/data/.contacts"
+fi
+# Symlink config for root access (docker exec runs as root)
+ln -sf /opt/data/.config/cardamum /root/.config/cardamum
+
 # ── Auto-configure zotero-cli-cc from env vars ─────────
 # Generates ~/.config/zot/config.toml if ZOTERO_API_KEY is set.
 # ZOT_DATA_DIR env var (docker-compose) takes highest priority for data dir.

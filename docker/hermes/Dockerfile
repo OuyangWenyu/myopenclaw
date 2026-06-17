@@ -47,6 +47,16 @@ RUN HIMALAYA_VER="1.2.0" && \
     chmod +x /usr/local/bin/himalaya && \
     rm /tmp/himalaya.tgz
 
+# ── Install cardamum (CLI contact manager) ────────────────────
+# Pre-built static binary from same pimalaya ecosystem as himalaya.
+# Manages contacts via vdir (local .vcf files) or CardDAV backends.
+RUN CARDAMUM_VER="0.1.0" && \
+    ARCH=$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/aarch64/') && \
+    wget -qO /tmp/cardamum.tgz "https://github.com/pimalaya/cardamum/releases/download/v${CARDAMUM_VER}/cardamum.${ARCH}-linux.tgz" && \
+    tar xzf /tmp/cardamum.tgz -C /usr/local/bin cardamum && \
+    chmod +x /usr/local/bin/cardamum && \
+    rm /tmp/cardamum.tgz
+
 # ── Install rclone (Google Drive / cloud storage CLI) ────────
 # Single binary for uploading papers to Google Drive via service account.
 # Uses rclone env vars (RCLONE_CONFIG_GDRIVE_*) for headless auth — no config file needed.
