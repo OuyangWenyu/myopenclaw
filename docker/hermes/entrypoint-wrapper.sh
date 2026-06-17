@@ -183,26 +183,48 @@ TOML
 fi
 
 # ── Auto-configure cardamum (CLI contact manager) ─────────
-# Uses vdir backend — contacts stored as .vcf files in /opt/data/.contacts/
-# Persists on host ~/.hermes/.contacts/ via the hermes data volume mount.
-# Symlink for root access (docker exec runs as root).
-mkdir -p /opt/data/.contacts
-ln -sf /opt/data/.contacts /root/.local/share/vdirsyncer/contacts 2>/dev/null || true
-ln -sf /opt/data/.contacts /opt/data/.local/share/vdirsyncer/contacts 2>/dev/null || true
+# cardamum uses ~/.config/cardamum/config.toml (pimalaya_config default).
+# Hermes terminal HOME = /opt/data/home (not /opt/data), so config goes there.
+# Contacts (vdir) stored at /opt/data/.contacts/ — root of volume, covered by backup.
+CONTACTS_DIR="/opt/data/.contacts"
+CARDAMUM_CONFIG_DIR="/opt/data/home/.config/cardamum"
+CARDAMUM_CONFIG="${CARDAMUM_CONFIG_DIR}/config.toml"
 
-CARDAMUM_CONFIG="/opt/data/.config/cardamum/config.toml"
+mkdir -p "${CONTACTS_DIR}" "${CARDAMUM_CONFIG_DIR}"
+
 if [[ ! -f "${CARDAMUM_CONFIG}" ]]; then
-  mkdir -p "$(dirname "${CARDAMUM_CONFIG}")"
   cat > "${CARDAMUM_CONFIG}" << TOML
 [accounts.default]
 default = true
-vdir.home-dir = "/opt/data/.contacts"
+vdir.home-dir = "${CONTACTS_DIR}"
 TOML
-  chown -R hermes:hermes /opt/data/.config/cardamum /opt/data/.contacts
-  echo "   📇 cardamum 已自动配置 — vdir: /opt/data/.contacts"
+  echo "   📇 cardamum 已自动配置 — vdir: ${CONTACTS_DIR}"
+elif ! grep -q "vdir.home-dir = \"${CONTACTS_DIR}\"" "${CARDAMUM_CONFIG}" 2>/dev/null; then
+  sed -i "s|vdir.home-dir = \".*\"|vdir.home-dir = \"${CONTACTS_DIR}\"|" "${CARDAMUM_CONFIG}"
+  echo "   📇 cardamum vdir 路径已修正 → ${CONTACTS_DIR}"
 fi
-# Symlink config for root access (docker exec runs as root)
-ln -sf /opt/data/.config/cardamum /root/.config/cardamum
+
+# Migrate any contacts from old default location to the persistent directory
+OLD_VDIR="/opt/data/home/.local/share/cardamum"
+if [[ -d "${OLD_VDIR}" ]] && [[ "$(ls -A "${OLD_VDIR}" 2>/dev/null)" ]]; then
+  for ab_dir in "${OLD_VDIR}"/*/; do
+    ab_name="$(basename "${ab_dir}")"
+    if [[ ! -d "${CONTACTS_DIR}/${ab_name}" ]]; then
+      cp -r "${ab_dir}" "${CONTACTS_DIR}/${ab_name}"
+      echo "   📇 已迁移通讯录: ${ab_name} → ${CONTACTS_DIR}"
+    fi
+  done
+fi
+
+chown -R hermes:hermes "${CONTACTS_DIR}" "${CARDAMUM_CONFIG_DIR}"
+
+# Symlink for root access (docker exec runs as root)
+mkdir -p /root/.config
+ln -sf "${CARDAMUM_CONFIG_DIR}" /root/.config/cardamum
+
+# Clean up old incorrect config paths from previous entrypoint versions
+rm -f /opt/data/home/.config/cardamum.toml /root/.config/cardamum.toml 2>/dev/null || true
+rm -rf /opt/data/.config/cardamum 2>/dev/null || true
 
 # ── Auto-configure zotero-cli-cc from env vars ─────────
 # Generates ~/.config/zot/config.toml if ZOTERO_API_KEY is set.

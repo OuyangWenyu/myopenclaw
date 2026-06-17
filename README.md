@@ -131,7 +131,7 @@ cp .cloud.conf.example .cloud.conf
 | 安装 paper-fetch skill | `~/.openclaw/skills/paper-fetch`（自动 git clone） |
 | 物化被黑名单拦截的 API Key | 容器内 `/opt/data/secrets/`（deepseek、openrouter、openai） |
 | 生成 himalaya 邮件配置 | `~/.hermes/.config/himalaya/config.toml`（从 `~/.hermes/.env` 中 `EMAIL_*` 变量） |
-| 生成 cardamum 联系人配置 | `~/.hermes/.config/cardamum/config.toml` + `~/.hermes/.contacts/`（vdir 本地存储） |
+| 生成 cardamum 联系人配置 | `~/.hermes/home/.config/cardamum/config.toml` + `~/.hermes/.contacts/`（vdir 本地存储） |
 | 映射 DEEPSEEK_API_KEY → ANTHROPIC_API_KEY | claude-code 容器内环境变量，供 Claude Code 使用 |
 | 初始化 lark-cli 配置 | `~/.lark-cli/`（从 `.env` 读取凭证，支持多 profile） |
 
@@ -227,10 +227,15 @@ EMAIL_SMTP_PORT=587
 **管理联系人**（可选）：Hermes 通过 [cardamum](https://github.com/pimalaya/cardamum)（pimalaya 生态的 CLI 联系人工具）管理联系人。cardamum 已预装在 Hermes 镜像中（v0.1.0），使用 **vdir** 本地存储（QQ 邮箱和 DLUT 均不支持 CardDAV 远程同步）。
 
 首次启动时 entrypoint 自动创建配置和数据目录：
-- 配置文件：`~/.hermes/.config/cardamum/config.toml`
-- 联系人数据：`~/.hermes/.contacts/`（vdir，每个联系人一个 `.vcf` 文件）
+- 配置文件：`~/.hermes/home/.config/cardamum/config.toml`
+- 联系人数据：`~/.hermes/.contacts/`（vdir，每个联系人一个 UUID.vcf 文件）
 
 联系人数据通过 `hermes/scripts/backup.sh` 自动纳入云端备份。
+
+联系人以 **vCard 4.0** 格式存储。添加联系人时注意：
+- `.vcf` 文件名用 UUID（`uuidgen`）
+- vCard 内 `UID` 必须与文件名 UUID 一致
+- 使用 `VERSION:4.0`（不是 3.0）
 
 常用命令：
 
@@ -248,7 +253,7 @@ docker compose exec hermes cardamum cards read <ADDRESSBOOK-ID> <CARD-ID>
 docker compose exec hermes cardamum cards list --json <ADDRESSBOOK-ID>
 ```
 
-联系人以 vCard 4.0 格式（`.vcf` 文件）存储在通讯录目录中，Hermes 可直接写入 `.vcf` 文件来添加联系人。
+联系人以 vCard 4.0 格式（`.vcf` 文件）存储在通讯录目录中，Hermes 可直接写入 `.vcf` 文件来添加联系人（写入后运行 `cardamum cards list` 即可看到）。
 
 **gh CLI 认证**（可选）：Hermes 容器内已安装 GitHub CLI。二选一：
 
