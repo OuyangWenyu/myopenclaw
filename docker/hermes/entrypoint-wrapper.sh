@@ -60,6 +60,14 @@ if [ ! -d /opt/data/skills/gitcode ]; then
   echo "   📦 gitcode-cli skill 已安装"
 fi
 
+# ── morning-briefing skill → Hermes skills ─────────────────────
+# Symlink from read-only volume mount to hermes skills dir
+if [ -d /opt/hermes-skills/morning-briefing ] && [ ! -L /opt/data/skills/morning-briefing ]; then
+  mkdir -p /opt/data/skills
+  ln -sf /opt/hermes-skills/morning-briefing /opt/data/skills/morning-briefing
+  echo "   📋 morning-briefing skill 已安装"
+fi
+
 # Auto-configure lark-cli if credentials are available via env vars
 # LARK_CLI_APP_ID / LARK_CLI_APP_SECRET — primary app (Hermes)
 # LARK_CLI_IDM_APP_ID / LARK_CLI_IDM_APP_SECRET — secondary app (爱码士)
@@ -193,7 +201,8 @@ if command -v himalaya &>/dev/null && [[ -f "${HIMALAYA_CONFIG}" ]]; then
   HIMALAYA_ACCOUNTS="$(grep -oP '^\[accounts\.\K[^]]+' "${HIMALAYA_CONFIG}" 2>/dev/null || true)"
   for H_ACCT in ${HIMALAYA_ACCOUNTS}; do
     # Skip if this account already has folder.aliases.sent configured
-    if grep -qA50 "^\[accounts\.${H_ACCT}\]" "${HIMALAYA_CONFIG}" 2>/dev/null | \
+    # NOTE: -q suppresses -A output, so drop -q on the first grep for the pipe.
+    if grep -A50 "^\[accounts\.${H_ACCT}\]" "${HIMALAYA_CONFIG}" 2>/dev/null | \
        grep -q "^folder\.aliases\.sent\s*=" 2>/dev/null; then
       continue
     fi
@@ -292,9 +301,10 @@ if ! grep -q "^addressbook.default" "${CARDAMUM_CONFIG}" 2>/dev/null && \
   AB_ID="$(cardamum -c "${CARDAMUM_CONFIG}" addressbook list 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)"
   if [[ -n "${AB_ID}" ]]; then
     if grep -q "^\[addressbook\]" "${CARDAMUM_CONFIG}" 2>/dev/null; then
-      if grep -q "^default = " "${CARDAMUM_CONFIG}" 2>/dev/null; then
-        # Replace existing default (handles UUID changes from recreate)
-        sed -i "s/^default = .*/default = \"${AB_ID}\"/" "${CARDAMUM_CONFIG}"
+      # Check for existing default under [addressbook] only (not [accounts.default])
+      if sed -n '/^\[addressbook\]/,/^\[/p' "${CARDAMUM_CONFIG}" | grep -q "^default = "; then
+        # Replace existing default under [addressbook] only (handles UUID changes)
+        sed -i "/^\[addressbook\]/,/^\[/ s/^default = .*/default = \"${AB_ID}\"/" "${CARDAMUM_CONFIG}"
         echo "   📇 cardamum addressbook.default → ${AB_ID}"
       else
         sed -i "/^\[addressbook\]/a default = \"${AB_ID}\"" "${CARDAMUM_CONFIG}"

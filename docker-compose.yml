@@ -16,6 +16,7 @@ services:
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
+      - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -63,6 +64,7 @@ services:
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/.gitcode:/opt/gitcode-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
+      - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
