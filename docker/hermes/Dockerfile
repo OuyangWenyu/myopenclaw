@@ -124,4 +124,9 @@ RUN chmod +x /opt/hermes/scripts/run-paper-pipeline.sh
 COPY entrypoint-wrapper.sh /opt/hermes/entrypoint-wrapper.sh
 RUN chmod +x /opt/hermes/entrypoint-wrapper.sh
 
+# ── Build-time guard: verify EBADF patch target exists ─────────
+# entrypoint-wrapper.sh patches this line at startup to add "OSError"
+# to _TRANSIENT_TRANSPORT_ERRORS. Fail fast if upstream moves/renames it.
+RUN grep -q '"APIConnectionError", "APITimeoutError"' /opt/hermes/run_agent.py
+
 ENTRYPOINT ["/opt/hermes/entrypoint-wrapper.sh"]

@@ -68,6 +68,21 @@ if [ -d /opt/hermes-skills/morning-briefing ] && [ ! -L /opt/data/skills/morning
   echo "   📋 morning-briefing skill 已安装"
 fi
 
+# ── Patch: add "OSError" to Hermes transient transport errors ─────
+# [Errno 9] EBADF (bad file descriptor) from asyncio finalizer closing
+# fds that httpx sockets reuse. OSError is not in the upstream whitelist,
+# so retries recycle the same dead fd. Adding it triggers client rebuild
+# + fresh fd on retry. See: run_agent.py _TRANSIENT_TRANSPORT_ERRORS
+RUN_AGENT_PY="/opt/hermes/run_agent.py"
+if [ -f "${RUN_AGENT_PY}" ]; then
+	if ! grep -q '"OSError"' "${RUN_AGENT_PY}" 2>/dev/null; then
+		sed -i 's/"APIConnectionError", "APITimeoutError",/"APIConnectionError", "APITimeoutError", "OSError",/' "${RUN_AGENT_PY}"
+		echo "   🔧 run_agent.py: added OSError to transient transport errors"
+	else
+		echo "   ✅ run_agent.py: OSError already patched"
+	fi
+fi
+
 # Auto-configure lark-cli if credentials are available via env vars
 # LARK_CLI_APP_ID / LARK_CLI_APP_SECRET — primary app (Hermes)
 # LARK_CLI_IDM_APP_ID / LARK_CLI_IDM_APP_SECRET — secondary app (爱码士)
