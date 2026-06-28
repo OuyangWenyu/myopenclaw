@@ -228,6 +228,49 @@ for _ext_dir in "${HOME}/.openclaw/extensions"/*/; do
   fi
 done
 
+# ── OpenClaw：版本可见性 + 配置兼容性检查 ─────────────────────
+OPENCLAW_NPM_VERSION=""
+OPENCLAW_DOCKER_VERSION=""
+if [[ -x /opt/homebrew/lib/node_modules/openclaw/dist/index.js ]]; then
+  OPENCLAW_NPM_VERSION=$(/opt/homebrew/lib/node_modules/openclaw/dist/index.js --version 2>/dev/null | head -1 || echo "unknown")
+fi
+if docker compose config 2>/dev/null | grep -q "openclaw-gateway"; then
+  OPENCLAW_DOCKER_VERSION=$(docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs --version 2>/dev/null | tail -1 || echo "unknown")
+fi
+
+echo ""
+echo "🦞 OpenClaw 版本检查"
+echo "   launchd 网关 (npm):  ${OPENCLAW_NPM_VERSION:-未安装}"
+echo "   Docker 网关 (镜像): ${OPENCLAW_DOCKER_VERSION:-未安装}"
+
+if [[ -n "${OPENCLAW_NPM_VERSION}" && -n "${OPENCLAW_DOCKER_VERSION}" ]] \
+  && [[ "${OPENCLAW_NPM_VERSION}" != "${OPENCLAW_DOCKER_VERSION}" ]]; then
+  echo "   ⚠️  版本不一致！npm 和 Docker 镜像应保持相同版本，避免配置格式不兼容"
+  echo "   升级方法: npm install -g openclaw@<版本> && 更新 .env OPENCLAW_IMAGE"
+elif [[ -z "${OPENCLAW_NPM_VERSION}" && -z "${OPENCLAW_DOCKER_VERSION}" ]]; then
+  echo "   ℹ️  未检测到 OpenClaw，跳过版本检查"
+fi
+
+# 用 Docker 镜像的 openclaw 校验配置文件兼容性
+# 如果 Docker 版本不认识配置格式，会在这里提前发现，而不是启动后沉默打 762MB 日志
+echo ""
+echo "🔍 校验 OpenClaw 配置兼容性 (Docker 镜像版本 ${OPENCLAW_DOCKER_VERSION})..."
+set +e
+VALIDATE_OUTPUT=$(docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs config validate 2>&1)
+VALIDATE_EXIT=$?
+set -e
+if [[ "${VALIDATE_EXIT}" -ne 0 ]] || echo "${VALIDATE_OUTPUT}" | grep -qiE "invalid|problem|error"; then
+  echo "   ⚠️  配置校验发现问题（Docker 镜像视角）："
+  echo "${VALIDATE_OUTPUT}" | sed 's/^/   │  /'
+  echo "   ⚠️  继续启动，但请关注上述警告。网关可能反复打印相同错误到"
+  echo "         ~/.openclaw/logs/gateway.err.log"
+  echo "   修复: 不要从 host 运行 openclaw doctor --fix，应在容器内操作："
+  echo "         docker compose run --rm --entrypoint \"node\" openclaw-gateway openclaw.mjs doctor --fix"
+else
+  echo "   ✅ 配置兼容（Docker 镜像版本可以正确解析）"
+fi
+echo ""
+
 cd "${REPO_ROOT}"
 
 BUILD_FLAG=""

@@ -67,6 +67,40 @@ docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_
 # dailyinfo launchd scheduling
 ./scripts/launchd/install-dailyinfo.sh
 ./scripts/launchd/uninstall-dailyinfo.sh
+
+# Gateway error loop detection（检测 OpenClaw 配置兼容性导致的日志刷屏）
+./scripts/check-gateway-errors.sh            # 人类可读
+./scripts/check-gateway-errors.sh --json     # JSON 输出（适合 cron/监控）
+```
+
+## ⚠️ OpenClaw 配置安全规则
+
+**两个网关共享同一份配置** `~/.openclaw/openclaw.json`：
+- launchd 网关 (npm global, 端口 18790) — dailyinfo Discord 推送
+- Docker 网关 (镜像, 端口 18789) — 虾酱主机器人
+
+**禁止从 host 运行任何会写入配置的 openclaw 命令**，必须在 Docker 容器内操作：
+
+```bash
+# ❌ 禁止（host 的 npm 版本可能与 Docker 镜像版本不同，写出的配置格式 Docker 不认识）
+openclaw doctor --fix
+openclaw config set ...
+
+# ✅ 正确（在容器内操作，使用 Docker 镜像的版本）
+docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs doctor --fix
+docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs config set ...
+```
+
+**原因**：2026.3.31 因为 host 上运行的 `openclaw doctor --fix` 写出了 Docker 不认识的 streaming 配置格式，导致 gateway.err.log 在 3 个月内增长到 762MB（2380 万行重复错误），无人察觉。
+
+**升级流程**（保持两个网关版本一致）：
+```bash
+# 1. 更新 npm global 版本
+npm install -g openclaw@<版本>
+# 2. 更新 .env 中的 OPENCLAW_IMAGE
+# 3. 拉取新镜像并重启
+docker compose pull openclaw-gateway
+./scripts/start.sh
 ```
 
 ## Architecture
