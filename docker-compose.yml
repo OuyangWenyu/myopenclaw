@@ -140,6 +140,7 @@ services:
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_GROUP_POLICY=open
+      - GATEWAY_ALLOW_ALL_USERS=true
     shm_size: "1g"
     deploy:
       resources:

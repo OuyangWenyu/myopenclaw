@@ -60,26 +60,55 @@ fi
 
 ok=$(python3 -c "import json; print(json.load(open('$PF_JSON'))['ok'])")
 if [ "$ok" != "True" ]; then
-    echo "❌ paper-fetch 下载失败" >&2
-    cat "$PF_JSON" >&2
-    rm -f "$PF_JSON"
-    exit 1
+    echo "⚠️  paper-fetch 下载失败（期刊爬虫阻挡或无法访问）" >&2
+    # Fallback: metadata-only Zotero entry via Crossref
+    if is_doi "$input"; then
+        echo "   → 使用 Crossref 元数据创建 Zotero 条目（无 PDF）..."
+        if $dry_run; then
+            /opt/hermes/scripts/paper-to-zotero.py --dry-run --metadata-only "$input"
+        else
+            result=$(/opt/hermes/scripts/paper-to-zotero.py --metadata-only "$input")
+            zotero_key=$(echo "$result" | python3 -c "import json,sys; print(json.load(sys.stdin)['zotero_key'])")
+            echo ""
+            echo "========================================"
+            echo "✅ 流水线完成（仅元数据）"
+            echo "   🔑 DOI: $input"
+            echo "   📚 Zotero: $zotero_key"
+            echo "========================================"
+        fi
+        rm -f "$PF_JSON"
+        rmdir "$PAPERS_DIR" 2>/dev/null || true
+        exit 0
+    else
+        echo "❌ paper-fetch 下载失败（无法获取 DOI）" >&2
+        cat "$PF_JSON" >&2
+        rm -f "$PF_JSON"
+        rmdir "$PAPERS_DIR" 2>/dev/null || true
+        exit 1
+    fi
 fi
 
-pf_file=$(python3 -c "import json; print(json.load(open('$PF_JSON'))['data']['results'][0]['file'])")
+pf_file=$(python3 -c "import json; print(json.load(open('$PF_JSON'))['data']['results'][0].get('file') or '')")
 pf_title=$(python3 -c "import json; print(json.load(open('$PF_JSON'))['data']['results'][0]['meta']['title'][:80])")
 pf_doi=$(python3 -c "import json; print(json.load(open('$PF_JSON'))['data']['results'][0].get('doi', ''))")
-basename=$(basename "$pf_file")
 
-echo "   ✅ $pf_title"
-echo "   📁 $basename"
-echo ""
+if [ -n "$pf_file" ]; then
+    basename=$(basename "$pf_file")
+    echo "   ✅ $pf_title"
+    echo "   📁 $basename"
+    echo ""
 
-# ── Step 2: 上传到 Google Drive ───────────────────────────────
-echo "2️⃣  上传到 Google Drive..."
-rclone copy "$PAPERS_DIR/$basename" gdrive:
-echo "   ✅ $basename → gdrive:"
-echo ""
+    # ── Step 2: 上传到 Google Drive ───────────────────────────
+    echo "2️⃣  上传到 Google Drive..."
+    rclone copy "$PAPERS_DIR/$basename" gdrive:
+    echo "   ✅ $basename → gdrive:"
+    echo ""
+else
+    basename=""
+    echo "   ✅ $pf_title"
+    echo "   ℹ️  无 PDF 文件（期刊爬虫阻挡），将创建仅元数据条目"
+    echo ""
+fi
 
 # ── Step 3: 创建 Zotero 条目 ──────────────────────────────────
 echo "3️⃣  创建 Zotero 条目..."
@@ -97,7 +126,10 @@ echo ""
 
 # ── Step 4: 清理临时文件 ─────────────────────────────────────
 echo "4️⃣  清理临时文件..."
-rm -f "$PAPERS_DIR/$basename" "$PF_JSON"
+if [ -n "$basename" ]; then
+    rm -f "$PAPERS_DIR/$basename"
+fi
+rm -f "$PF_JSON"
 rmdir "$PAPERS_DIR" 2>/dev/null || true
 echo "   ✅ 完成"
 echo ""

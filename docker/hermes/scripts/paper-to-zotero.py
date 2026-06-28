@@ -14,7 +14,9 @@ Output: Zotero item key on stdout
 import json
 import os
 import sys
+import time
 import tomllib
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -52,6 +54,8 @@ def fetch_arxiv(arxiv_id: str) -> dict | None:
         authors = entry.findall("atom:author", ns)
         published = entry.find("atom:published", ns)
         primary = entry.find("arxiv:primary_category", ns)
+        published_doi_el = entry.find("arxiv:doi", ns)
+        journal_ref_el = entry.find("arxiv:journal_ref", ns)
         return {
             "title": title.text.strip() if title is not None else "",
             "summary": summary.text.strip() if summary is not None else "",
@@ -59,9 +63,39 @@ def fetch_arxiv(arxiv_id: str) -> dict | None:
                        for a in authors],
             "published": published.text.strip()[:10] if published is not None else "",
             "primary_category": primary.get("term") if primary is not None else "",
+            "published_doi": published_doi_el.text.strip() if published_doi_el is not None else None,
+            "journal_ref": journal_ref_el.text.strip() if journal_ref_el is not None else None,
         }
     except Exception:
         return None
+
+
+S2_API = "https://api.semanticscholar.org/graph/v1/paper"
+
+
+def fetch_published_doi_s2(arxiv_id: str) -> str | None:
+    """Look up the published DOI for an arXiv paper via Semantic Scholar.
+
+    S2 reliably links arXiv IDs to published DOIs (e.g. conference / journal
+    versions), even when the arXiv API itself does not carry the <arxiv:doi>
+    element.  Returns None on any failure — callers should fall back to
+    preprint metadata.
+    """
+    url = f"{S2_API}/ArXiv:{arxiv_id}?fields=externalIds"
+    req = urllib.request.Request(url, headers={"User-Agent": CROSSREF_UA})
+    for attempt in range(3):
+        try:
+            resp = urllib.request.urlopen(req, timeout=10)
+            ext = json.loads(resp.read()).get("externalIds", {})
+            return ext.get("DOI")
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                time.sleep(2 * (attempt + 1))  # back off: 2, 4, 6 s
+                continue
+            return None
+        except Exception:
+            return None
+    return None
 
 
 def _pick_arxiv_id(doi: str) -> str | None:
@@ -79,8 +113,26 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
     item = {}
     extra = {}
 
+    arxiv_id = _pick_arxiv_id(doi)
+
     # Try Crossref first
     cr = fetch_crossref(doi)
+
+    # For arXiv DOIs: attempt to upgrade metadata from preprint to
+    # published version.  The arXiv API carries the formal published DOI
+    # (<arxiv:doi>) when authors updated their submission.  Semantic
+    # Scholar is more reliable but shares a rate-limit pool with
+    # paper-fetch (which calls S2 first), so we only use arXiv here.
+    # Use fetch_published_doi_s2() directly for one-off lookups where
+    # S2 is known to be available.
+    arxiv_data = None
+    if arxiv_id and (not cr or cr.get("type") in ("posted-content", "preprint")):
+        arxiv_data = fetch_arxiv(arxiv_id)
+        published_doi = arxiv_data.get("published_doi") if arxiv_data else None
+        if published_doi:
+            published_cr = fetch_crossref(published_doi)
+            if published_cr:
+                cr = published_cr
 
     if cr:
         # Title
@@ -113,9 +165,15 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
             elif len(dp) >= 1:
                 item["date"] = str(dp[0])
 
-        # Item type
+        # Item type — map CrossRef types to Zotero item types
         cr_type = cr.get("type", "")
-        item["itemType"] = "journalArticle" if cr_type == "journal-article" else "preprint"
+        type_map = {
+            "journal-article": "journalArticle",
+            "proceedings-article": "conferencePaper",
+            "book-chapter": "bookSection",
+            "book": "book",
+        }
+        item["itemType"] = type_map.get(cr_type, "preprint")
 
         # Journal info → extra
         container = cr.get("container-title", [])
@@ -138,9 +196,9 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
             extra["publisher"] = publisher
 
     else:
-        # Crossref failed — try arXiv for arXiv DOIs
-        arxiv_id = _pick_arxiv_id(doi)
-        arxiv_data = fetch_arxiv(arxiv_id) if arxiv_id else None
+        # Crossref failed — try arXiv (may have been pre-fetched above)
+        if arxiv_data is None:
+            arxiv_data = fetch_arxiv(arxiv_id) if arxiv_id else None
 
         if arxiv_data:
             item["title"] = arxiv_data["title"]
@@ -183,6 +241,17 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
                 extra["archiveID"] = f"arXiv:{arxiv_id}"
                 extra["libraryCatalog"] = "arXiv.org"
 
+    # When metadata was upgraded from arXiv preprint → published version,
+    # note the arXiv source so it is not lost.
+    if arxiv_id and arxiv_data:
+        for key, val in [
+            ("repository", "arXiv"),
+            ("archiveID", f"arXiv:{arxiv_id}"),
+            ("libraryCatalog", "arXiv.org"),
+        ]:
+            if key not in extra:
+                extra[key] = val
+
     # Common fields
     item["DOI"] = doi
     item["url"] = f"https://doi.org/{doi}"
@@ -208,42 +277,54 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
 
 def main():
     dry_run = False
+    metadata_only = False
     args = sys.argv[1:]
 
     if "--dry-run" in args:
         dry_run = True
         args.remove("--dry-run")
+    if "--metadata-only" in args:
+        metadata_only = True
+        args.remove("--metadata-only")
 
     if len(args) < 1:
-        print("Usage: paper-to-zotero [--dry-run] <paper_fetch_json>",
+        print("Usage: paper-to-zotero [--dry-run] [--metadata-only]"
+              " <paper_fetch_json|DOI>",
               file=sys.stderr)
         sys.exit(2)
 
-    pf_path = args[0]
+    input_arg = args[0]
 
-    # Read paper-fetch output
-    with open(pf_path) as f:
-        pf = json.load(f)
+    # ── Metadata-only mode: input is a DOI, no JSON file ─────────
+    if metadata_only:
+        doi = input_arg
+        pf_meta = {}
+        pf_filename = ""
+        title = doi
+    else:
+        # Read paper-fetch output
+        pf_path = input_arg
+        with open(pf_path) as f:
+            pf = json.load(f)
 
-    if not pf.get("ok"):
-        print("Error: paper-fetch failed, cannot create Zotero entry",
-              file=sys.stderr)
-        sys.exit(3)
+        if not pf.get("ok"):
+            print("Error: paper-fetch failed, cannot create Zotero entry",
+                  file=sys.stderr)
+            sys.exit(3)
 
-    result = pf["data"]["results"][0]
-    doi = result.get("doi", "")
-    pf_meta = result.get("meta", {})
-    title = pf_meta.get("title", result.get("doi", "Unknown"))
+        result = pf["data"]["results"][0]
+        doi = result.get("doi", "")
+        pf_meta = result.get("meta", {})
+        title = pf_meta.get("title", result.get("doi", "Unknown"))
 
-    pf_filename = os.path.basename(result.get("file", ""))
-    if not pf_filename:
-        print("Error: no filename in paper-fetch JSON", file=sys.stderr)
-        sys.exit(5)
+        pf_filename = os.path.basename(result.get("file", ""))
+        if not pf_filename:
+            print("   ℹ️  No PDF in paper-fetch output — creating metadata-only entry")
 
     # Use Zotero's attachments: scheme — resolves relative to each
     # computer's Linked Attachment Base Directory (set in Zotero prefs).
     # This makes linked_file paths portable across OSes and user accounts.
-    attachment_path = f"attachments:{pf_filename}"
+    attachment_path = f"attachments:{pf_filename}" if pf_filename else None
 
     # Read Zotero config
     config = tomllib.load(open("/opt/data/.config/zot/config.toml", "rb"))
@@ -266,7 +347,10 @@ def main():
         print(f"  Date: {item_data.get('date', '')}")
         print(f"  Abstract: {'yes' if item_data.get('abstractNote') else 'no'}")
         print(f"  Extra: {list(extra_fields.keys())}")
-        print(f"  Attachment: linked_file → {attachment_path}")
+        if attachment_path:
+            print(f"  Attachment: linked_file → {attachment_path}")
+        else:
+            print(f"  Attachment: (none — metadata only)")
         sys.exit(0)
 
     # Create Zotero item
@@ -294,27 +378,31 @@ def main():
 
     parent_key = list(created.values())[0]
 
-    # Create linked_file attachment
-    attach_tmpl = z.item_template("attachment", "linked_file")
-    attach_tmpl["title"] = pf_filename
-    attach_tmpl["parentItem"] = parent_key
-    attach_tmpl["path"] = attachment_path
+    # Create linked_file attachment (if PDF available)
+    attach_key = None
+    if attachment_path:
+        attach_tmpl = z.item_template("attachment", "linked_file")
+        attach_tmpl["title"] = pf_filename
+        attach_tmpl["parentItem"] = parent_key
+        attach_tmpl["path"] = attachment_path
 
-    attach_resp = z.create_items([attach_tmpl])
-    attach_created = attach_resp.get("success", {})
-    if attach_created:
-        attach_key = list(attach_created.values())[0]
-    else:
-        attach_key = "(failed)"
+        attach_resp = z.create_items([attach_tmpl])
+        attach_created = attach_resp.get("success", {})
+        if attach_created:
+            attach_key = list(attach_created.values())[0]
+        else:
+            attach_key = "(failed)"
 
-    print(json.dumps({
+    result_out = {
         "ok": True,
         "zotero_key": parent_key,
-        "attachment_key": attach_key,
         "title": title,
         "doi": doi,
-        "pdf_path": attachment_path,
-    }))
+    }
+    if attach_key:
+        result_out["attachment_key"] = attach_key
+        result_out["pdf_path"] = attachment_path
+    print(json.dumps(result_out))
 
 
 if __name__ == "__main__":
