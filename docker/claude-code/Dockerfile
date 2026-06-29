@@ -25,6 +25,10 @@ RUN ARCH=$(dpkg --print-architecture) && \
 # ── uv（静态二进制，复用 Hermes Dockerfile 模式）─────────────────
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# ── Python deps for dailyinfo (weekly_summary.py) ────────────────
+RUN pip install --break-system-packages --no-cache-dir \
+    requests scikit-learn click python-dotenv
+
 # ── GitHub CLI（direct binary）───────────────────────────────────
 RUN ARCH=$(dpkg --print-architecture) && \
     GH_VERSION="2.92.0" && \
@@ -53,6 +57,10 @@ RUN mkdir -p /home/node/code && chown node:node /home/node/code
 RUN git clone --depth 1 https://github.com/affaan-m/everything-claude-code.git /opt/ecc-seed \
     && cd /opt/ecc-seed && npm install --no-audit --no-fund --loglevel=error \
     && chown -R node:node /opt/ecc-seed
+
+# ── Weekly AI News generate script ────────────────────────────────
+COPY weekly-ai-news-generate.sh /opt/claude-code/weekly-ai-news-generate.sh
+RUN chmod +x /opt/claude-code/weekly-ai-news-generate.sh
 
 # ── Entrypoint wrapper ────────────────────────────────────────────
 COPY entrypoint.sh /opt/claude-code/entrypoint.sh

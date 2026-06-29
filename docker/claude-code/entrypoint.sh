@@ -22,10 +22,26 @@ rm -rf /home/node/.cc-connect /root/.cc-connect
 ln -sf /opt/cc-config /home/node/.cc-connect
 ln -sf /opt/cc-config /root/.cc-connect
 
+# cc-connect run/ directory must be on a local (non-macOS) filesystem
+# because chmod on Unix sockets fails across the macOS→Linux boundary
+mkdir -p /tmp/cc-connect-run
+rm -rf /opt/cc-config/run
+ln -sf /tmp/cc-connect-run /opt/cc-config/run
+
 # gitcode-cli reads config from $HOME/.gitcode/
 rm -rf /home/node/.gitcode /root/.gitcode
 ln -sf /opt/gitcode-config /home/node/.gitcode
 ln -sf /opt/gitcode-config /root/.gitcode
+
+# ── dailyinfo skills -> Claude Code skills ────────────────────
+# Mounted at /opt/dailyinfo-skills (ro), symlinked after .claude is set up
+mkdir -p /home/node/.claude/skills
+for skill_dir in /opt/dailyinfo-skills/*/; do
+    skill_name=$(basename "$skill_dir")
+    target="/home/node/.claude/skills/${skill_name}"
+    rm -rf "$target"
+    ln -sf "$skill_dir" "$target"
+done
 
 # ── API key mapping: DeepSeek → Anthropic ─────────────────────
 # Claude Code reads ANTHROPIC_API_KEY; map DEEPSEEK_API_KEY → ANTHROPIC_API_KEY
@@ -70,9 +86,17 @@ cp -r /usr/local/lib/node_modules/gitcode-cli/skills/gitcode-cli/* /opt/claude-c
 # ── uv self-update ───────────────────────────────────────────
 uv self update --quiet 2>/dev/null || true
 
+# ── dailyinfo install（后台 pip install -e，deps 已在镜像中）─────
+(
+    if [ -d "/home/node/code/dailyinfo" ] && ! python3 -c "import dailyinfo" 2>/dev/null; then
+        echo "📦 安装 dailyinfo..."
+        timeout 30 python3 -m pip install -e /home/node/code/dailyinfo --quiet 2>/dev/null && \
+            echo "✅ dailyinfo 安装完成" || true
+    fi
+) &
+
 # ── Code 目录骨架（卷挂载后创建）─────────────────────────────
-mkdir -p /home/node/code/opensource /home/node/code/OuyangWenyu /home/node/code/iHeadWater
-chown -R node:node /home/node/code 2>/dev/null || true
+mkdir -p /home/node/code/opensource /home/node/code/OuyangWenyu /home/node/code/iHeadWater 2>/dev/null || true
 
 # ── Launch cc-connect ─────────────────────────────────────────
 # cc-connect is the main process; it manages Claude Code sessions
@@ -190,6 +214,30 @@ if (changed) {
     console.error("🔧 settings.json restore failed:", e.message);
 }
 '
+) &
+
+# ── Auto-register weekly AI News cron jobs ──────────────────────
+(
+    for i in $(seq 1 30); do
+        if [ -S /root/.cc-connect/run/api.sock ]; then break; fi
+        sleep 2
+    done
+    if [ -S /root/.cc-connect/run/api.sock ]; then
+        EXISTING=$(CC_SESSION_KEY=s1 cc-connect cron list 2>/dev/null | grep -c "AI News" || true)
+        if [ "$EXISTING" -lt 2 ]; then
+            echo "📋 Registering weekly AI News cron jobs..."
+            CC_SESSION_KEY=s1 cc-connect cron add \
+                --cron "0 0 * * 0" \
+                --exec "bash /opt/claude-code/weekly-ai-news-generate.sh" \
+                --desc "AI News 周报生成" 2>/dev/null || true
+            CC_SESSION_KEY=s1 cc-connect cron add \
+                --cron "10 0 * * 0" \
+                --prompt "执行 ai-news-weekly-polish 润色任务：1）读取 /home/node/.myagentdata/dailyinfo/briefings/weekly/weekly_recap_\$(date +%Y-%m-%d).md 2）深度润色（导读用具体数字切入、跨日事件体现演化、冷门实体加背景、消除AI套话）3）保存润色版并作为回复返回" \
+                --session-mode new-per-run \
+                --desc "AI News 周报润色+飞书推送" 2>/dev/null || true
+            echo "✅ weekly AI News cron jobs registered"
+        fi
+    fi
 ) &
 
 exec cc-connect

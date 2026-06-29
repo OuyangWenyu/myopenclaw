@@ -187,6 +187,8 @@ services:
       - ${HOME}/.gitcode:/opt/gitcode-config
       - ${HOME}/code:/home/node/code
       - ${HOME}/Code:/home/node/Code
+      - ${HOME}/.myagentdata:/home/node/.myagentdata
+      - ${HOME}/code/dailyinfo/skills/ai-news-weekly-polish:/opt/dailyinfo-skills/ai-news-weekly-polish:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -195,6 +197,7 @@ services:
       - CC_CONNECT_FEISHU_APP_SECRET=${CC_CONNECT_FEISHU_APP_SECRET:-}
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - GITCODE_TOKEN=${GITCODE_TOKEN:-}
+      - DAILYINFO_DATA_ROOT=/home/node/.myagentdata/dailyinfo
       - TZ=${TZ:-Asia/Shanghai}
     ports:
       - "${CC_CONNECT_PORT:-9090}:9090"
