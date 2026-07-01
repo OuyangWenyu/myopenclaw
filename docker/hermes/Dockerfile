@@ -117,6 +117,12 @@ RUN chmod +x /opt/hermes/scripts/paper-to-zotero.py
 COPY scripts/run-paper-pipeline.sh /opt/hermes/scripts/run-paper-pipeline.sh
 RUN chmod +x /opt/hermes/scripts/run-paper-pipeline.sh
 
+# ── Tests for paper pipeline scripts ──────────────────────────
+COPY scripts/test-paper-to-zotero.sh /opt/hermes/scripts/test-paper-to-zotero.sh
+COPY scripts/test-run-paper-pipeline.sh /opt/hermes/scripts/test-run-paper-pipeline.sh
+RUN chmod +x /opt/hermes/scripts/test-paper-to-zotero.sh \
+    /opt/hermes/scripts/test-run-paper-pipeline.sh
+
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the
