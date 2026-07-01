@@ -278,6 +278,7 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
 def main():
     dry_run = False
     metadata_only = False
+    pdf_filename = None
     args = sys.argv[1:]
 
     if "--dry-run" in args:
@@ -286,10 +287,16 @@ def main():
     if "--metadata-only" in args:
         metadata_only = True
         args.remove("--metadata-only")
+    # --pdf-filename: attach a linked_file in metadata-only mode
+    if "--pdf-filename" in args:
+        idx = args.index("--pdf-filename")
+        args.pop(idx)
+        if idx < len(args):
+            pdf_filename = args.pop(idx)
 
     if len(args) < 1:
         print("Usage: paper-to-zotero [--dry-run] [--metadata-only]"
-              " <paper_fetch_json|DOI>",
+              " [--pdf-filename <name>] <paper_fetch_json|DOI>",
               file=sys.stderr)
         sys.exit(2)
 
@@ -299,7 +306,7 @@ def main():
     if metadata_only:
         doi = input_arg
         pf_meta = {}
-        pf_filename = ""
+        pf_filename = pdf_filename or ""
         title = doi
     else:
         # Read paper-fetch output
