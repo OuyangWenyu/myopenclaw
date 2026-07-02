@@ -76,6 +76,12 @@ docker compose exec claude-code python3 /home/node/code/myloop/scripts/morning-t
 # Gateway error loop detection（检测 OpenClaw 配置兼容性导致的日志刷屏）
 ./scripts/check-gateway-errors.sh            # 人类可读
 ./scripts/check-gateway-errors.sh --json     # JSON 输出（适合 cron/监控）
+
+# Monitoring（Uptime Kuma + Healthchecks.io）
+open http://localhost:3001                                    # Uptime Kuma 监控面板
+./scripts/launchd/install-healthchecks-ping.sh                # 安装 Healthchecks.io 心跳任务
+launchctl start ai.myopenclaw.healthchecks-ping               # 手动触发心跳
+tail -f logs/healthchecks-ping.log                            # 查看心跳日志
 ```
 
 ## ⚠️ OpenClaw 配置安全规则
@@ -110,7 +116,9 @@ docker compose pull openclaw-gateway
 
 ## Architecture
 
-**Five Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+**Six Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+
+0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
 1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Three profiles: default (port 8642), coder (8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644). Dashboard on port 9119.
 
@@ -162,6 +170,8 @@ myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
 - myloop skill 修改后，CC飞总 下次启动自动加载新版本（symlink 跟随）。
 - 执行脚本（如 `morning-triage-send.py`）放在 myopenclaw，因为它依赖容器环境、飞书 API 凭证等执行层细节。
 - cc-connect cron 不可用于 myloop skills（session→platform 解析限制），改用宿主机 launchd。
+
+**Monitoring**: Dual-layer via Uptime Kuma (service-level, Docker container) + Healthchecks.io (host-level, cloud dead man's switch). See `docs/monitoring.md` for full architecture and setup instructions. Healthchecks.io heartbeat via host launchd every 60s.
 
 ## Key Design Decisions
 

@@ -254,6 +254,27 @@ services:
     depends_on:
       - openclaw-gateway
 
+  # ── Uptime Kuma（服务监控面板）──────────────────────────────
+  uptime-kuma:
+    image: louislam/uptime-kuma:latest
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "${UPTIME_KUMA_PORT:-3001}:3001"
+    volumes:
+      - ${HOME}/.uptime-kuma:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - NODE_ENV=production
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    networks:
+      - myopenclaw-net
+
   # ── 定时快照备份 ─────────────────────────────────────────────
   backup-cron:
     build:
