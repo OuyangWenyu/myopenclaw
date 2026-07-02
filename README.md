@@ -10,7 +10,7 @@
 | hermes-coder | 同 hermes 镜像 | 8643 | Hermes coder profile |
 | hermes-finance | 同 hermes 镜像 | 8644 | Hermes finance profile |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板 |
-| claude-code | 自建镜像（基于 `ubuntu:24.04`，含 Python 3.12 + uv + Claude Code + cc-connect + gh） | 9090 | Claude Code + 飞书直连 |
+| claude-code | 自建镜像（基于 `ubuntu:24.04`，含 Python 3.12 + uv + Claude Code + cc-connect + gh），启动时自动加载 MyLoop skills | 9090 | Claude Code + 飞书直连 + MyLoop 执行引擎 |
 | openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway |
 | backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每周日凌晨 2:00）|
 
@@ -354,6 +354,43 @@ docker compose logs -f claude-code
 
 ---
 
+## MyLoop 集成 — Daily Command Center
+
+[MyLoop](https://github.com/OuyangWenyu/myloop) 是本项目的 **loop 设计层**，定义 agent 自主循环的 skill 合同、分类规则和输出格式。myopenclaw 是执行层，负责调度和飞书推送。
+
+### 架构
+
+```
+myloop/                          ← 设计层（skill 合同、ledger、分类规则）
+  skills/morning-triage/SKILL.md   → 定义 Daily Command Center
+  memory/{4个ledger}/inbox.md      → 数据层
+
+~/.claude/skills/morning-triage  ← symlink（不复制、不分叉）
+    ↓
+CC飞总 (claude-code)              ← 执行层：读 skill → 分类 → 飞书推送
+```
+
+容器启动时 `entrypoint.sh` 自动检测 `~/code/myloop/skills/`，存在则 symlink 全部 skill 到 CC飞总。
+
+### Morning Triage（晨间三签）
+
+每天早上 07:50 自动读取四个信息账本，生成决策支撑报告推送到飞书：
+
+```bash
+# 安装定时任务（新机器首次）
+./scripts/launchd/install-morning-triage.sh
+
+# 手动触发一次
+launchctl start ai.myloop.morning-triage
+
+# 容器内直接运行
+docker compose exec claude-code python3 /home/node/code/myloop/scripts/morning-triage-send.py
+```
+
+详见 [`docs/myloop-integration.md`](docs/myloop-integration.md)。
+
+---
+
 ## 目录结构
 
 ```ini
@@ -379,10 +416,15 @@ myopenclaw/
     ├── start.sh                # 启动服务（含自动配置 + skill 安装）
     ├── stop.sh                 # 停止服务
     ├── setup-cloud.sh          # 初始化云盘备份目录
+    ├── morning-triage-send.py  # MyLoop morning-triage 执行脚本
     ├── backup-data.sh          # ~/.myagentdata 通用快照脚本
     ├── backup-all.sh           # 本机全量备份（不依赖容器）
     ├── backup-all-docker.sh    # 容器内备份（供 cron 调用）
-    └── restore.sh              # 从快照恢复数据
+    ├── restore.sh              # 从快照恢复数据
+    └── launchd/
+        ├── install-dailyinfo.sh          # dailyinfo 调度安装
+        ├── install-morning-triage.sh     # morning-triage 调度安装
+        └── *.plist.template              # launchd plist 模板
 ```
 
 ## 备份内容说明
@@ -439,6 +481,7 @@ FreshRSS 配了 `restart: unless-stopped`，起一次之后宿主机重启也会
 | 05:30 | `ai.dailyinfo.push-early` | `uv run dailyinfo push --categories ai_news,code,resource` |
 | 06:00 | `ai.dailyinfo.push-papers` | `uv run dailyinfo push --categories papers` |
 | 07:00 | `ai.dailyinfo.push-arxiv` | `uv run dailyinfo push --categories arxiv` |
+| **07:50** | **`ai.myloop.morning-triage`** | **`docker compose exec claude-code python3 …/morning-triage-send.py`（MyLoop 晨间三签）** |
 
 日志统一落在 `/Users/owen/code/dailyinfo/logs/dailyinfo-*.log`。
 
