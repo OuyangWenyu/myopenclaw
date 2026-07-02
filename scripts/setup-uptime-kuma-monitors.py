@@ -41,20 +41,13 @@ HTTP_SERVICE_MAP = {
         "interval": 60,
         "name": "Hermes Dashboard",
     },
-    "claude-code": {
-        "url": "http://claude-code:9090",
-        "interval": 60,
-        "name": "Claude Code (cc-connect)",
-    },
 }
 
-HTTP_DEFAULT_PORTS = {
-    "hermes": ("hermes", 8642, 60, "Hermes"),
-    "hermes-coder": ("hermes-coder", 8642, 60, "Hermes Coder"),
-    "hermes-finance": ("hermes-finance", 8642, 60, "Hermes Finance"),
-}
-
-SKIP_HTTP = {"openclaw-cli", "backup-cron"}
+# Hermes instances don't expose standard HTTP health endpoints.
+# The gateway uses WebSocket for Feishu/Discord, and the webhook port
+# only responds to specific webhook paths, not to GET /.
+# Monitor them via Docker container status instead.
+SKIP_HTTP = {"openclaw-cli", "backup-cron", "hermes", "hermes-coder", "hermes-finance"}
 SKIP_DOCKER = {"openclaw-cli"}
 
 
