@@ -71,6 +71,12 @@ docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_
 # Gateway error loop detection（检测 OpenClaw 配置兼容性导致的日志刷屏）
 ./scripts/check-gateway-errors.sh            # 人类可读
 ./scripts/check-gateway-errors.sh --json     # JSON 输出（适合 cron/监控）
+
+# Monitoring（Uptime Kuma + Healthchecks.io）
+open http://localhost:3001                                    # Uptime Kuma 监控面板
+./scripts/launchd/install-healthchecks-ping.sh                # 安装 Healthchecks.io 心跳任务
+launchctl start ai.myopenclaw.healthchecks-ping               # 手动触发心跳
+tail -f logs/healthchecks-ping.log                            # 查看心跳日志
 ```
 
 ## ⚠️ OpenClaw 配置安全规则
@@ -105,7 +111,9 @@ docker compose pull openclaw-gateway
 
 ## Architecture
 
-**Five Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+**Six Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+
+0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
 1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Three profiles: default (port 8642), coder (8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644). Dashboard on port 9119.
 
@@ -120,6 +128,8 @@ docker compose pull openclaw-gateway
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, and `scripts/backup-data.sh` in sequence. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DB uses `sqlite3 .backup` for hot backup. Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
 **dailyinfo scheduling**: Managed via host launchd (not Docker). `scripts/launchd/` contains plist templates and install/uninstall scripts. dailyinfo is a sibling repo (`../dailyinfo`) with its own Docker services (FreshRSS).
+
+**Monitoring**: Dual-layer via Uptime Kuma (service-level, Docker container) + Healthchecks.io (host-level, cloud dead man's switch). See `docs/monitoring.md` for full architecture and setup instructions. Healthchecks.io heartbeat via host launchd every 60s.
 
 ## Key Design Decisions
 
