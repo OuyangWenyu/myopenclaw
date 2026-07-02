@@ -11,6 +11,9 @@
 # ── Code intelligence index (auto-generated) ─────────────────────
 .codegraph/
 
+# ── Runtime logs ──────────────────────────────────────────────────
+logs/
+
 # ── macOS ────────────────────────────────────────────────────────
 .DS_Store
 

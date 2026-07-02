@@ -12,6 +12,7 @@
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板 |
 | claude-code | 自建镜像（基于 `ubuntu:24.04`，含 Python 3.12 + uv + Claude Code + cc-connect + gh） | 9090 | Claude Code + 飞书直连 |
 | openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway |
+| uptime-kuma | `louislam/uptime-kuma:latest` | 3001 | 服务监控面板（HTTP + Docker 容器状态，飞书告警）|
 | backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每周日凌晨 2:00）|
 
 数据目录映射：
@@ -25,6 +26,7 @@
 - `~/.config/opencode` → `/opt/opencode-config`（hermes 容器内，opencode 配置，宿主机持久化）
 - `~/.hermes/secrets/` → `/opt/data/secrets/`（hermes 容器内，LLM 密钥文件，opencode.json 用 `{file:}` 引用）
 - `~/.hermes/rclone/` → `/opt/data/rclone/`（hermes 容器内，rclone Google Drive 认证配置，不入 git）
+- `~/.uptime-kuma` → `/app/data`（uptime-kuma 容器内，SQLite 数据库 + 配置，宿主机持久化）
 - `~/code` + `~/Code` → `/home/node/code` + `/home/node/Code`（claude-code 容器内，代码仓库）
 
 ---
@@ -352,6 +354,20 @@ open http://localhost:9090
 docker compose logs -f claude-code
 ```
 
+### 服务监控
+
+```bash
+# Uptime Kuma 监控面板
+open http://localhost:3001
+
+# Healthchecks.io 心跳
+./scripts/launchd/install-healthchecks-ping.sh   # 安装定时任务
+launchctl start ai.myopenclaw.healthchecks-ping   # 手动触发
+tail -f logs/healthchecks-ping.log                # 查看日志
+```
+
+监控体系详见 [docs/monitoring.md](docs/monitoring.md)。
+
 ---
 
 ## 目录结构
@@ -361,6 +377,11 @@ myopenclaw/
 ├── docker-compose.yml          # 服务编排
 ├── .env.example                # 环境变量模板（API Key、端口、cron 等）
 ├── .cloud.conf.example         # 云盘路径模板（本机路径，不入 git）
+├── docs/
+│   ├── monitoring.md           # 服务监控体系（Uptime Kuma + Healthchecks.io）
+│   └── myloop-integration.md   # MyLoop 集成文档
+├── tests/
+│   └── test-monitoring.sh      # 监控配置 TDD 测试
 ├── docker/
 │   ├── backup-cron/            # 定时备份容器（alpine + rsync + sqlite3）
 │   ├── hermes/                 # 自定义 Hermes 镜像（opencode + gh CLI + lark-cli）
@@ -379,10 +400,14 @@ myopenclaw/
     ├── start.sh                # 启动服务（含自动配置 + skill 安装）
     ├── stop.sh                 # 停止服务
     ├── setup-cloud.sh          # 初始化云盘备份目录
+    ├── healthchecks-ping.sh    # Healthchecks.io 心跳 ping
     ├── backup-data.sh          # ~/.myagentdata 通用快照脚本
     ├── backup-all.sh           # 本机全量备份（不依赖容器）
     ├── backup-all-docker.sh    # 容器内备份（供 cron 调用）
-    └── restore.sh              # 从快照恢复数据
+    ├── restore.sh              # 从快照恢复数据
+    └── launchd/
+        ├── ai.myopenclaw.healthchecks-ping.plist.template   # Healthchecks 心跳 launchd 模板
+        └── install-healthchecks-ping.sh                     # 安装 Healthchecks 心跳定时任务
 ```
 
 ## 备份内容说明
@@ -439,6 +464,8 @@ FreshRSS 配了 `restart: unless-stopped`，起一次之后宿主机重启也会
 | 05:30 | `ai.dailyinfo.push-early` | `uv run dailyinfo push --categories ai_news,code,resource` |
 | 06:00 | `ai.dailyinfo.push-papers` | `uv run dailyinfo push --categories papers` |
 | 07:00 | `ai.dailyinfo.push-arxiv` | `uv run dailyinfo push --categories arxiv` |
+| 07:50 | `ai.myloop.morning-triage` | `docker compose exec claude-code python3 .../morning-triage-send.py`（MyLoop 晨间三签）|
+| 每 60s | `ai.myopenclaw.healthchecks-ping` | `scripts/healthchecks-ping.sh`（Healthchecks.io 心跳）|
 
 日志统一落在 `/Users/owen/code/dailyinfo/logs/dailyinfo-*.log`。
 
