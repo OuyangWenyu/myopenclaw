@@ -82,6 +82,13 @@ open http://localhost:3001                                    # Uptime Kuma 监�
 ./scripts/launchd/install-healthchecks-ping.sh                # 安装 Healthchecks.io 心跳任务
 launchctl start ai.myopenclaw.healthchecks-ping               # 手动触发心跳
 tail -f logs/healthchecks-ping.log                            # 查看心跳日志
+
+# AgentOps auto-collection（morning-triage 数据采集）
+python3 scripts/collect_agentops.py                           # 手动运行采集
+python3 scripts/collect_agentops.py --dry-run                 # 预览模式（不写入 ledger）
+./scripts/launchd/install-collect-agentops.sh                 # 安装每天 7:45 定时采集
+launchctl start ai.myopenclaw.collect-agentops                # 手动触发采集
+tail -f logs/collect-agentops.log                             # 查看采集日志
 ```
 
 ## ⚠️ OpenClaw 配置安全规则

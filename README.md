@@ -504,6 +504,7 @@ FreshRSS 配了 `restart: unless-stopped`，起一次之后宿主机重启也会
 | 05:30 | `ai.dailyinfo.push-early` | `uv run dailyinfo push --categories ai_news,code,resource` |
 | 06:00 | `ai.dailyinfo.push-papers` | `uv run dailyinfo push --categories papers` |
 | 07:00 | `ai.dailyinfo.push-arxiv` | `uv run dailyinfo push --categories arxiv` |
+| 07:45 | `ai.myopenclaw.collect-agentops` | `python3 scripts/collect_agentops.py`（AgentOps 信号自动采集）|
 | 07:50 | `ai.myloop.morning-triage` | `docker compose exec claude-code python3 .../morning-triage-send.py`（MyLoop 晨间三签）|
 | 每 60s | `ai.myopenclaw.healthchecks-ping` | `scripts/healthchecks-ping.sh`（Healthchecks.io 心跳）|
 
