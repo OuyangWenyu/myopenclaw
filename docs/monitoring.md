@@ -50,7 +50,20 @@ Layer 2: Healthchecks.io (云端)
 
 ### 添加监控目标
 
-在 Uptime Kuma Web UI 逐一添加：
+**自动方式（推荐）**：运行自动发现脚本，从 `docker-compose.yml` 读取所有服务并批量创建：
+
+```bash
+python3 scripts/setup-uptime-kuma-monitors.py
+```
+
+脚本会提示输入 Uptime Kuma 用户名和密码，或通过环境变量传入：
+```bash
+UPK_USER=owen UPK_PASS=yourpass python3 scripts/setup-uptime-kuma-monitors.py
+```
+
+幂等运行——已存在的监控会自动跳过。新增服务后重新运行即可。
+
+**手动方式**（备选）：在 Uptime Kuma Web UI 逐一添加。
 
 **HTTP 监控**（类型选择 "HTTP(s)"）：
 
@@ -64,6 +77,20 @@ Layer 2: Healthchecks.io (云端)
 | Claude Code | `http://claude-code:9090` | 60s | 3 | cc-connect 管理界面 |
 
 > **注意**：URL 使用 Docker 内部 DNS（容器名），因为 Uptime Kuma 和所有服务在同一个 `myopenclaw-net` 网络上。
+
+**Docker 主机配置**（Docker 容器监控的前置条件）：
+
+首次使用 Docker 监控前，需要在 Uptime Kuma 中配置 Docker 连接：
+1. Settings → Docker Hosts → Setup Docker Host
+2. Socket Type: Unix Socket
+3. Socket Path: `/var/run/docker.sock`
+4. Name: Mac mini Docker
+
+或者直接插入数据库（自动脚本会尝试自动处理）：
+```bash
+docker compose exec uptime-kuma sqlite3 /app/data/kuma.db \
+  "INSERT INTO docker_host (user_id, docker_daemon, docker_type, name) VALUES (1, '/var/run/docker.sock', 'socket', 'Mac mini Docker');"
+```
 
 **Docker 容器监控**（类型选择 "Docker"）：
 
