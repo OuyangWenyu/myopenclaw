@@ -439,6 +439,7 @@ FreshRSS 配了 `restart: unless-stopped`，起一次之后宿主机重启也会
 | 05:30 | `ai.dailyinfo.push-early` | `uv run dailyinfo push --categories ai_news,code,resource` |
 | 06:00 | `ai.dailyinfo.push-papers` | `uv run dailyinfo push --categories papers` |
 | 07:00 | `ai.dailyinfo.push-arxiv` | `uv run dailyinfo push --categories arxiv` |
+| 07:45 | `ai.myopenclaw.collect-agentops` | `python3 scripts/collect_agentops.py`（AgentOps 信号自动采集）|
 
 日志统一落在 `/Users/owen/code/dailyinfo/logs/dailyinfo-*.log`。
 

@@ -71,6 +71,13 @@ docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_
 # Gateway error loop detection（检测 OpenClaw 配置兼容性导致的日志刷屏）
 ./scripts/check-gateway-errors.sh            # 人类可读
 ./scripts/check-gateway-errors.sh --json     # JSON 输出（适合 cron/监控）
+
+# AgentOps auto-collection（morning-triage 数据采集）
+python3 scripts/collect_agentops.py                           # 手动运行采集
+python3 scripts/collect_agentops.py --dry-run                 # 预览模式（不写入 ledger）
+./scripts/launchd/install-collect-agentops.sh                 # 安装每天 7:45 定时采集
+launchctl start ai.myopenclaw.collect-agentops                # 手动触发采集
+tail -f logs/collect-agentops.log                             # 查看采集日志
 ```
 
 ## ⚠️ OpenClaw 配置安全规则
