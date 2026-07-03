@@ -17,6 +17,7 @@ services:
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
+      - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -65,6 +66,7 @@ services:
       - ${HOME}/.gitcode:/opt/gitcode-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
+      - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -299,6 +301,28 @@ services:
       - TZ=${TZ:-Asia/Shanghai}
     networks:
       - myopenclaw-net
+
+  # ── aisecretary — 事务数据库 MCP 服务 ──────────────────────
+  aisecretary:
+    build:
+      context: ../aisecretary
+      dockerfile: Dockerfile
+    image: myopenclaw/aisecretary:latest
+    container_name: aisecretary
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_PATH=/data/transactions.sqlite
+    volumes:
+      - ${HOME}/.myagentdata/aisecretary:/data
+    networks:
+      - myopenclaw-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
 
 networks:
   myopenclaw-net:

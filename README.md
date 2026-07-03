@@ -12,6 +12,7 @@
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板 |
 | claude-code | 自建镜像（基于 `ubuntu:24.04`，含 Python 3.12 + uv + Claude Code + cc-connect + gh），启动时自动加载 MyLoop skills | 9090 | Claude Code + 飞书直连 + MyLoop 执行引擎 |
 | openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway |
+| aisecretary | 自建镜像（基于 `python:3.12-slim`，含 FastAPI + FastMCP），build context `../aisecretary` | 8000 | 事务数据库 MCP 服务（7 个 tools，SQLite 持久化） |
 | uptime-kuma | `louislam/uptime-kuma:latest` | 3001 | 服务监控面板（HTTP + Docker 容器状态，飞书告警）|
 | backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每周日凌晨 2:00）|
 
@@ -83,6 +84,7 @@ cp .env.example .env
 | `LARK_CLI_APP_ID` / `SECRET` | 可选 | lark-cli 主应用（Hermes 机器人），不填则绑定 Hermes 内置飞书应用 |
 | `LARK_CLI_IDM_APP_ID` / `SECRET` | 可选 | lark-cli 第二个 profile（爱码士应用） |
 | `DISCORD_BOT_TOKEN` | 可选 | Hermes coder Discord Bot Token，爱码士 Discord 接入 |
+| `UPK_USER` / `UPK_PASS` | 可选 | Uptime Kuma 管理员账号密码（`setup-uptime-kuma-monitors.py` 自动读取，免手动输入）|
 
 被 Hermes 黑名单拦截的密钥（DEEPSEEK、OPENROUTER、OPENAI）通过 `.env` 传入容器后，由 entrypoint 脚本自动写入 `/opt/data/secrets/` 文件，opencode.json 通过 `{file:路径}` 引用，无需手动创建。
 
@@ -368,6 +370,27 @@ tail -f logs/healthchecks-ping.log                # 查看日志
 
 监控体系详见 [docs/monitoring.md](docs/monitoring.md)。
 
+### aisecretary 事务数据库
+
+```bash
+# 健康检查
+curl -s http://localhost:8000/health
+
+# 查看事务数量（只读）
+docker compose exec aisecretary python3 -c "
+import sqlite3; conn=sqlite3.connect('/data/transactions.sqlite')
+print(conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0])
+"
+
+# MCP 连接测试（从 Hermes 容器内）
+docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp test aisecretary
+
+# MCP tools 列表
+docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp list
+```
+
+飞书上对 Hermes 说「列出当前事务」「汇总事务状态」即可通过 MCP 访问数据库。Hermes 的 `mcp_servers` 配置在 `~/.hermes/config.yaml`，skill 走 `external_dirs` 自动发现。
+
 ---
 
 ## MyLoop 集成 — Daily Command Center
@@ -443,6 +466,8 @@ myopenclaw/
     ├── backup-all.sh           # 本机全量备份（不依赖容器）
     ├── backup-all-docker.sh    # 容器内备份（供 cron 调用）
     ├── restore.sh              # 从快照恢复数据
+    ├── setup-uptime-kuma-monitors.py    # Uptime Kuma 监控自动注册（从 .env 读取凭证）
+    ├── test-aisecretary-integration.sh  # aisecretary 集成验证（TDD，9 项检查）
     └── launchd/
         ├── install-dailyinfo.sh                    # dailyinfo 调度安装
         ├── install-morning-triage.sh               # morning-triage 调度安装
