@@ -41,6 +41,11 @@ HTTP_SERVICE_MAP = {
         "interval": 60,
         "name": "Hermes Dashboard",
     },
+    "aisecretary": {
+        "url": "http://aisecretary:8000/health",
+        "interval": 60,
+        "name": "aisecretary",
+    },
 }
 
 # Hermes instances don't expose standard HTTP health endpoints.
@@ -49,6 +54,7 @@ HTTP_SERVICE_MAP = {
 # Monitor them via Docker container status instead.
 SKIP_HTTP = {"openclaw-cli", "backup-cron", "hermes", "hermes-coder", "hermes-finance"}
 SKIP_DOCKER = {"openclaw-cli"}
+HTTP_DEFAULT_PORTS = {}
 
 
 def parse_compose_services():
@@ -196,7 +202,26 @@ def sock_call(sio, event, data=None):
     return result[0] if result else None
 
 
+def load_env_file(env_path: Path):
+    """Load KEY=VALUE pairs from a .env file into os.environ (if not already set)."""
+    if not env_path.exists():
+        return
+    with open(env_path) as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            if key and key not in os.environ:
+                os.environ[key] = value
+
+
 def main():
+    # Load .env from repo root so UPK_USER/UPK_PASS are auto-resolved
+    load_env_file(REPO_ROOT / ".env")
+
     base_url = os.environ.get("UPK_URL", "http://localhost:3001").rstrip("/")
     username = os.environ.get("UPK_USER")
     password = os.environ.get("UPK_PASS")
