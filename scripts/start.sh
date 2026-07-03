@@ -286,4 +286,9 @@ echo "✅ 服务已启动"
 # 确保 dailyinfo 的 FreshRSS 也在运行
 (cd "${HOME}/code/dailyinfo" && docker compose up -d freshrss) || true
 
+# ── 幂等初始化 Uptime Kuma 监控项 ──────────────────────────────
+if docker compose ps uptime-kuma 2>/dev/null | grep -q 'Up'; then
+  "${REPO_ROOT}/scripts/setup-uptime-kuma.sh" --quiet || true
+fi
+
 docker compose ps

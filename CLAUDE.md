@@ -62,7 +62,7 @@ docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp test aisecretary  # 
 docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp list             # MCP tools 列表
 docker compose exec aisecretary python3 -c "import sqlite3; conn=sqlite3.connect('/data/transactions.sqlite'); print(conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0])"  # 事务计数
 ./scripts/test-aisecretary-integration.sh                      # 集成验证（9 项检查）
-./scripts/setup-uptime-kuma-monitors.py                        # Uptime Kuma 监控注册（从 .env 读取 UPK_USER/UPK_PASS）
+./scripts/setup-uptime-kuma.sh                       # Uptime Kuma 监控项幂等注册（直接 SQLite，无需 API 凭证）
 
 # Paper pipeline (paper-fetch → Google Drive → Zotero linked_file)
 # One-shot: download PDF + upload to Drive + create Zotero entry with metadata + cleanup
