@@ -279,11 +279,11 @@ if (changed) {
         if [ "$EXISTING" -lt 2 ]; then
             echo "📋 Registering weekly AI News cron jobs..."
             CC_SESSION_KEY=s1 cc-connect cron add \
-                --cron "0 0 * * 0" \
+                --cron "0 8 * * 0" \
                 --exec "bash /opt/claude-code/weekly-ai-news-generate.sh" \
                 --desc "AI News 周报生成" 2>/dev/null || true
             CC_SESSION_KEY=s1 cc-connect cron add \
-                --cron "10 0 * * 0" \
+                --cron "10 8 * * 0" \
                 --prompt "执行 ai-news-weekly-polish 润色任务：1）读取 /home/node/.myagentdata/dailyinfo/briefings/weekly/weekly_recap_\$(date +%Y-%m-%d).md 2）深度润色（导读用具体数字切入、跨日事件体现演化、冷门实体加背景、消除AI套话）3）保存润色版并作为回复返回" \
                 --session-mode new-per-run \
                 --desc "AI News 周报润色+飞书推送" 2>/dev/null || true
