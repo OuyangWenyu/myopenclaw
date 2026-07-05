@@ -208,6 +208,43 @@ if (!settings.permissions.allow) {
     changed = true;
 }
 
+// Model defaults (deepseek-v4-pro 主模型，防止 cc-connect 重写后丢失)
+if (!settings.env) {
+    settings.env = {};
+}
+if (!settings.env.ANTHROPIC_BASE_URL || settings.env.ANTHROPIC_BASE_URL.includes("bigmodel")) {
+    settings.env.ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_MODEL || settings.env.ANTHROPIC_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_MODEL = "deepseek-v4-pro[1M]";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "deepseek-v4-flash";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL || settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL = "deepseek-v4-pro[1M]";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL || settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL = "deepseek-v4-pro[1M]";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL || settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL = "deepseek-v4-pro[1M]";
+    changed = true;
+}
+if (!settings.env.API_TIMEOUT_MS) {
+    settings.env.API_TIMEOUT_MS = "3000000";
+    changed = true;
+}
+if (!settings.env.CLAUDE_CODE_EFFORT_LEVEL) {
+    settings.env.CLAUDE_CODE_EFFORT_LEVEL = "max";
+    changed = true;
+}
+
 // MCP servers
 if (!settings.mcpServers) {
     settings.mcpServers = {};
@@ -222,7 +259,7 @@ if (!settings.mcpServers.codegraph) {
 
 if (changed) {
     fs.writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
-    console.log("🔧 settings.json: 已注册 ECC + pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
+    console.log("🔧 settings.json 已恢复: deepseek-v4-pro 主模型 + ECC/pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
 }
 
 } catch(e) {
