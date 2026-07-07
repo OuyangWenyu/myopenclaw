@@ -103,6 +103,29 @@ myopenclaw/
 
 ## 文档
 
+### GitCode CLI（可选）
+
+如需让 OpenClaw 或 Hermes 通过 `gc` 操作 GitCode，先编译并安装 CLI：
+
+```bash
+git clone https://gitcode.com/gitcode-cli/cli.git
+cd cli
+go env -w GOPROXY=https://goproxy.cn,direct
+go build -o gc ./cmd/gc
+mkdir -p ~/.openclaw/bin
+mv gc ~/.openclaw/bin/gc
+chmod +x ~/.openclaw/bin/gc
+```
+
+在项目 `.env` 中配置 `GITCODE_TOKEN`，并重新创建相关容器：
+
+```bash
+docker compose up -d --force-recreate hermes openclaw-gateway openclaw-cli
+docker compose exec openclaw-gateway gc auth status
+```
+
+配置目录为 `~/.config/gc`，CLI 文件为 `~/.openclaw/bin/gc`，两者都会持久化在宿主机。
+
 完整文档 → **[ouyangwenyu.github.io/myopenclaw](https://ouyangwenyu.github.io/myopenclaw)**
 
 - [快速开始](https://ouyangwenyu.github.io/myopenclaw/setup/) — 新机器从零到运行
