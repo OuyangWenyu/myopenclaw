@@ -35,9 +35,6 @@ RUN apt-get update && \
 # opencode-ai is the official npm package (Node.js 18+ required, already in base)
 RUN npm install -g opencode-ai gitcode-cli
 
-# ── TDAI Memory plugin (long-term memory L0→L3 for Hermes) ──
-RUN npm install -g @tencentdb-agent-memory/memory-tencentdb@0.3.6
-
 # ── Install Feishu/Lark CLI via npm ─────────────────────────
 # @larksuite/cli is the official Feishu CLI tool (200+ commands, 24 Agent Skills)
 # Two-step install: npm package + binary bootstrap via `install` command
