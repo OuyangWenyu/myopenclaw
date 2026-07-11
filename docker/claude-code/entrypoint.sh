@@ -208,6 +208,43 @@ if (!settings.permissions.allow) {
     changed = true;
 }
 
+// Model defaults (deepseek-v4-pro 主模型，防止 cc-connect 重写后丢失)
+if (!settings.env) {
+    settings.env = {};
+}
+if (!settings.env.ANTHROPIC_BASE_URL || settings.env.ANTHROPIC_BASE_URL.includes("bigmodel")) {
+    settings.env.ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_MODEL || settings.env.ANTHROPIC_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_MODEL = "deepseek-v4-pro[1M]";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "deepseek-v4-flash";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL || settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL = "deepseek-v4-pro[1M]";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL || settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL = "deepseek-v4-pro[1M]";
+    changed = true;
+}
+if (!settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL || settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL.includes("glm")) {
+    settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL = "deepseek-v4-pro[1M]";
+    changed = true;
+}
+if (!settings.env.API_TIMEOUT_MS) {
+    settings.env.API_TIMEOUT_MS = "3000000";
+    changed = true;
+}
+if (!settings.env.CLAUDE_CODE_EFFORT_LEVEL) {
+    settings.env.CLAUDE_CODE_EFFORT_LEVEL = "max";
+    changed = true;
+}
+
 // MCP servers
 if (!settings.mcpServers) {
     settings.mcpServers = {};
@@ -222,7 +259,7 @@ if (!settings.mcpServers.codegraph) {
 
 if (changed) {
     fs.writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
-    console.log("🔧 settings.json: 已注册 ECC + pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
+    console.log("🔧 settings.json 已恢复: deepseek-v4-pro 主模型 + ECC/pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
 }
 
 } catch(e) {
@@ -242,11 +279,11 @@ if (changed) {
         if [ "$EXISTING" -lt 2 ]; then
             echo "📋 Registering weekly AI News cron jobs..."
             CC_SESSION_KEY=s1 cc-connect cron add \
-                --cron "0 0 * * 0" \
+                --cron "0 8 * * 0" \
                 --exec "bash /opt/claude-code/weekly-ai-news-generate.sh" \
                 --desc "AI News 周报生成" 2>/dev/null || true
             CC_SESSION_KEY=s1 cc-connect cron add \
-                --cron "10 0 * * 0" \
+                --cron "10 8 * * 0" \
                 --prompt "执行 ai-news-weekly-polish 润色任务：1）读取 /home/node/.myagentdata/dailyinfo/briefings/weekly/weekly_recap_\$(date +%Y-%m-%d).md 2）深度润色（导读用具体数字切入、跨日事件体现演化、冷门实体加背景、消除AI套话）3）保存润色版并作为回复返回" \
                 --session-mode new-per-run \
                 --desc "AI News 周报润色+飞书推送" 2>/dev/null || true
