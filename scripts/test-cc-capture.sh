@@ -144,6 +144,42 @@ else
 fi
 
 # ============================================================
+# Test 3b: read_last_turn — 多条 assistant 合并 + uuid 幂等键
+# ============================================================
+echo ""
+echo "🧪 Test 3b: read_last_turn 合并 + uuid"
+if [[ -f "${HOOK_PY}" ]]; then
+    TMPD=$(mktemp -d)
+    trap 'rm -rf "${TMPD}"' EXIT
+    # 一轮：user + 3 条 assistant（text/tool_use/text，中间无真实 user）
+    cat > "${TMPD}/t.jsonl" << 'JSONL'
+{"message":{"role":"user","content":"帮我查一下"},"uuid":"u1","sessionId":"s-merge"}
+{"message":{"role":"assistant","content":[{"type":"text","text":"好的，我先看看"}]},"uuid":"a1","sessionId":"s-merge"}
+{"message":{"role":"assistant","content":[{"type":"tool_use","name":"Bash","input":{}}]},"uuid":"a2","sessionId":"s-merge"}
+{"message":{"role":"user","content":[{"type":"tool_result","content":"输出"}]},"uuid":"tr1","sessionId":"s-merge"}
+{"message":{"role":"assistant","content":[{"type":"text","text":"查到了，结果是X"}]},"uuid":"a3","sessionId":"s-merge"}
+JSONL
+    MERGE_TEST=$(${PY} - "${HOOK_PY}" "${TMPD}/t.jsonl" << 'PYEOF' 2>&1
+import sys, importlib.util
+spec = importlib.util.spec_from_file_location("cap", sys.argv[1])
+m = importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
+u, a, sk, uid = m.read_last_turn(sys.argv[2])
+print("USER:", u)
+print("ASST:", a)
+print("SK:", sk)
+print("UUID:", uid)
+PYEOF
+)
+    assert_contains "merges contiguous assistant text" "查到了，结果是X" "${MERGE_TEST}"
+    assert_contains "merge includes earlier assistant text" "好的，我先看看" "${MERGE_TEST}"
+    assert_contains "user paired correctly" "USER: 帮我查一下" "${MERGE_TEST}"
+    assert_contains "session_key from record" "SK: s-merge" "${MERGE_TEST}"
+    assert_contains "uuid captured as idempotency key" "UUID: a3" "${MERGE_TEST}"
+else
+    FAIL=$((FAIL + 5))
+fi
+
+# ============================================================
 # Test 4: 异常防御 — 任何输入都 exit 0
 # ============================================================
 echo ""
@@ -196,8 +232,10 @@ if [[ -f "${HOOK_PY}" ]] && curl -s http://localhost:8420/health >/dev/null 2>&1
 {"message":{"role":"assistant","content":[{"type":"thinking","thinking":"思考"},{"type":"text","text":"收到你的E2E测试标记词zzyptest"}]},"timestamp":"2026-07-11T15:00:05.000Z","sessionId":"e2e-test-session"}
 JSONL
     # 从宿主机调用需要 localhost，容器内是 tdai-memory；用 env 覆盖
+    # MEMORY_CAPTURE_LOG 指向临时目录（宿主机无 /home/node）
     echo "{\"transcript_path\":\"${TRANSCRIPT}\",\"session_id\":\"e2e-test-session\"}" | \
         MEMORY_TENCENTDB_GATEWAY_HOST=localhost MEMORY_TENCENTDB_GATEWAY_PORT=8420 \
+        MEMORY_CAPTURE_LOG="${TMPDIR}/capture.log" \
         ${PY} "${HOOK_PY}" >/dev/null 2>&1
     sleep 2
     # 验证 Gateway L0 是否收到
@@ -210,9 +248,16 @@ JSONL
         echo "     result: ${RESULT:0:120}"
         FAIL=$((FAIL + 1))
     fi
+    # 验证成功心跳日志（可诊断性）
+    if [[ -f "${TMPDIR}/capture.log" ]] && grep -q 'captured session=' "${TMPDIR}/capture.log"; then
+        echo -e "  ${GREEN}✅${NC} E2E: 成功心跳已写入日志"; PASS=$((PASS + 1))
+    else
+        echo -e "  ${RED}❌${NC} E2E: 心跳日志缺失"
+        FAIL=$((FAIL + 1))
+    fi
 else
     echo "   ⚠️  Gateway 不可达或脚本缺失，跳过 E2E"
-    FAIL=$((FAIL + 1))
+    FAIL=$((FAIL + 2))
 fi
 
 # ============================================================
