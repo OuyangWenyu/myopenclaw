@@ -39,7 +39,8 @@ services:
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
-      - TDAI_GATEWAY_URL=http://tdai-memory:8420
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -94,7 +95,8 @@ services:
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
-      - TDAI_GATEWAY_URL=http://tdai-memory:8420
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
     shm_size: "1g"
     deploy:
       resources:
@@ -139,7 +141,8 @@ services:
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
-      - TDAI_GATEWAY_URL=http://tdai-memory:8420
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
@@ -353,7 +356,7 @@ services:
     deploy:
       resources:
         limits:
-          memory: 512M
+          memory: 1G
           cpus: "0.5"
     networks:
       - myopenclaw-net
