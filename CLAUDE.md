@@ -63,6 +63,7 @@ docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp list             # M
 docker compose exec aisecretary python3 -c "import sqlite3; conn=sqlite3.connect('/data/transactions.sqlite'); print(conn.execute('SELECT COUNT(*) FROM transactions').fetchone()[0])"  # 事务计数
 ./scripts/test-aisecretary-integration.sh                      # 集成验证（9 项检查）
 ./scripts/setup-uptime-kuma.sh                       # Uptime Kuma 监控项幂等注册（直接 SQLite，无需 API 凭证）
+./scripts/setup-openclaw-memory.sh                    # 虾酱 (Discord) OpenClaw memory plugin（local 模式）
 
 # TDAI Memory Gateway（Agent 长期记忆）
 curl -s http://localhost:8420/health                           # Health check
