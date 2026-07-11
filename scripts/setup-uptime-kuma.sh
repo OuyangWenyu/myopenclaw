@@ -11,12 +11,17 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
-KUMA_DB="${HOME}/.uptime-kuma/kuma.db"
+KUMA_DB="${KUMA_DB_PATH:-${HOME}/.uptime-kuma/kuma.db}"
 QUIET="${1:-}"
 
 log() {
     [[ "${QUIET}" == "--quiet" ]] && return
     echo "$@"
+}
+
+sql_escape() {
+    # Escape single quotes for safe embedding in SQL string literals
+    sed "s/'/''/g"
 }
 
 # ── 等待 Uptime Kuma 就绪 ──────────────────────────────────────
@@ -107,7 +112,12 @@ SKIPPED=0
 for entry in "${MONITORS[@]}"; do
     IFS='|' read -r name mon_type url container status_codes <<< "${entry}"
 
-    EXISTS=$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM monitor WHERE name='${name}';")
+    # Escape fields for safe embedding into SQL string literals
+    esc_name=$(sql_escape <<< "${name}")
+    esc_url=$(sql_escape <<< "${url}")
+    esc_container=$(sql_escape <<< "${container}")
+
+    EXISTS=$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM monitor WHERE name='${esc_name}';")
     if [[ "${EXISTS}" -gt 0 ]]; then
         SKIPPED=$((SKIPPED + 1))
         continue
@@ -116,13 +126,13 @@ for entry in "${MONITORS[@]}"; do
     if [[ "${mon_type}" == "docker" ]]; then
         sqlite3 "${KUMA_DB}" "
             INSERT INTO monitor (name, type, docker_host, docker_container, active, user_id, interval)
-            VALUES ('${name}', 'docker', ${DOCKER_HOST_ID}, '${container}', 1, ${USER_ID}, 60);
+            VALUES ('${esc_name}', 'docker', ${DOCKER_HOST_ID}, '${esc_container}', 1, ${USER_ID}, 60);
         "
     else
         STATUS_JSON="${status_codes:-[\"200-299\"]}"
         sqlite3 "${KUMA_DB}" "
             INSERT INTO monitor (name, type, url, active, user_id, interval, accepted_statuscodes_json)
-            VALUES ('${name}', 'http', '${url}', 1, ${USER_ID}, 60, '${STATUS_JSON}');
+            VALUES ('${esc_name}', 'http', '${esc_url}', 1, ${USER_ID}, 60, '${STATUS_JSON}');
         "
     fi
     ADDED=$((ADDED + 1))
@@ -142,8 +152,13 @@ if [[ "${NOTIF_COUNT}" -eq 0 ]]; then
     log "   3. 填入 webhook URL，并设为默认通知方式"
 fi
 
-# ── 重启容器使其感知变更 ──────────────────────────────────────
-log ""
-log "🔄 重启 Uptime Kuma 以加载新配置..."
-docker compose restart uptime-kuma >/dev/null 2>&1
-log "✅ Uptime Kuma 配置完成"
+# ── 仅在新增监控项时重启容器 ──────────────────────────────
+if [[ ${ADDED} -gt 0 ]]; then
+    log ""
+    log "🔄 重启 Uptime Kuma 以加载新配置..."
+    docker compose restart uptime-kuma >/dev/null 2>&1
+    log "✅ Uptime Kuma 配置完成"
+else
+    log ""
+    log "✅ Uptime Kuma 配置无变更，无需重启"
+fi
