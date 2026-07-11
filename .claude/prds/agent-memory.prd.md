@@ -127,10 +127,10 @@ L3 Persona       画像 / Golden Rules  → 跨 agent 共享的用户画像
 
 | # | Milestone | Outcome | Status | Plan |
 |---|-----------|---------|--------|------|
-| 1 | tdai-memory 容器冒烟 | Gateway :8420 运行，`/health` 返回 200 | in-progress | [harmonic-nibbling-wave](../../.claude/plans/harmonic-nibbling-wave.md) |
-| 2 | CC飞总 MCP server | CC飞总可通过 `memory_search` 工具召回记忆 | pending | — |
-| 3 | docker-compose 固化 + backup | `tdai-memory` service 纳入 docker-compose.yml + backup 管线 | pending | — |
-| 4 | Hermes 三 profile adapter | default / coder / finance 均接入 Gateway | pending | — |
+| 1 | tdai-memory 容器冒烟 | Gateway :8420 运行，`/health` 返回 200 | complete | [harmonic-nibbling-wave](../../.claude/plans/harmonic-nibbling-wave.md) |
+| 2 | CC飞总 MCP server | CC飞总可通过 `memory_search` 工具召回记忆 | complete | — |
+| 3 | docker-compose 固化 + backup | `tdai-memory` service 纳入 docker-compose.yml + backup 管线 | complete | — |
+| 4 | Hermes 三 profile adapter | default / coder / finance 均接入 Gateway | complete | — |
 | 5 | 虾酱 OpenClaw 插件 | 虾酱 Discord bot 独立接入 local 模式（独立 DB 文件） | pending | — |
 
 ## Open Questions
