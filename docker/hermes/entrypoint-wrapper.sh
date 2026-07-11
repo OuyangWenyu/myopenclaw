@@ -378,5 +378,52 @@ TOML
   chown -R hermes:hermes /opt/data/.config/zot
 fi
 
+# ── TDAI Memory plugin symlink ──────────────────────────────────
+# The npm package includes hermes-plugin/memory/memory_tencentdb/
+# Symlink into Hermes plugin discovery path so all 3 profiles can use it.
+PLUGIN_SRC="/usr/local/lib/node_modules/@tencentdb-agent-memory/memory-tencentdb/hermes-plugin/memory/memory_tencentdb"
+PLUGIN_DST="/opt/hermes/plugins/memory/memory_tencentdb"
+if [ -d "${PLUGIN_SRC}" ]; then
+    mkdir -p "$(dirname "${PLUGIN_DST}")"
+    ln -sf "${PLUGIN_SRC}" "${PLUGIN_DST}"
+    echo "   🧠 TDAI Memory plugin 已安装 (memory_tencentdb_v2)"
+else
+    echo "   ⚠️  TDAI Memory plugin 未找到 — 跳过"
+fi
+
+# ── Inject memory provider into profiles ───────────────────────
+# Append memory.provider to each profile's config.yaml if not set.
+# Uses python3 for reliable YAML-safe key injection (no fragile sed).
+if [ -n "${TDAI_GATEWAY_URL:-}" ]; then
+    for profile_dir in /opt/data/profiles/*/; do
+        profile=$(basename "${profile_dir}")
+        config="${profile_dir}config.yaml"
+        if [ -f "${config}" ]; then
+            if ! grep -q '^memory:' "${config}" 2>/dev/null; then
+                # Map profile to session_id
+                case "${profile}" in
+                    coder)   sid="personal_aimashi" ;;
+                    finance) sid="personal_finance" ;;
+                    *)       sid="personal_hermes" ;;
+                esac
+                cat >> "${config}" << MEMEOF
+
+# ── TDAI Memory (Agent 长期记忆 L0→L3) ──────────────────────
+memory:
+  provider: memory_tencentdb_v2
+  gateway_url: ${TDAI_GATEWAY_URL}
+  service_id: personal
+  session_id: ${sid}
+MEMEOF
+                echo "   🧠 ${profile}: memory provider → memory_tencentdb_v2 (sid=${sid})"
+            else
+                echo "   ✅ ${profile}: memory provider 已配置，跳过"
+            fi
+        fi
+    done
+else
+    echo "   ℹ️  TDAI_GATEWAY_URL 未设置，跳过 memory provider 配置"
+fi
+
 # Hand off to original Hermes entrypoint (handles UID mapping + gosu)
 exec /opt/hermes/docker/entrypoint.sh "$@"
