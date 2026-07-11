@@ -324,6 +324,35 @@ services:
           memory: 256M
           cpus: "0.5"
 
+  # ── TDAI Memory Gateway（Agent 长期记忆 L0→L3 分层管线）───────
+  tdai-memory:
+    build:
+      context: ./docker/tdai-memory
+      dockerfile: Dockerfile
+    image: myopenclaw/tdai-memory:latest
+    container_name: tdai-memory
+    restart: unless-stopped
+    ports:
+      - "${TDAI_MEMORY_PORT:-8420}:8420"
+    volumes:
+      - ${HOME}/.myagentdata/tdai-memory:/opt/data/tdai-memory
+    environment:
+      - TDAI_LLM_API_KEY=${DEEPSEEK_API_KEY:-}
+      - TDAI_LLM_BASE_URL=${TDAI_LLM_BASE_URL:-https://api.deepseek.com/v1}
+      - TDAI_LLM_MODEL=${TDAI_LLM_MODEL:-deepseek-chat}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8420/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    networks:
+      - myopenclaw-net
+
 networks:
   myopenclaw-net:
     driver: bridge

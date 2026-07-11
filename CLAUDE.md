@@ -64,6 +64,10 @@ docker compose exec aisecretary python3 -c "import sqlite3; conn=sqlite3.connect
 ./scripts/test-aisecretary-integration.sh                      # 集成验证（9 项检查）
 ./scripts/setup-uptime-kuma.sh                       # Uptime Kuma 监控项幂等注册（直接 SQLite，无需 API 凭证）
 
+# TDAI Memory Gateway（Agent 长期记忆）
+curl -s http://localhost:8420/health                           # Health check
+docker compose logs -f tdai-memory                            # Gateway 日志
+
 # Paper pipeline (paper-fetch → Google Drive → Zotero linked_file)
 # One-shot: download PDF + upload to Drive + create Zotero entry with metadata + cleanup
 docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh '<DOI>'
@@ -131,7 +135,7 @@ docker compose pull openclaw-gateway
 
 ## Architecture
 
-**Six Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+**Seven Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
@@ -144,6 +148,8 @@ docker compose pull openclaw-gateway
 4. **backup-cron** — Alpine image (`docker/backup-cron/Dockerfile`) with rsync + sqlite3. Runs crond with a single job calling `backup-all-docker.sh`. Also executes an initial backup on container startup.
 
 5. **hermes-dashboard** — Stock Hermes image running `dashboard --host 0.0.0.0`. Read-only, shares the hermes data volume.
+
+6. **tdai-memory** — Custom image (`docker/tdai-memory/Dockerfile`) based on `ubuntu:24.04` with Node.js 22 and `@tencentdb-agent-memory/memory-tencentdb@0.3.6`. Port 8420. Provides shared L0→L3 memory pipeline (Gateway HTTP API) for personal agents. LLM backend: DeepSeek (`TDAI_LLM_API_KEY` env). Data stored at `~/.myagentdata/tdai-memory/`.
 
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, and `scripts/backup-data.sh` in sequence. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DB uses `sqlite3 .backup` for hot backup. Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
