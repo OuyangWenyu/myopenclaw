@@ -394,7 +394,7 @@ fi
 # ── Inject memory provider into profiles ───────────────────────
 # Append memory.provider to each profile's config.yaml if not set.
 # Uses python3 for reliable YAML-safe key injection (no fragile sed).
-if [ -n "${TDAI_GATEWAY_URL:-}" ]; then
+if [[ "${TDAI_GATEWAY_URL:-}" =~ ^https?:// ]]; then
     for profile_dir in /opt/data/profiles/*/; do
         profile=$(basename "${profile_dir}")
         config="${profile_dir}config.yaml"

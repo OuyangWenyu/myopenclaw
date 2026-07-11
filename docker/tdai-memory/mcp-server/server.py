@@ -13,12 +13,15 @@ Env vars:
   TDAI_DATA_DIR     — Path to memory data for persona.md read (default: /home/node/.myagentdata/tdai-memory)
 """
 
-import os
 import json
+import logging
+import os
 from pathlib import Path
 
 import httpx
 from mcp.server.fastmcp import FastMCP
+
+logger = logging.getLogger("tdai-memory-mcp")
 
 GATEWAY_URL = os.environ.get("TDAI_GATEWAY_URL", "http://tdai-memory:8420")
 DATA_DIR = os.environ.get("TDAI_DATA_DIR", "/home/node/.myagentdata/tdai-memory")
@@ -27,12 +30,53 @@ mcp = FastMCP("tdai-memory")
 
 
 async def _gateway_post(endpoint: str, body: dict) -> dict:
-    """Call a Gateway HTTP endpoint and return the JSON response."""
+    """Call a Gateway HTTP endpoint and return the JSON response.
+
+    Raises specific exception types so callers can distinguish
+    transient failures from permanent errors.
+    """
     url = f"{GATEWAY_URL}{endpoint}"
     async with httpx.AsyncClient(timeout=30.0) as client:
-        resp = await client.post(url, json=body)
-        resp.raise_for_status()
-        return resp.json()
+        try:
+            resp = await client.post(url, json=body)
+        except httpx.ConnectError:
+            logger.error("Gateway unreachable at %s (%s)", url, endpoint)
+            raise RuntimeError(f"Gateway unreachable at {url}") from None
+        except httpx.TimeoutException:
+            logger.error("Gateway timeout at %s (%s)", url, endpoint)
+            raise RuntimeError(f"Gateway timeout at {url}") from None
+
+        if resp.status_code >= 500:
+            logger.error("Gateway server error %d for %s", resp.status_code, endpoint)
+            raise RuntimeError(
+                f"Gateway returned {resp.status_code} for {endpoint}"
+            )
+
+        try:
+            return resp.json()
+        except json.JSONDecodeError:
+            ct = resp.headers.get("content-type", "unknown")
+            logger.error(
+                "Gateway returned non-JSON for %s (content-type=%s, body=%.200s)",
+                endpoint, ct, resp.text,
+            )
+            raise RuntimeError(
+                f"Gateway returned non-JSON response for {endpoint}"
+            ) from None
+
+
+def _format_tool_error(context: str, exc: Exception) -> str:
+    """Return a structured error string suitable for the LLM to interpret."""
+    logger.warning("%s failed: %s", context, exc)
+    return json.dumps({
+        "error": True,
+        "context": context,
+        "message": str(exc),
+        "suggestion": (
+            "Check that the TDAI Memory Gateway is running "
+            "(docker compose ps tdai-memory) and reachable at " + GATEWAY_URL
+        ) if "unreachable" in str(exc).lower() or "timeout" in str(exc).lower() else "See logs for details",
+    }, ensure_ascii=False)
 
 
 @mcp.tool()
@@ -49,9 +93,15 @@ async def memory_search(query: str, limit: int = 5, type: str = "") -> str:
         body["type"] = type
     try:
         result = await _gateway_post("/search/memories", body)
+        if not result or not isinstance(result, dict):
+            logger.warning("Empty or unexpected memory_search result: %s", result)
+            return json.dumps({"results": "No matching memories found.", "total": 0})
         return json.dumps(result, ensure_ascii=False, indent=2)
-    except Exception as e:
-        return f"Error searching memories: {e}"
+    except RuntimeError as e:
+        return _format_tool_error("memory_search", e)
+    except Exception:
+        logger.exception("Unexpected error in memory_search")
+        return _format_tool_error("memory_search", RuntimeError("Unexpected internal error"))
 
 
 @mcp.tool()
@@ -64,9 +114,15 @@ async def conversation_search(query: str, limit: int = 5) -> str:
     """
     try:
         result = await _gateway_post("/search/conversations", {"query": query, "limit": limit})
+        if not result or not isinstance(result, dict):
+            logger.warning("Empty or unexpected conversation_search result: %s", result)
+            return json.dumps({"results": "No matching conversation messages found.", "total": 0})
         return json.dumps(result, ensure_ascii=False, indent=2)
-    except Exception as e:
-        return f"Error searching conversations: {e}"
+    except RuntimeError as e:
+        return _format_tool_error("conversation_search", e)
+    except Exception:
+        logger.exception("Unexpected error in conversation_search")
+        return _format_tool_error("conversation_search", RuntimeError("Unexpected internal error"))
 
 
 @mcp.tool()
@@ -79,9 +135,15 @@ async def read_scenario(query: str, session_key: str = "personal_ccfeizong") -> 
     """
     try:
         result = await _gateway_post("/recall", {"query": query, "session_key": session_key})
+        if not result or not isinstance(result, dict):
+            logger.warning("Empty or unexpected read_scenario result: %s", result)
+            return json.dumps({"context": "", "memory_count": 0})
         return json.dumps(result, ensure_ascii=False, indent=2)
-    except Exception as e:
-        return f"Error recalling scenario: {e}"
+    except RuntimeError as e:
+        return _format_tool_error("read_scenario", e)
+    except Exception:
+        logger.exception("Unexpected error in read_scenario")
+        return _format_tool_error("read_scenario", RuntimeError("Unexpected internal error"))
 
 
 @mcp.tool()
@@ -94,14 +156,19 @@ async def read_core() -> str:
 
     persona_path = Path(DATA_DIR) / "persona.md"
     if persona_path.exists():
-        parts.append(f"## Persona\n\n{persona_path.read_text()}")
+        try:
+            parts.append(f"## Persona\n\n{persona_path.read_text()}")
+        except (OSError, UnicodeDecodeError) as e:
+            logger.warning("Failed to read persona.md: %s", e)
+            parts.append(f"## Persona\n\n(unable to read persona.md: {e})")
 
     checkpoint_path = Path(DATA_DIR) / "checkpoint.json"
     if checkpoint_path.exists():
         try:
             cp = json.loads(checkpoint_path.read_text())
             parts.append(f"## Checkpoint\n\n{json.dumps(cp, ensure_ascii=False, indent=2)}")
-        except (json.JSONDecodeError, OSError):
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Failed to read checkpoint.json: %s", e)
             parts.append("## Checkpoint\n\n(unable to parse checkpoint.json)")
 
     if not parts:
@@ -110,7 +177,7 @@ async def read_core() -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def main():
+def main() -> None:
     mcp.run()
 
 

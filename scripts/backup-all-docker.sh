@@ -10,6 +10,12 @@ TIMESTAMP="$(date +%Y-%m-%d_%H%M%S)"
 export BACKUP_ROOT="${BACKUP_ROOT:-/backup}"
 export BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 export TIMESTAMP
+FAILED=0
+
+fail_step() {
+    echo "⚠️  $1 备份失败，继续..." >&2
+    FAILED=1
+}
 
 mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude" "${BACKUP_ROOT}/data" "${BACKUP_ROOT}/tdai-memory"
 
@@ -19,23 +25,28 @@ echo "   时间戳: ${TIMESTAMP}"
 
 echo ""
 echo "▶ 备份 hermes..."
-HOME=/root bash /hermes-scripts/backup.sh "${TIMESTAMP}" || echo "⚠️  hermes 备份失败，继续..."
+HOME=/root bash /hermes-scripts/backup.sh "${TIMESTAMP}" || fail_step "hermes"
 
 echo ""
 echo "▶ 备份 openclaw..."
-HOME=/root bash /openclaw-scripts/backup.sh "${TIMESTAMP}" || echo "⚠️  openclaw 备份失败，继续..."
+HOME=/root bash /openclaw-scripts/backup.sh "${TIMESTAMP}" || fail_step "openclaw"
 
 echo ""
 echo "▶ 备份 claude..."
-HOME=/root bash /claude-scripts/backup.sh "${TIMESTAMP}" || echo "⚠️  claude 备份失败，继续..."
+HOME=/root bash /claude-scripts/backup.sh "${TIMESTAMP}" || fail_step "claude"
 
 echo ""
 echo "▶ 备份 /.myagentdata..."
-DATA_ROOT=/.myagentdata bash /scripts/backup-data.sh "${TIMESTAMP}" || echo "⚠️  data 备份失败，继续..."
+DATA_ROOT=/.myagentdata bash /scripts/backup-data.sh "${TIMESTAMP}" || fail_step "data"
 
 echo ""
 echo "▶ 备份 tdai-memory..."
-TDAI_DATA_SRC=/.myagentdata/tdai-memory bash /tdai-scripts/backup.sh "${TIMESTAMP}" || echo "⚠️  tdai-memory 备份失败，继续..."
+TDAI_DATA_SRC=/.myagentdata/tdai-memory bash /tdai-scripts/backup.sh "${TIMESTAMP}" || fail_step "tdai-memory"
 
 echo ""
-echo "✅ [$(date '+%Y-%m-%d %H:%M:%S')] 全部备份完成"
+if [ $FAILED -eq 0 ]; then
+    echo "✅ [$(date '+%Y-%m-%d %H:%M:%S')] 全部备份完成"
+else
+    echo "❌ [$(date '+%Y-%m-%d %H:%M:%S')] 备份完成，但有部分失败" >&2
+    exit 1
+fi

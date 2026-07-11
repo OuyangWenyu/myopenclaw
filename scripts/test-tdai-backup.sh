@@ -64,7 +64,7 @@ if [[ -f "${BACKUP_SH}" ]]; then
     assert_contains "uses sqlite3 .backup" '.backup' "${CONTENT}"
     assert_contains "backs up memories.sqlite" 'memories.sqlite' "${CONTENT}"
     assert_contains "backs up persona.md" 'persona.md' "${CONTENT}"
-    assert_contains "has cp fallback for sqlite3" 'cp' "${CONTENT}"
+    assert_contains "requires sqlite3 (no cp fallback)" 'sqlite3 未安装' "${CONTENT}"
     assert_contains "syncs to latest/" 'latest' "${CONTENT}"
     assert_contains "prunes old snapshots" 'BACKUP_KEEP_DAYS' "${CONTENT}"
 else

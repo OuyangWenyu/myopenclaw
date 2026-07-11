@@ -12,7 +12,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TIMESTAMP="${1:-$(date +%Y-%m-%d_%H%M%S)}"
-TDAI_DATA="${TDAI_DATA_SRC:-${HOME}/.myagentdata/tdai-memory}"
+TDAI_DATA="${TDAI_DATA_SRC:-/.myagentdata/tdai-memory}"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 
 if [[ -z "${BACKUP_ROOT:-}" ]]; then
@@ -39,8 +39,8 @@ if [[ -f "${SQLITE_SRC}" ]]; then
         sqlite3 "${SQLITE_SRC}" ".backup '${DEST}/memories.sqlite'"
         echo "   ✅ SQLite 热备完成"
     else
-        cp "${SQLITE_SRC}" "${DEST}/memories.sqlite"
-        echo "   ✅ SQLite 文件复制（sqlite3 未安装，使用 cp 回退）"
+        echo "   ❌ sqlite3 未安装，无法安全备份 SQLite 数据库" >&2
+        exit 1
     fi
 else
     echo "   ℹ️  memories.sqlite 尚不存在，跳过"
@@ -66,14 +66,18 @@ fi
 
 echo "   ✅ 快照完成: ${DEST}"
 
-# ── 同步到 latest/（--delete 确保不残留旧文件）─────────────────
-rsync -a --delete "${DEST}/" "${LATEST}/"
-echo "   ✅ latest/ 已更新"
+# ── 同步到 latest/（仅在备份有数据时更新，防止空备份覆盖历史）───
+if [ "$(ls -A "${DEST}" 2>/dev/null)" ]; then
+    rsync -a --delete "${DEST}/" "${LATEST}/"
+    echo "   ✅ latest/ 已更新"
+else
+    echo "   ⚠️  本次备份无数据，latest/ 未更新（保护已有备份）"
+fi
 
 # ── 清理超过保留天数的旧快照 ────────────────────────────────────
 find "${BACKUP_ROOT}/tdai-memory" -mindepth 1 -maxdepth 1 -type d \
     ! -name "latest" -mtime "+${BACKUP_KEEP_DAYS}" \
     -exec echo "   🗑  删除旧快照: {}" \; \
-    -exec rm -rf {} \; 2>/dev/null || true
+    -exec rm -rf {} \; || echo "   ⚠️  部分旧快照清理失败" >&2
 
 echo "   备份完成 (tdai-memory)"
