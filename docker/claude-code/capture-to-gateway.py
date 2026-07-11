@@ -17,6 +17,7 @@ Claude Code 每轮会话结束触发 Stop hook，stdin 传入含 transcript_path
 
 import json
 import logging
+import logging.handlers
 import os
 import sys
 import urllib.error
@@ -47,17 +48,26 @@ logger = logging.getLogger("cc-capture")
 
 
 def _setup_logging() -> None:
-    """Attach an append-only file handler. Failure here must not break the hook."""
+    """Attach a size-capped rotating file handler. Failure here must not break
+    the hook — a broken log channel falls back to a no-op NullHandler.
+
+    Rotation caps total log size (1MB × 2 backups); a permanently-down Gateway
+    appends one WARN per turn, and rotation prevents unbounded growth
+    (cf. the 762MB silent-error-log incident in CLAUDE.md).
+    """
     try:
         os.makedirs(os.path.dirname(LOG_PATH), exist_ok=True)
-        handler = logging.FileHandler(LOG_PATH, encoding="utf-8")
+        handler = logging.handlers.RotatingFileHandler(
+            LOG_PATH, maxBytes=1_048_576, backupCount=2, encoding="utf-8",
+        )
         handler.setFormatter(logging.Formatter(
             "%(asctime)s %(levelname)s %(message)s"
         ))
         logger.addHandler(handler)
         logger.setLevel(logging.INFO)
-    except OSError:
+    except Exception:
         # No durable log channel — fall back to a null handler so calls are no-ops.
+        # Broad except: setup must never break the hook's exit-0 guarantee.
         logger.addHandler(logging.NullHandler())
 
 
