@@ -58,11 +58,25 @@ if [[ -f "${SQLITE_SRC}" ]]; then
   mkdir -p "${DEST}/memory"
   if command -v sqlite3 &>/dev/null; then
     sqlite3 "${SQLITE_SRC}" ".backup '${DEST}/memory/main.sqlite'"
-    echo "   ✅ SQLite 热备完成"
+    echo "   ✅ SQLite 热备完成 (Hermes memory)"
   else
     # sqlite3 不可用时 fallback 到 cp
     cp "${SQLITE_SRC}" "${DEST}/memory/main.sqlite"
     echo "   ✅ SQLite 文件复制（sqlite3 未安装，使用 cp fallback）"
+  fi
+fi
+
+# ── memory-tdai/memories.sqlite（虾酱 TencentDB Agent Memory）─────
+# 独立于 Hermes 内置 memory/main.sqlite，物理隔离
+TDAI_SQLITE_SRC="${OPENCLAW_DATA}/memory-tdai/memories.sqlite"
+if [[ -f "${TDAI_SQLITE_SRC}" ]]; then
+  mkdir -p "${DEST}/memory-tdai"
+  if command -v sqlite3 &>/dev/null; then
+    sqlite3 "${TDAI_SQLITE_SRC}" ".backup '${DEST}/memory-tdai/memories.sqlite'"
+    echo "   ✅ SQLite 热备完成 (虾酱 memory-tdai)"
+  else
+    echo "   ❌ sqlite3 未安装，无法安全备份 虾酱 memory 数据库" >&2
+    exit 1
   fi
 fi
 
