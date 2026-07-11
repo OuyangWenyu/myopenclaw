@@ -191,6 +191,7 @@ services:
       - ${HOME}/Code:/home/node/Code
       - ${HOME}/.myagentdata:/home/node/.myagentdata
       - ${HOME}/code/dailyinfo/skills/ai-news-weekly-polish:/opt/dailyinfo-skills/ai-news-weekly-polish:ro
+      - ./docker/tdai-memory/mcp-server/server.py:/opt/tdai-mcp-server.py:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
