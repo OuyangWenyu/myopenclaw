@@ -11,7 +11,7 @@ export BACKUP_ROOT="${BACKUP_ROOT:-/backup}"
 export BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 export TIMESTAMP
 
-mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude" "${BACKUP_ROOT}/data"
+mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude" "${BACKUP_ROOT}/data" "${BACKUP_ROOT}/tdai-memory"
 
 echo "📦 [$(date '+%Y-%m-%d %H:%M:%S')] 开始备份"
 echo "   备份根目录: ${BACKUP_ROOT}"
@@ -32,6 +32,10 @@ HOME=/root bash /claude-scripts/backup.sh "${TIMESTAMP}" || echo "⚠️  claude
 echo ""
 echo "▶ 备份 /.myagentdata..."
 DATA_ROOT=/.myagentdata bash /scripts/backup-data.sh "${TIMESTAMP}" || echo "⚠️  data 备份失败，继续..."
+
+echo ""
+echo "▶ 备份 tdai-memory..."
+TDAI_DATA_SRC=/.myagentdata/tdai-memory bash /tdai-scripts/backup.sh "${TIMESTAMP}" || echo "⚠️  tdai-memory 备份失败，继续..."
 
 echo ""
 echo "✅ [$(date '+%Y-%m-%d %H:%M:%S')] 全部备份完成"
