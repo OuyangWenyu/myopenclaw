@@ -90,7 +90,7 @@ declare -a MONITORS=(
     "Hermes Dashboard|http|http://hermes-dashboard:9119||[\"200-299\"]"
     "OpenClaw Gateway|http|http://openclaw-gateway:18789/healthz||[\"200-299\"]"
     "aisecretary|http|http://aisecretary:8000/health||[\"200-299\"]"
-    "FreshRSS|http|http://host.docker.internal:8081||[\"200-399\"]"
+    "FreshRSS|http|http://dailyinfo_freshrss:80||[\"200-399\"]"
 
     # ── Docker 容器监控 ────────────────────────────────────
     "Docker: hermes|docker||hermes|"

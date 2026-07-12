@@ -6,7 +6,7 @@
 set -euo pipefail
 
 LAUNCH_DIR="${HOME}/Library/LaunchAgents"
-JOBS=(freshrss run-arxiv run-resource run-code run-papers run-ai_news push-early push-papers push-arxiv)
+JOBS=(run-arxiv run-resource run-code run-papers run-ai_news push-early push-papers push-arxiv)
 # Also clean up legacy single-push job and old numbered jobs if they still exist.
 LEGACY_JOBS=(run-p1-arxiv run-p1 run-p2 run-p3 push)
 
