@@ -256,6 +256,33 @@ if (!settings.mcpServers.codegraph) {
     };
     changed = true;
 }
+	if (!settings.mcpServers["tdai-memory"]) {
+	    settings.mcpServers["tdai-memory"] = {
+	        command: "python3",
+	        args: ["/opt/tdai-mcp-server.py"],
+	        env: {
+	            TDAI_GATEWAY_URL: "http://tdai-memory:8420",
+	            TDAI_DATA_DIR: "/home/node/.myagentdata/tdai-memory"
+	        }
+	    };
+	    changed = true;
+	}
+
+	// Stop hook: capture CC飞总 conversations into TDAI Memory Gateway
+	// (writes L0 → enables bidirectional cross-agent memory sharing).
+	if (!settings.hooks) {
+	    settings.hooks = {};
+	}
+	if (!settings.hooks.Stop) {
+	    settings.hooks.Stop = [{
+	        hooks: [{
+	            type: "command",
+	            command: "python3 /opt/capture-to-gateway.py"
+	        }]
+	    }];
+	    changed = true;
+	}
+
 
 if (changed) {
     fs.writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");

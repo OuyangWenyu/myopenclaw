@@ -29,6 +29,10 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 RUN pip install --break-system-packages --no-cache-dir \
     requests scikit-learn click python-dotenv
 
+# ── TDAI Memory MCP server deps ──────────────────────────────
+RUN pip install --break-system-packages --no-cache-dir \
+    "mcp>=1.0.0" "httpx>=0.27.0"
+
 # ── GitHub CLI（direct binary）───────────────────────────────────
 RUN ARCH=$(dpkg --print-architecture) && \
     GH_VERSION="2.92.0" && \

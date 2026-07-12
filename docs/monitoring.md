@@ -76,6 +76,8 @@ UPK_USER=owen UPK_PASS=yourpass python3 scripts/setup-uptime-kuma-monitors.py
 | OpenClaw Gateway | `http://openclaw-gateway:18789/healthz` | 30s | 3 | 有 /healthz 端点 |
 | Claude Code | `http://claude-code:9090` | 60s | 3 | cc-connect 管理界面 |
 | aisecretary | `http://aisecretary:8000/health` | 60s | 3 | 事务数据库 MCP 服务 |
+| TDAI Memory | `http://tdai-memory:8420/health` | 60s | 3 | Agent 长期记忆 Gateway |
+| FreshRSS | `http://dailyinfo_freshrss:80` | 60s | 3 | RSS 聚合 |
 
 > **注意**：URL 使用 Docker 内部 DNS（容器名），因为 Uptime Kuma 和所有服务在同一个 `myopenclaw-net` 网络上。
 
@@ -104,6 +106,8 @@ docker compose exec uptime-kuma sqlite3 /app/data/kuma.db \
 | Docker: claude-code | claude-code |
 | Docker: openclaw-gateway | openclaw-gateway |
 | Docker: aisecretary | aisecretary |
+| Docker: tdai-memory | tdai-memory |
+| Docker: dailyinfo_freshrss | dailyinfo_freshrss |
 | Docker: backup-cron | backup-cron |
 
 **Ping 监控**（可选，监控宿主机可达性）：

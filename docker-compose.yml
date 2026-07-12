@@ -39,6 +39,8 @@ services:
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -93,6 +95,8 @@ services:
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
     shm_size: "1g"
     deploy:
       resources:
@@ -137,6 +141,8 @@ services:
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
@@ -191,6 +197,8 @@ services:
       - ${HOME}/Code:/home/node/Code
       - ${HOME}/.myagentdata:/home/node/.myagentdata
       - ${HOME}/code/dailyinfo/skills/ai-news-weekly-polish:/opt/dailyinfo-skills/ai-news-weekly-polish:ro
+      - ./docker/tdai-memory/mcp-server/server.py:/opt/tdai-mcp-server.py:ro
+      - ./docker/claude-code/capture-to-gateway.py:/opt/capture-to-gateway.py:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
@@ -200,6 +208,8 @@ services:
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - DAILYINFO_DATA_ROOT=/home/node/.myagentdata/dailyinfo
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - TZ=${TZ:-Asia/Shanghai}
     ports:
       - "${CC_CONNECT_PORT:-9090}:9090"
@@ -315,6 +325,7 @@ services:
       - ./openclaw/scripts:/openclaw-scripts:ro
       - ./claude/scripts:/claude-scripts:ro
       - ./scripts:/scripts:ro
+      - ./tdai-memory/scripts:/tdai-scripts:ro
     environment:
       - BACKUP_CRON=${BACKUP_CRON:-0 2 * * 0}
       - BACKUP_KEEP_DAYS=${BACKUP_KEEP_DAYS:-30}
@@ -343,6 +354,35 @@ services:
         limits:
           memory: 256M
           cpus: "0.5"
+
+  # ── TDAI Memory Gateway（Agent 长期记忆 L0→L3 分层管线）───────
+  tdai-memory:
+    build:
+      context: ./docker/tdai-memory
+      dockerfile: Dockerfile
+    image: myopenclaw/tdai-memory:latest
+    container_name: tdai-memory
+    restart: unless-stopped
+    ports:
+      - "${TDAI_MEMORY_PORT:-8420}:8420"
+    volumes:
+      - ${HOME}/.myagentdata/tdai-memory:/opt/data/tdai-memory
+    environment:
+      - TDAI_LLM_API_KEY=${DEEPSEEK_API_KEY:-}
+      - TDAI_LLM_BASE_URL=${TDAI_LLM_BASE_URL:-https://api.deepseek.com/v1}
+      - TDAI_LLM_MODEL=${TDAI_LLM_MODEL:-deepseek-chat}
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8420/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "0.5"
+    networks:
+      - myopenclaw-net
 
 networks:
   myopenclaw-net:

@@ -378,5 +378,79 @@ TOML
   chown -R hermes:hermes /opt/data/.config/zot
 fi
 
+# ── TDAI Memory plugin install + inject provider ───────────────
+# Runtime install (not in Dockerfile) to avoid cache invalidation of the
+# cardamum Rust build stage. The npm package ships a Python MemoryProvider
+# at hermes-plugin/memory/memory_tencentdb/ that Hermes discovers under
+# /opt/hermes/plugins/memory/<name>/.
+#
+# Key facts learned from integration:
+#   - The provider reads the Gateway address from env vars
+#     MEMORY_TENCENTDB_GATEWAY_HOST / _PORT (set in docker-compose.yml),
+#     NOT from config.yaml. So config only needs `memory.provider`.
+#   - Hermes scans for a real directory with __init__.py; a symlink is NOT
+#     recognized — the plugin dir must be copied in place.
+#   - The registered provider name is `memory_tencentdb` (no _v2 suffix).
+PKG="@tencentdb-agent-memory/memory-tencentdb"
+PKG_DIR="/usr/local/lib/node_modules/${PKG}"
+PLUGIN_SRC="${PKG_DIR}/hermes-plugin/memory/memory_tencentdb"
+PLUGIN_DST="/opt/hermes/plugins/memory/memory_tencentdb"
+
+if [ ! -d "${PKG_DIR}" ]; then
+    echo "   📦 安装 TDAI Memory plugin (${PKG}@0.3.6)..."
+    npm install -g "${PKG}@0.3.6" >/dev/null 2>&1 || echo "   ⚠️  TDAI Memory plugin 安装失败"
+fi
+
+if [ -d "${PLUGIN_SRC}" ]; then
+    # Copy (not symlink) so Hermes's plugin scanner discovers it.
+    rm -rf "${PLUGIN_DST}"
+    cp -r "${PLUGIN_SRC}" "${PLUGIN_DST}"
+    chown -R hermes:hermes "${PLUGIN_DST}" 2>/dev/null || true
+    echo "   🧠 TDAI Memory plugin 已安装 (memory_tencentdb)"
+else
+    echo "   ⚠️  TDAI Memory plugin 未找到 — 跳过"
+fi
+
+# ── Inject memory.provider into profile configs ────────────────
+# Only sets `provider: memory_tencentdb` in the existing `memory:` section.
+# Gateway address comes from env vars, so no gateway_url/session_id needed
+# in config. Idempotent: skips if the provider is already set.
+if [ -d "${PLUGIN_DST}" ]; then
+    for config in /opt/data/config.yaml /opt/data/profiles/*/config.yaml; do
+        [ -f "${config}" ] || continue
+        if grep -q 'provider: memory_tencentdb' "${config}" 2>/dev/null; then
+            echo "   ✅ $(dirname "${config}"): memory provider 已配置，跳过"
+            continue
+        fi
+        # Replace the empty built-in provider with memory_tencentdb.
+        if grep -qE "^  provider: ''" "${config}" 2>/dev/null; then
+            python3 - "${config}" << 'PYEOF'
+import sys
+path = sys.argv[1]
+with open(path) as f:
+    lines = f.readlines()
+out = []
+section = None
+done = False
+for line in lines:
+    # Track the current top-level section (memory:, delegation:, etc.)
+    if line and not line[0].isspace() and line.rstrip('\n').endswith(':'):
+        section = line.rstrip('\n')[:-1]
+    # Only replace the empty provider INSIDE the top-level memory: block.
+    if not done and section == 'memory' and line.strip() == "provider: ''":
+        out.append("  provider: memory_tencentdb\n")
+        done = True
+        continue
+    out.append(line)
+with open(path, 'w') as f:
+    f.writelines(out)
+PYEOF
+            echo "   🧠 $(dirname "${config}"): memory provider → memory_tencentdb"
+        else
+            echo "   ⚠️  $(dirname "${config}"): 未找到可替换的 provider 字段，跳过"
+        fi
+    done
+fi
+
 # Hand off to original Hermes entrypoint (handles UID mapping + gosu)
 exec /opt/hermes/docker/entrypoint.sh "$@"

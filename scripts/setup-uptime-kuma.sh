@@ -90,6 +90,7 @@ declare -a MONITORS=(
     "Hermes Dashboard|http|http://hermes-dashboard:9119||[\"200-299\"]"
     "OpenClaw Gateway|http|http://openclaw-gateway:18789/healthz||[\"200-299\"]"
     "aisecretary|http|http://aisecretary:8000/health||[\"200-299\"]"
+    "TDAI Memory|http|http://tdai-memory:8420/health||[\"200-299\"]"
     "FreshRSS|http|http://dailyinfo_freshrss:80||[\"200-399\"]"
 
     # ── Docker 容器监控 ────────────────────────────────────
@@ -102,6 +103,7 @@ declare -a MONITORS=(
     "Docker: uptime-kuma|docker||uptime-kuma|"
     "Docker: backup-cron|docker||backup-cron|"
     "Docker: aisecretary|docker||aisecretary|"
+    "Docker: tdai-memory|docker||tdai-memory|"
     "Docker: dailyinfo_freshrss|docker||dailyinfo_freshrss|"
 )
 
