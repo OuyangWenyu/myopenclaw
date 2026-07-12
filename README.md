@@ -13,6 +13,8 @@
 | claude-code | 自建镜像（基于 `ubuntu:24.04`，含 Python 3.12 + uv + Claude Code + cc-connect + gh），启动时自动加载 MyLoop skills | 9090 | Claude Code + 飞书直连 + MyLoop 执行引擎 |
 | openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway |
 | aisecretary | 自建镜像（基于 `python:3.12-slim`，含 FastAPI + FastMCP），build context `../aisecretary` | 8000 | 事务数据库 MCP 服务（7 个 tools，SQLite 持久化） |
+| tdai-memory | 自建镜像（基于 `ubuntu:24.04`，含 Node.js 22 + `@tencentdb-agent-memory/memory-tencentdb@0.3.6`） | 8420 | Agent 长期记忆 Gateway（L0→L3 分层，4 agent 共享；sqlite-vec 本地向量库） |
+| freshrss | `freshrss/freshrss:latest`（从 dailyinfo 迁入） | 8081 | RSS 聚合（AI News 周报数据源） |
 | uptime-kuma | `louislam/uptime-kuma:latest` | 3001 | 服务监控面板（HTTP + Docker 容器状态，飞书告警）|
 | backup-cron | 自建 alpine 镜像 | — | 定时快照备份（默认每周日凌晨 2:00）|
 
@@ -22,6 +24,7 @@
 - `~/.claude` → `/opt/claude-config`（claude-code 容器内，Claude Code 配置和凭证）
 - `~/.cc-connect` → `/opt/cc-config`（claude-code 容器内，cc-connect 配置）
 - `~/.openclaw` → `/home/node/.openclaw`（openclaw 容器内）
+- `~/.myagentdata/tdai-memory` → `/opt/data/tdai-memory`（tdai-memory 容器内，L0→L3 记忆数据 + sqlite-vec 向量库）
 - `~/.myagentdata` → `/.myagentdata`（backup-cron 容器只读挂载，用于备份）
 - `~/.config/gh` → `/opt/gh-config`（hermes 和 claude-code 容器内，gh 认证和配置，宿主机持久化）
 - `~/.config/opencode` → `/opt/opencode-config`（hermes 容器内，opencode 配置，宿主机持久化）
@@ -393,6 +396,71 @@ docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp list
 
 ---
 
+## Agent 长期记忆（TDAI Memory）— 4 agent 双向共享
+
+基于 [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory) v0.3.6，让 4 个个人 agent 跨会话、跨 agent 共享长期记忆。**飞书对 CC飞总 说的，Discord 侧爱玛士能召回**，反之亦然。
+
+### 记忆分层 L0→L3
+
+```
+L0 Conversation  原始对话         → conversations/<date>.jsonl
+  ↑ 抽取
+L1 Atom          结构化事实/偏好   → records/<date>.jsonl
+  ↑ 聚合
+L2 Scenario      按主题的场景块    → scene_blocks/<topic>.md
+  ↑ 提炼
+L3 Persona       用户画像          → persona.md
+```
+
+价值过滤（只抽关键结论）、去重、分层压缩全由 TDAI 管线负责——对话再啰嗦，L1 只留一句话。
+
+### 拓扑：两套物理独立体系
+
+| 体系 | 归属 | 后端 | 接入方式 |
+|------|------|------|----------|
+| **个人体系** | owen 一人，4 agent 共享 | `~/.myagentdata/tdai-memory/` | 独立 Gateway 容器 `:8420` |
+| **虾酱** | OpenClaw Discord，多用户 | `~/.openclaw/memory-tdai/` | OpenClaw 内嵌插件（local 模式） |
+
+两套用不同 SQLite 库文件物理隔离——虾酱（多人、零密钥）不掌握个人信息。
+
+### 4 个 agent 的接入方式
+
+| Agent | 容器 | 接入 | 写入路径 |
+|-------|------|------|----------|
+| Hermes default / 爱玛士 / finance | hermes 三兄弟 | `memory_tencentdb` adapter | plugin 生命周期钩子（自动） |
+| CC飞总 | claude-code | MCP server（4 读工具）+ Stop hook | Stop hook 每轮捕获对话 |
+
+- **Hermes adapter**：entrypoint 启动时自动 `npm install` + 部署 plugin + 注入 `memory.provider`，读 env `MEMORY_TENCENTDB_GATEWAY_HOST/PORT` 连 Gateway。
+- **CC飞总 双向**：读走 MCP server（`memory_search` / `conversation_search` / `read_scenario` / `read_core`），写走 `capture-to-gateway.py` Stop hook（会话每轮结束时 POST `/capture`，`session_id=personal_ccfeizong`）。hook 任何异常静默 exit 0，绝不阻塞对话；心跳/失败写 `~/.myagentdata/tdai-memory/capture-hook.log`（RotatingFileHandler 有界）。
+
+### 常用命令
+
+```bash
+# 健康检查
+curl -s http://localhost:8420/health
+
+# 查记忆（L0 原始对话）
+curl -s -X POST http://localhost:8420/search/conversations \
+  -H 'Content-Type: application/json' -d '{"query":"关键词","limit":5}'
+
+# 查记忆（L1 结构化事实）
+curl -s -X POST http://localhost:8420/search/memories \
+  -H 'Content-Type: application/json' -d '{"query":"关键词","limit":5}'
+
+# Gateway 日志
+docker compose logs -f tdai-memory
+
+# CC飞总 capture 心跳日志
+docker compose exec claude-code tail -f /home/node/.myagentdata/tdai-memory/capture-hook.log
+
+# 虾酱 OpenClaw memory plugin（独立体系，local 模式）
+./scripts/setup-openclaw-memory.sh
+```
+
+> **重启自动恢复**：`docker compose up -d` / `./scripts/start.sh` 后，所有 agent 的记忆能力零手工介入自动恢复（entrypoint 自动装 plugin、注入 config、注册 hook）。数据落 `~/.myagentdata/tdai-memory/`，纳入 backup 管线（sqlite3 热备）。
+
+---
+
 ## MyLoop 集成 — Daily Command Center
 
 [MyLoop](https://github.com/OuyangWenyu/myloop) 是本项目的 **loop 设计层**，定义 agent 自主循环的 skill 合同、分类规则和输出格式。myopenclaw 是执行层，负责调度和飞书推送。
@@ -481,9 +549,11 @@ myopenclaw/
 
 **Claude Code 备份**：`settings.json`、`projects/`、`skills/`、`plans/`、`tasks/`、cc-connect `config.toml`
 
-**OpenClaw 备份**：`openclaw.json`、`agents/`、`flows/`、`extensions/`、`memory/main.sqlite`（热备份）
+**OpenClaw 备份**：`openclaw.json`、`agents/`、`flows/`、`extensions/`、`memory/main.sqlite`（热备份）、`memory-tdai/memories.sqlite`（虾酱记忆，热备份）
 
-**Data 备份**：`~/.myagentdata/` 整目录 rsync 快照。所有数据类应用统一放此目录的子目录下（如 `~/.myagentdata/aisecretary/`、`~/.myagentdata/dailyinfo/`），无需额外配置即自动备份。
+**TDAI Memory 备份**：`memories.sqlite`（sqlite3 热备）、`scene_blocks/`、`persona.md`、`checkpoint.json`（个人体系 4 agent 共享记忆）
+
+**Data 备份**：`~/.myagentdata/` 整目录 rsync 快照。所有数据类应用统一放此目录的子目录下（如 `~/.myagentdata/aisecretary/`、`~/.myagentdata/dailyinfo/`、`~/.myagentdata/tdai-memory/`），无需额外配置即自动备份。
 
 不备份：大型缓存、临时会话、auth token、日志等（`~/.config/gh`、`~/.config/opencode` 和 `~/.hermes/secrets/` 中的敏感内容不备份，需重新配置）。
 

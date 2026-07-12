@@ -65,9 +65,15 @@ docker compose exec aisecretary python3 -c "import sqlite3; conn=sqlite3.connect
 ./scripts/setup-uptime-kuma.sh                       # Uptime Kuma 监控项幂等注册（直接 SQLite，无需 API 凭证）
 ./scripts/setup-openclaw-memory.sh                    # 虾酱 (Discord) OpenClaw memory plugin（local 模式）
 
-# TDAI Memory Gateway（Agent 长期记忆）
+# TDAI Memory Gateway（Agent 长期记忆，4 agent 双向共享 L0→L3）
 curl -s http://localhost:8420/health                           # Health check
 docker compose logs -f tdai-memory                            # Gateway 日志
+# 查记忆（L0 原始对话 / L1 结构化事实）
+curl -s -X POST http://localhost:8420/search/conversations -H 'Content-Type: application/json' -d '{"query":"关键词","limit":5}'
+curl -s -X POST http://localhost:8420/search/memories -H 'Content-Type: application/json' -d '{"query":"关键词","limit":5}'
+# CC飞总 capture 心跳日志（成功/失败诊断）
+docker compose exec claude-code tail -f /home/node/.myagentdata/tdai-memory/capture-hook.log
+./scripts/setup-openclaw-memory.sh                             # 虾酱 OpenClaw memory plugin（独立体系 local 模式）
 
 # Paper pipeline (paper-fetch → Google Drive → Zotero linked_file)
 # One-shot: download PDF + upload to Drive + create Zotero entry with metadata + cleanup
@@ -150,9 +156,9 @@ docker compose pull openclaw-gateway
 
 5. **hermes-dashboard** — Stock Hermes image running `dashboard --host 0.0.0.0`. Read-only, shares the hermes data volume.
 
-6. **tdai-memory** — Custom image (`docker/tdai-memory/Dockerfile`) based on `ubuntu:24.04` with Node.js 22 and `@tencentdb-agent-memory/memory-tencentdb@0.3.6`. Port 8420. Provides shared L0→L3 memory pipeline (Gateway HTTP API) for personal agents. LLM backend: DeepSeek (`TDAI_LLM_API_KEY` env). Data stored at `~/.myagentdata/tdai-memory/`.
+6. **tdai-memory** — Custom image (`docker/tdai-memory/Dockerfile`) based on `ubuntu:24.04` with Node.js 22 and `@tencentdb-agent-memory/memory-tencentdb@0.3.6`. Port 8420. Provides shared L0→L3 memory pipeline (Gateway HTTP API) for personal agents. LLM backend: DeepSeek (`TDAI_LLM_API_KEY` env). Data stored at `~/.myagentdata/tdai-memory/`. Resource limit 1G (OOM at 512M during large-JSON init). 4 agents share this Gateway bidirectionally — see **Agent Memory (TDAI)** design decision below.
 
-**Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, and `scripts/backup-data.sh` in sequence. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DB uses `sqlite3 .backup` for hot backup. Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
+**Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
 **dailyinfo scheduling**: Managed via host launchd (not Docker). `scripts/launchd/` contains plist templates and install/uninstall scripts. dailyinfo is a sibling repo (`../dailyinfo`) with its own Docker services (FreshRSS).
 
@@ -214,6 +220,14 @@ myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
 - **Google Drive (rclone)**: rclone v1.69.2 is installed in the hermes image for direct Google Drive API uploads. OAuth token stored in `~/.hermes/rclone/rclone.conf` (chmod 600, not in git). Remote `gdrive:` is scoped to a target folder via `root_folder_id`. Hermes uses `rclone copy <pdf> gdrive:` to upload papers. Full setup guide: `docs/google-drive-rclone.md`.
 
 - **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. The coder profile config at `~/.hermes/profiles/coder/config.yaml` is auto-created by `start.sh` on first run with deepseek-v4-pro as the default model. Has paper-fetch skill and rclone for paper download + Google Drive upload, plus zotero-cli-cc for Zotero library management (SQLite reads + Web API writes). Zotero data dir (`~/Zotero`) is mounted read-only; writes go through the Zotero Web API. PDFs are stored in Google Drive (not Zotero cloud) and linked to Zotero entries via `linked_file` attachments created by `paper-to-zotero.py`. Full workflow: paper-fetch download → rclone upload → paper-to-zotero (metadata + linked_file). Full docs: `docs/zotero-cli-cc.md`.
+
+- **Agent Memory (TDAI) — bidirectional cross-agent sharing**: 4 personal agents share long-term memory (L0→L3) via the tdai-memory Gateway. **Two physically-isolated systems** (separate SQLite files, not permission-based): personal (`~/.myagentdata/tdai-memory/`, 4 agents) and 虾酱 (`~/.openclaw/memory-tdai/`, multi-user OpenClaw plugin, local mode). Three integration paths, each with a critical gotcha learned during integration:
+  - **Hermes adapter** (default/爱玛士/finance): The npm package ships a Python `MemoryProvider` at `hermes-plugin/memory/memory_tencentdb/`. `entrypoint-wrapper.sh` installs it at **runtime** (not Dockerfile — avoids cardamum cache invalidation), deploys via `cp -r` (NOT symlink — Hermes's plugin scanner doesn't follow symlinks), and injects `provider: memory_tencentdb` (NOT `_v2`) into the `memory:` section only (section-scoped, so `delegation.provider` isn't clobbered). The provider reads the Gateway address from env `MEMORY_TENCENTDB_GATEWAY_HOST`/`_PORT` (NOT config.yaml `gateway_url`). Writes happen automatically via provider lifecycle hooks (`sync_turn`/`on_session_end`).
+  - **CC飞总 read** (claude-code): MCP server `docker/tdai-memory/mcp-server/server.py` (stdio, 4 read tools: `memory_search`/`conversation_search`/`read_scenario`/`read_core`), registered in `settings.json` mcpServers by `entrypoint.sh`.
+  - **CC飞总 write** (claude-code): `docker/claude-code/capture-to-gateway.py` Stop hook, registered in `settings.json` hooks.Stop. Every turn end, it reads the transcript's last user+assistant turn (merges contiguous assistant records, extracts only `text` blocks, skips slash-commands/caveats/tool output), POSTs to Gateway `/capture` with `session_id=personal_ccfeizong`. **Never blocks CC飞总** (exit 0 on any error) but writes a heartbeat/failure log to `~/.myagentdata/tdai-memory/capture-hook.log` (RotatingFileHandler, 1MB×2 — bounded, unlike the 762MB incident) so a broken pipeline is diagnosable. TDAI pipeline handles L1 value-filtering/dedup/layering, so raw verbosity in gets distilled to key facts.
+  - **Restart auto-recovery**: `docker compose up -d` / `./scripts/start.sh` recovers all memory wiring with zero manual steps — hermes entrypoint re-installs the plugin + re-injects config; claude-code entrypoint re-registers the Stop hook. Verified by force-recreate. LLM key reuses `DEEPSEEK_API_KEY` (4th independent key domain per isolation philosophy). Bearer auth off (Docker internal network). Full design in `.claude/prds/agent-memory.prd.md`.
+
+- **⚠️ Hermes image cannot be rebuilt with `docker compose build`**: The current `myopenclaw/hermes:latest` was patched (based on an existing image, COPYing the updated `entrypoint-wrapper.sh`) rather than built clean, because the cardamum Rust build stage fails against an upstream `io-addressbook` incompatible change (unrelated to this project). **Daily `docker compose up` / restart / host reboot all work fine** (uses the existing image + entrypoint automation). Only `docker compose build hermes` or `up --build` hits the cardamum error. Do NOT touch the cardamum stage — contacts work as-is. If the hermes image ever needs a clean rebuild, the cardamum upstream issue must be fixed first (or pin to a compilable rev / use the v0.1.0 binary).
 
 ## Network & DNS
 
