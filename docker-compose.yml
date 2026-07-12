@@ -277,6 +277,26 @@ services:
     networks:
       - myopenclaw-net
 
+  # ── FreshRSS（dailyinfo RSS 订阅源）───────────────────────────
+  freshrss:
+    image: freshrss/freshrss:latest
+    container_name: dailyinfo_freshrss
+    restart: unless-stopped
+    ports:
+      - "${FRESHRSS_PORT:-8081}:80"
+    volumes:
+      - ${HOME}/.myagentdata/dailyinfo/freshrss/data:/var/www/FreshRSS/data
+    environment:
+      - TZ=${TZ:-Asia/Shanghai}
+      - CRON_MIN=*/15
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+    networks:
+      - myopenclaw-net
+
   # ── 定时快照备份 ─────────────────────────────────────────────
   backup-cron:
     build:
