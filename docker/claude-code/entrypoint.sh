@@ -17,6 +17,28 @@ ln -sf /opt/claude-config /root/.claude
 ln -sf /opt/gh-config /home/node/.config/gh
 ln -sf /opt/gh-config /root/.config/gh
 
+# ── gh hosts.yml 自动同步 ───────────────────────────────────
+# 每次容器启动时，用 .env 里的 GH_TOKEN 更新 hosts.yml 中的 oauth_token
+# 这样用户只需要改 .env 一个地方，重启即可生效
+if [ -n "${GITHUB_TOKEN:-}" ]; then
+  mkdir -p /opt/gh-config
+  if [ -f /opt/gh-config/hosts.yml ]; then
+    sed -i "s/oauth_token:.*/oauth_token: ${GITHUB_TOKEN}/" /opt/gh-config/hosts.yml
+    echo "   🔑 gh hosts.yml 已同步当前 GITHUB_TOKEN"
+  else
+    cat > /opt/gh-config/hosts.yml << HOSTSEOF
+github.com:
+    git_protocol: https
+    users:
+        OuyangWenyu:
+            oauth_token: ${GITHUB_TOKEN}
+    user: OuyangWenyu
+HOSTSEOF
+    chmod 600 /opt/gh-config/hosts.yml
+    echo "   🔑 gh hosts.yml 已创建并写入 GITHUB_TOKEN"
+  fi
+fi
+
 # cc-connect reads config from $HOME/.cc-connect/
 rm -rf /home/node/.cc-connect /root/.cc-connect
 ln -sf /opt/cc-config /home/node/.cc-connect
