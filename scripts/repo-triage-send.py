@@ -31,14 +31,16 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
 # DeepSeek LLM — env vars read at call time so tests can monkeypatch (see summarize_with_llm)
 
 # Feishu credentials — same fallback priority as morning_triage_summary.py
-# Uses FEISHU_APP_ID/SECRET first (Hermes bot), falls back to LARK_CLI_APP_ID/SECRET
+# Priority: explicit FEISHU_APP_ID > CC_CONNECT (cc-connect bot) > LARK_CLI (Hermes bot)
 FEISHU_APP_ID = os.environ.get(
     "FEISHU_APP_ID",
-    os.environ.get("LARK_CLI_APP_ID", ""),
+    os.environ.get("CC_CONNECT_FEISHU_APP_ID",
+        os.environ.get("LARK_CLI_APP_ID", "")),
 )
 FEISHU_APP_SECRET = os.environ.get(
     "FEISHU_APP_SECRET",
-    os.environ.get("LARK_CLI_APP_SECRET", ""),
+    os.environ.get("CC_CONNECT_FEISHU_APP_SECRET",
+        os.environ.get("LARK_CLI_APP_SECRET", "")),
 )
 FEISHU_AUTH_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
 FEISHU_MSG_URL = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
@@ -335,8 +337,14 @@ def main() -> None:
     # 1. Build summary from SQLite
     logger.info("读取仓库活动数据...")
     try:
-        import repo_summary
-    except ImportError:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "repo_summary",
+            os.path.join(REPO_ROOT, "scripts", "repo-summary.py"),
+        )
+        repo_summary = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(repo_summary)
+    except Exception:
         logger.error("无法导入 repo-summary.py，请确认 scripts/repo-summary.py 存在")
         sys.exit(1)
 
