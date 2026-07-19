@@ -299,3 +299,12 @@ if [[ -x "${MORNING_TRIAGE_INSTALLER}" ]]; then
 else
   echo "   ℹ️  Morning Triage v2 安装脚本未找到，跳过"
 fi
+
+# ── 自动部署 AI News 周报推送（Hermes 身份，替代 cc-connect cron）──
+AI_NEWS_INSTALLER="${REPO_ROOT}/scripts/launchd/install-ai-news-weekly.sh"
+if [[ -x "${AI_NEWS_INSTALLER}" ]]; then
+  echo ""
+  "${AI_NEWS_INSTALLER}"
+else
+  echo "   ℹ️  AI News 周报安装脚本未找到，跳过"
+fi

@@ -45,14 +45,14 @@ DEEPSEEK_BASE_URL = os.environ.get(
 )
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
-# Feishu — reuses CC_CONNECT credentials (same as old morning-triage-send.py)
+# Feishu — Hermes identity (LARK_CLI credentials, same as Hermes bot)
 FEISHU_APP_ID = os.environ.get(
     "FEISHU_APP_ID",
-    os.environ.get("CC_CONNECT_FEISHU_APP_ID", ""),
+    os.environ.get("LARK_CLI_APP_ID", ""),
 )
 FEISHU_APP_SECRET = os.environ.get(
     "FEISHU_APP_SECRET",
-    os.environ.get("CC_CONNECT_FEISHU_APP_SECRET", ""),
+    os.environ.get("LARK_CLI_APP_SECRET", ""),
 )
 FEISHU_AUTH_URL = (
     "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
@@ -525,8 +525,8 @@ def main():
     # 6. Push to Feishu
     if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
         logger.error(
-            "缺少 FEISHU_APP_ID / FEISHU_APP_SECRET / CC_CONNECT_FEISHU_APP_ID "
-            "环境变量，无法推送"
+            "缺少 FEISHU_APP_ID / FEISHU_APP_SECRET / LARK_CLI_APP_ID "
+            "环境变量，无法推送（需要 Hermes 飞书应用凭证）"
         )
         sys.exit(1)
 

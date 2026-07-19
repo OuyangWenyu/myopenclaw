@@ -178,5 +178,49 @@ class TestErrorHandling(unittest.TestCase):
         self.assertEqual(result, "Found 5 matches")
 
 
+class TestFeishuCredentialResolution(unittest.TestCase):
+    """Test Feishu credential fallback chain uses Hermes identity."""
+
+    def test_feishu_app_id_preferred(self):
+        """FEISHU_APP_ID should be primary — no fallback needed."""
+        with patch.dict("os.environ", {
+            "FEISHU_APP_ID": "hermes-app",
+            "FEISHU_APP_SECRET": "hermes-secret",
+            "LARK_CLI_APP_ID": "lark-app",
+            "LARK_CLI_APP_SECRET": "lark-secret",
+            "CC_CONNECT_FEISHU_APP_ID": "cc-app",
+            "CC_CONNECT_FEISHU_APP_SECRET": "cc-secret",
+        }, clear=True):
+            # Reload module-level configs
+            import importlib
+            import morning_triage_summary as mts2
+            importlib.reload(mts2)
+            self.assertEqual(mts2.FEISHU_APP_ID, "hermes-app")
+            self.assertEqual(mts2.FEISHU_APP_SECRET, "hermes-secret")
+
+    def test_fallback_to_lark_cli(self):
+        """Without FEISHU_APP_ID, should fall back to LARK_CLI (Hermes)."""
+        with patch.dict("os.environ", {
+            "LARK_CLI_APP_ID": "lark-app",
+            "LARK_CLI_APP_SECRET": "lark-secret",
+            "CC_CONNECT_FEISHU_APP_ID": "cc-app",
+            "CC_CONNECT_FEISHU_APP_SECRET": "cc-secret",
+        }, clear=True):
+            import importlib
+            import morning_triage_summary as mts2
+            importlib.reload(mts2)
+            self.assertEqual(mts2.FEISHU_APP_ID, "lark-app")
+            self.assertEqual(mts2.FEISHU_APP_SECRET, "lark-secret")
+
+    def test_cc_connect_not_in_chain(self):
+        """CC_CONNECT_FEISHU should NOT be in the fallback chain."""
+        with patch.dict("os.environ", {}, clear=True):
+            import importlib
+            import morning_triage_summary as mts2
+            importlib.reload(mts2)
+            # Should be empty string, not cc-connect
+            self.assertEqual(mts2.FEISHU_APP_ID, "")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
