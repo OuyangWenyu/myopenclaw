@@ -299,7 +299,7 @@ if (!settings.mcpServers.codegraph) {
 	    settings.hooks.Stop = [{
 	        hooks: [{
 	            type: "command",
-	            command: "python3 /opt/capture-to-gateway.py"
+	            command: "test -f /opt/capture-to-gateway.py && python3 /opt/capture-to-gateway.py || true"
 	        }]
 	    }];
 	    changed = true;

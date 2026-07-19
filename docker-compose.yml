@@ -183,8 +183,8 @@ services:
   # ── Claude Code + cc-connect（独立编码 Agent，飞书直连）──────
   claude-code:
     build:
-      context: ./docker/claude-code
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/claude-code/Dockerfile
     image: myopenclaw/claude-code:latest
     container_name: claude-code
     restart: unless-stopped
