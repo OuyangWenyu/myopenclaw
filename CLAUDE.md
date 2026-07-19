@@ -56,6 +56,12 @@ END:VCARD' | docker compose exec -T hermes cardamum card create -   # Add contac
 docker compose exec hermes-coder zot stats                      # Zotero library statistics
 docker compose exec hermes-coder zot search "keyword" --limit 5 # Search papers
 
+# Zotero MCP (Python Web API server — CC飞总 文献查询与分析)
+# CC飞总通过 MCP 工具直接查询 Zotero 文献库（api.zotero.org），在飞书对话中直接使用。
+# 环境变量: ZOTERO_API_KEY + ZOTERO_LIBRARY_ID + ZOTERO_LIBRARY_TYPE（均在 .env 中配置）
+# Zotero 数据以只读方式挂载到 /opt/zotero-data
+# MCP server: docker/claude-code/zotero-mcp-server.py（Python 3 stdlib，4 tools）
+
 # aisecretary — 事务数据库 MCP 服务
 curl -s http://localhost:8000/health                           # Health check
 docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp test aisecretary  # MCP 连接测试

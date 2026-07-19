@@ -196,7 +196,8 @@ services:
       - ${HOME}/code:/home/node/code
       - ${HOME}/Code:/home/node/Code
       - ${HOME}/.myagentdata:/home/node/.myagentdata
-      - ${HOME}/code/dailyinfo/skills/ai-news-weekly-polish:/opt/dailyinfo-skills/ai-news-weekly-polish:ro
+      - ${HOME}/Zotero:/opt/zotero-data:ro
+      - ${HOME}/code/dailyinfo/skills:/opt/dailyinfo-skills:ro
       - ./docker/tdai-memory/mcp-server/server.py:/opt/tdai-mcp-server.py:ro
       - ./docker/claude-code/capture-to-gateway.py:/opt/capture-to-gateway.py:ro
     environment:
@@ -210,6 +211,10 @@ services:
       - DAILYINFO_DATA_ROOT=/home/node/.myagentdata/dailyinfo
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
+      # Zotero MCP — literature search & analysis
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - TZ=${TZ:-Asia/Shanghai}
     ports:
       - "${CC_CONNECT_PORT:-9090}:9090"

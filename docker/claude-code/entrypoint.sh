@@ -225,8 +225,13 @@ if (!settings.permissions.allow) {
         "mcp__codegraph__codegraph_impact",
         "mcp__codegraph__codegraph_node",
         "mcp__codegraph__codegraph_status",
-        "mcp__playwright__*"
+        "mcp__playwright__*",
+        "mcp__zotero__*"
     ];
+    changed = true;
+}
+if (!settings.permissions.allow.includes("mcp__zotero__*")) {
+    settings.permissions.allow.push("mcp__zotero__*");
     changed = true;
 }
 
@@ -289,6 +294,13 @@ if (!settings.mcpServers.codegraph) {
 	    };
 	    changed = true;
 	}
+		if (!settings.mcpServers["zotero"]) {
+		    settings.mcpServers["zotero"] = {
+		        command: "python3",
+		        args: ["/opt/zotero-mcp-server.py"]
+		    };
+		    changed = true;
+		}
 
 	// Stop hook: capture CC飞总 conversations into TDAI Memory Gateway
 	// (writes L0 → enables bidirectional cross-agent memory sharing).
