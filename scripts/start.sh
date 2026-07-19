@@ -290,3 +290,21 @@ if docker compose ps uptime-kuma 2>/dev/null | grep -q 'Up'; then
 fi
 
 docker compose ps
+
+# ── 自动部署 Morning Triage v2（记忆驱动的每日汇总推送）──────────
+MORNING_TRIAGE_INSTALLER="${REPO_ROOT}/scripts/launchd/install-morning-triage-v2.sh"
+if [[ -x "${MORNING_TRIAGE_INSTALLER}" ]]; then
+  echo ""
+  "${MORNING_TRIAGE_INSTALLER}"
+else
+  echo "   ℹ️  Morning Triage v2 安装脚本未找到，跳过"
+fi
+
+# ── 自动部署 AI News 周报推送（Hermes 身份，替代 cc-connect cron）──
+AI_NEWS_INSTALLER="${REPO_ROOT}/scripts/launchd/install-ai-news-weekly.sh"
+if [[ -x "${AI_NEWS_INSTALLER}" ]]; then
+  echo ""
+  "${AI_NEWS_INSTALLER}"
+else
+  echo "   ℹ️  AI News 周报安装脚本未找到，跳过"
+fi
