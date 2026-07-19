@@ -9,7 +9,7 @@
 	<array>
 		<string>/bin/bash</string>
 		<string>-c</string>
-		<string>cd __MYOPENCLAW_DIR__ &amp;&amp; set -a &amp;&amp; source .env 2&gt;/dev/null; set +a &amp;&amp; /usr/bin/env python3 scripts/morning_triage_summary.py &gt;&gt; __MYOPENCLAW_DIR__/logs/morning-triage.log 2&gt;&amp;1</string>
+		<string>cd __MYOPENCLAW_DIR__ &amp;&amp; set -a &amp;&amp; source .env 2&gt;/dev/null; set +a &amp;&amp; /usr/bin/env python3 scripts/morning_triage_summary.py 2&gt;&gt; __MYOPENCLAW_DIR__/logs/morning-triage.log | /usr/local/bin/docker compose exec -T hermes python3 /opt/hermes-skills/morning-triage-v2/send_card.py &gt;&gt; __MYOPENCLAW_DIR__/logs/morning-triage.log 2&gt;&amp;1</string>
 	</array>
 
 	<key>StartCalendarInterval</key>
