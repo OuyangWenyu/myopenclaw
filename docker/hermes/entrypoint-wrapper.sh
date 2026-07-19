@@ -90,12 +90,11 @@ if [ -d /opt/hermes-skills/morning-briefing ] && [ ! -L /opt/data/skills/morning
   echo "   📋 morning-briefing skill 已安装"
 fi
 
-# ── repo-triage skill → Hermes skills ────────────────────────────
-# Symlink from read-only volume mount to hermes skills dir
-if [ -d /opt/hermes-skills/repo-triage ] && [ ! -L /opt/data/skills/repo-triage ]; then
+# ── morning-triage-v2 skill → Hermes skills ─────────────────────
+if [ -d /opt/hermes-skills/morning-triage-v2 ] && [ ! -L /opt/data/skills/morning-triage-v2 ]; then
   mkdir -p /opt/data/skills
-  ln -sf /opt/hermes-skills/repo-triage /opt/data/skills/repo-triage
-  echo "   📦 repo-triage skill 已安装"
+  ln -sf /opt/hermes-skills/morning-triage-v2 /opt/data/skills/morning-triage-v2
+  echo "   📋 morning-triage-v2 skill 已安装"
 fi
 
 # ── Patch: add "OSError" to Hermes transient transport errors ─────

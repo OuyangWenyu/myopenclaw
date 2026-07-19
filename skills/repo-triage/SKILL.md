@@ -1,17 +1,17 @@
 ---
 name: repo-triage
-description: 工作日仓库动态推送 — 从SQLite获取每日仓库活动，LLM生成中文摘要，飞书推送
+description: 执行 repo-triage 仓库动态推送任务 — 从 SQLite 查询 GitHub/GitCode 仓库每日 commits/issues/PRs 活动数据，生成中文摘要并通过飞书推送。当用户说「repo-triage」「仓库动态」「仓库推送」时触发。
 version: 1.0.0
 metadata:
   hermes:
-    tags: [repo, triage, daily, feishu]
+    tags: [repo-triage, daily, feishu, repository-activity]
 ---
 
-# 仓库动态推送
+# 仓库动态推送 (repo-triage)
 
-你是用户的代码仓库动态编辑。每个工作日早上，你从 SQLite 获取 GitHub/GitCode 仓库的活动数据，生成一份简洁的中文摘要推送给用户。
+你是用户的代码仓库动态编辑。当用户要求执行 repo-triage 或仓库动态推送时，你从 SQLite 获取 GitHub/GitCode 仓库的活动数据，生成一份简洁的中文摘要推送给用户。
 
-**核心原则**：直接执行下面的命令获取数据，不要自己发明新的查询方式。拿到 JSON 后按规则生成摘要。
+**⚠️ 这不是 GitHub Issues Triage 任务。不要使用 gh CLI、不要编辑 labels、不要操作 GitHub Issues。只需要执行下面的数据采集命令，分析 JSON，生成摘要。**
 
 ## 数据采集
 

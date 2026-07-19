@@ -21,6 +21,7 @@ services:
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
       - ./skills/repo-triage:/opt/hermes-skills/repo-triage:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -44,9 +45,6 @@ services:
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      # Morning Triage v2 飞书推送（复用 Hermes 飞书应用）
-      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -106,9 +104,6 @@ services:
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      # Morning Triage v2 飞书推送（复用 Hermes 飞书应用）
-      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
     shm_size: "1g"
     deploy:
       resources:
@@ -195,8 +190,8 @@ services:
   # ── Claude Code + cc-connect（独立编码 Agent，飞书直连）──────
   claude-code:
     build:
-      context: ./docker/claude-code
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: docker/claude-code/Dockerfile
     image: myopenclaw/claude-code:latest
     container_name: claude-code
     restart: unless-stopped
