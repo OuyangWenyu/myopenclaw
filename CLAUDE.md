@@ -108,6 +108,18 @@ python3 scripts/collect_agentops.py --dry-run                 # 预览模式（�
 ./scripts/launchd/install-collect-agentops.sh                 # 安装每天 7:45 定时采集
 launchctl start ai.myopenclaw.collect-agentops                # 手动触发采集
 tail -f logs/collect-agentops.log                             # 查看采集日志
+
+# Repo scanner（仓库动态采集 + 推送）
+python3 scripts/collect-repos.py                              # 手动运行 24h 仓库采集（写入 SQLite）
+python3 scripts/collect-repos.py --dry-run                    # 预览模式（输出到 stdout，不写库）
+python3 scripts/repo-summary.py --json                        # 查询 SQLite 仓库摘要（JSON 输出）
+python3 scripts/repo-triage-send.py                           # 手动运行仓库动态推送（SQLite → LLM → 飞书）
+python3 scripts/repo-triage-send.py --dry-run                 # 预览模式（输出到 stdout，不推送）
+./scripts/launchd/install-collect-repos.sh                    # 安装每天 7:45 仓库采集
+./scripts/launchd/install-repo-triage.sh                      # 安装每天 7:55 仓库动态推送
+launchctl start ai.myopenclaw.collect-repos                   # 手动触发采集
+launchctl start ai.myopenclaw.repo-triage                     # 手动触发推送
+tail -f logs/repo-triage.log                                  # 查看推送日志
 ```
 
 ## ⚠️ OpenClaw 配置安全规则
