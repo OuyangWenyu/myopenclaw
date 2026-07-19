@@ -45,14 +45,17 @@ DEEPSEEK_BASE_URL = os.environ.get(
 )
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
-# Feishu — Hermes identity (LARK_CLI credentials, same as Hermes bot)
+# Feishu — Hermes identity with CC_CONNECT fallback
+# open_id is per-app — switching app requires updating TARGET_OPEN_ID
 FEISHU_APP_ID = os.environ.get(
     "FEISHU_APP_ID",
-    os.environ.get("LARK_CLI_APP_ID", ""),
+    os.environ.get("LARK_CLI_APP_ID",
+        os.environ.get("CC_CONNECT_FEISHU_APP_ID", "")),
 )
 FEISHU_APP_SECRET = os.environ.get(
     "FEISHU_APP_SECRET",
-    os.environ.get("LARK_CLI_APP_SECRET", ""),
+    os.environ.get("LARK_CLI_APP_SECRET",
+        os.environ.get("CC_CONNECT_FEISHU_APP_SECRET", "")),
 )
 FEISHU_AUTH_URL = (
     "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
@@ -60,7 +63,12 @@ FEISHU_AUTH_URL = (
 FEISHU_MSG_URL = (
     "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
 )
-TARGET_OPEN_ID = "ou_dbaed85f08cfdd46a38a3a8c47d5fe9a"
+# open_id is per-app — default works with CC_CONNECT_FEISHU_APP_ID
+# Set MORNING_TRIAGE_OPEN_ID if using a different Feishu app
+TARGET_OPEN_ID = os.environ.get(
+    "MORNING_TRIAGE_OPEN_ID",
+    "ou_dbaed85f08cfdd46a38a3a8c47d5fe9a",
+)
 
 # Skill + manual override paths (relative to repo root)
 SKILL_DIR = REPO_ROOT / "skills" / "morning-triage-v2"
@@ -525,8 +533,8 @@ def main():
     # 6. Push to Feishu
     if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
         logger.error(
-            "缺少 FEISHU_APP_ID / FEISHU_APP_SECRET / LARK_CLI_APP_ID "
-            "环境变量，无法推送（需要 Hermes 飞书应用凭证）"
+            "缺少飞书凭证 (FEISHU_APP_ID / LARK_CLI_APP_ID / "
+            "CC_CONNECT_FEISHU_APP_ID)，无法推送"
         )
         sys.exit(1)
 
