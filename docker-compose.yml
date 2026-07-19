@@ -18,7 +18,6 @@ services:
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
-      - ./scripts/morning_triage_summary.py:/opt/hermes-skills/morning-triage-v2/summarize.py:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
 
     environment:
@@ -74,7 +73,6 @@ services:
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
-      - ./scripts/morning_triage_summary.py:/opt/hermes-skills/morning-triage-v2/summarize.py:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
 
     environment:

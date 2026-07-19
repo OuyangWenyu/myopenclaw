@@ -1,21 +1,16 @@
 #!/usr/bin/env python3
 """
-Morning Triage v2 — 记忆驱动的每日自动汇总脚本。
+Morning Triage v2 — 记忆驱动的每日自动汇总。
 
 数据流:
   TDAI Gateway (localhost:8420) → L1 记忆搜索 + L2 场景召回
-  collect_agentops.py          → 容器/备份/磁盘/网关 健康信号
-  DeepSeek API                  → 自然语言摘要生成
-  Feishu Bot API                → 交互卡片推送
+  collect_agentops.py            → 容器/备份/磁盘/网关 健康信号
+  DeepSeek API                   → 自然语言摘要生成
 
-运行环境: macOS 宿主机（需要 Docker socket 访问 + host 路径）
-  - TDAI Gateway 通过 docker-compose 端口映射 localhost:8420
-  - AgentOps 采集复用 scripts/collect_agentops.py
-  - DEEPSEEK_API_KEY 从 .env 读取
+输出: Markdown 文本到 stdout，由 Hermes 容器接收并发送飞书消息。
 
 Usage:
-  python3 scripts/morning_triage_summary.py            # 正常推送
-  python3 scripts/morning_triage_summary.py --dry-run  # 输出到 stdout
+  python3 scripts/morning_triage_summary.py | docker compose exec -T hermes python3 /opt/hermes-skills/morning-triage-v2/send_card.py
 """
 
 import json
@@ -44,31 +39,6 @@ DEEPSEEK_BASE_URL = os.environ.get(
     "DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"
 )
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
-
-# Feishu — priority: explicit FEISHU_APP_ID > CC_CONNECT > LARK_CLI
-# CC_CONNECT before LARK_CLI because its open_id is known and working
-FEISHU_APP_ID = os.environ.get(
-    "FEISHU_APP_ID",
-    os.environ.get("CC_CONNECT_FEISHU_APP_ID",
-        os.environ.get("LARK_CLI_APP_ID", "")),
-)
-FEISHU_APP_SECRET = os.environ.get(
-    "FEISHU_APP_SECRET",
-    os.environ.get("CC_CONNECT_FEISHU_APP_SECRET",
-        os.environ.get("LARK_CLI_APP_SECRET", "")),
-)
-FEISHU_AUTH_URL = (
-    "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
-)
-FEISHU_MSG_URL = (
-    "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
-)
-# open_id is per-app — default works with CC_CONNECT_FEISHU_APP_ID
-# Set MORNING_TRIAGE_OPEN_ID if using a different Feishu app
-TARGET_OPEN_ID = os.environ.get(
-    "MORNING_TRIAGE_OPEN_ID",
-    "ou_dbaed85f08cfdd46a38a3a8c47d5fe9a",
-)
 
 # Skill + manual override paths (relative to repo root)
 SKILL_DIR = REPO_ROOT / "skills" / "morning-triage-v2"
@@ -341,50 +311,6 @@ def generate_report(
     return "\n".join(sections)
 
 
-# ── 飞书推送 ─────────────────────────────────────────────────────
-
-
-def build_feishu_card(content: str, today: date) -> dict:
-    """Build Feishu interactive card JSON."""
-    return {
-        "config": {"wide_screen_mode": True},
-        "header": {
-            "title": {
-                "tag": "plain_text",
-                "content": f"Daily Command Center — {today.strftime('%-m月%-d日')} {_weekday_cn(today)}",
-            },
-            "template": "blue",
-        },
-        "elements": [
-            {"tag": "markdown", "content": content}
-        ],
-    }
-
-
-def get_tenant_token(app_id: str, app_secret: str) -> str:
-    """Get Feishu tenant_access_token."""
-    body = json.dumps({"app_id": app_id, "app_secret": app_secret}).encode()
-    req = urllib.request.Request(FEISHU_AUTH_URL, data=body, method="POST")
-    req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=15) as r:
-        data = json.loads(r.read())
-    return data["tenant_access_token"]
-
-
-def send_feishu_message(token: str, open_id: str, card: dict) -> dict:
-    """Send Feishu interactive card message. Returns API response."""
-    body = json.dumps({
-        "receive_id": open_id,
-        "msg_type": "interactive",
-        "content": json.dumps(card, ensure_ascii=False),
-    }).encode("utf-8")
-    req = urllib.request.Request(FEISHU_MSG_URL, data=body, method="POST")
-    req.add_header("Authorization", f"Bearer {token}")
-    req.add_header("Content-Type", "application/json")
-    with urllib.request.urlopen(req, timeout=15) as r:
-        return json.loads(r.read())
-
-
 # ── LLM 汇总 ─────────────────────────────────────────────────────
 
 
@@ -525,44 +451,13 @@ def main():
     if manual_override.strip():
         report += f"\n\n━━━ 手动备注 ━━━\n\n{manual_override.strip()}"
 
+    # 6. Output — Hermes 容器通过 pipe 接收并发送飞书
+    print(report)
+
     if dry_run:
-        print(report)
         logger.info("DRY RUN — 未推送飞书")
-        return
-
-    # 6. Push to Feishu
-    if not FEISHU_APP_ID or not FEISHU_APP_SECRET:
-        logger.error(
-            "缺少飞书凭证 (FEISHU_APP_ID / LARK_CLI_APP_ID / "
-            "CC_CONNECT_FEISHU_APP_ID)，无法推送"
-        )
-        sys.exit(1)
-
-    logger.info("获取飞书 tenant token...")
-    try:
-        token = get_tenant_token(FEISHU_APP_ID, FEISHU_APP_SECRET)
-    except Exception as e:
-        logger.error("获取飞书 token 失败: %s", e)
-        sys.exit(1)
-
-    logger.info("推送飞书消息...")
-    try:
-        today = date.today()
-        card = build_feishu_card(report, today)
-        result = send_feishu_message(token, TARGET_OPEN_ID, card)
-        code = result.get("code", -1)
-        if code == 0:
-            logger.info("✅ 推送成功")
-        else:
-            logger.error(
-                "飞书推送失败: code=%s msg=%s",
-                code,
-                result.get("msg", "unknown"),
-            )
-            sys.exit(1)
-    except Exception as e:
-        logger.error("飞书推送异常: %s", e)
-        sys.exit(1)
+    else:
+        logger.info("报告已输出，等待 Hermes 发送飞书...")
 
 
 if __name__ == "__main__":
