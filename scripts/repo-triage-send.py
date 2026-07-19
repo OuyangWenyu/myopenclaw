@@ -30,9 +30,16 @@ sys.path.insert(0, os.path.join(REPO_ROOT, "scripts"))
 
 # DeepSeek LLM — env vars read at call time so tests can monkeypatch (see summarize_with_llm)
 
-# Feishu
-FEISHU_APP_ID = os.environ.get("CC_CONNECT_FEISHU_APP_ID", "")
-FEISHU_APP_SECRET = os.environ.get("CC_CONNECT_FEISHU_APP_SECRET", "")
+# Feishu credentials — same fallback priority as morning_triage_summary.py
+# Uses FEISHU_APP_ID/SECRET first (Hermes bot), falls back to LARK_CLI_APP_ID/SECRET
+FEISHU_APP_ID = os.environ.get(
+    "FEISHU_APP_ID",
+    os.environ.get("LARK_CLI_APP_ID", ""),
+)
+FEISHU_APP_SECRET = os.environ.get(
+    "FEISHU_APP_SECRET",
+    os.environ.get("LARK_CLI_APP_SECRET", ""),
+)
 FEISHU_AUTH_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
 FEISHU_MSG_URL = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
 TARGET_OPEN_ID = "ou_dbaed85f08cfdd46a38a3a8c47d5fe9a"

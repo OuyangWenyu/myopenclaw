@@ -9,7 +9,7 @@
 	<array>
 		<string>/bin/bash</string>
 		<string>-c</string>
-		<string>cd __MYOPENCLAW_DIR__ &amp;&amp; set -a &amp;&amp; source .env 2&gt;/dev/null; set +a &amp;&amp; /usr/bin/env python3 scripts/repo-triage-send.py &gt;&gt; __MYOPENCLAW_DIR__/logs/repo-triage.log 2&gt;&amp;1</string>
+		<string>cd __MYOPENCLAW_DIR__ &amp;&amp; (set -a &amp;&amp; source .env 2&gt;/dev/null || echo "[launchd] WARNING: .env not found or unreadable" &gt;&amp;2) &amp;&amp; set +a &amp;&amp; __PYTHON3__ scripts/repo-triage-send.py &gt;&gt; __MYOPENCLAW_DIR__/logs/repo-triage.log 2&gt;&amp;1</string>
 	</array>
 
 	<key>StartCalendarInterval</key>

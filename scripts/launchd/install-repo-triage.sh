@@ -13,6 +13,7 @@ LOGS_DIR="${REPO_ROOT}/logs"
 TEMPLATE="${SCRIPT_DIR}/ai.myopenclaw.repo-triage.plist.template"
 PLIST_FILE="${LAUNCH_DIR}/ai.myopenclaw.repo-triage.plist"
 PLIST_PATH="/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+PYTHON3="$(which python3 2>/dev/null || echo '/usr/bin/python3')"
 
 # ── 前置检查 ────────────────────────────────────────────────
 if [[ ! -f "${TEMPLATE}" ]]; then
@@ -34,6 +35,7 @@ sed_escape() {
 
 MYOPENCLAW_DIR_ESC="$(sed_escape "${REPO_ROOT}")"
 PATH_ESC="$(sed_escape "${PLIST_PATH}")"
+PYTHON3_ESC="$(sed_escape "${PYTHON3}")"
 
 # ── 卸载旧任务（如果存在）───────────────────────────────────
 if [[ -f "${PLIST_FILE}" ]]; then
@@ -45,6 +47,7 @@ fi
 sed \
     -e "s|__MYOPENCLAW_DIR__|${MYOPENCLAW_DIR_ESC}|g" \
     -e "s|__PATH__|${PATH_ESC}|g" \
+    -e "s|__PYTHON3__|${PYTHON3_ESC}|g" \
     "${TEMPLATE}" > "${PLIST_FILE}"
 
 chmod 644 "${PLIST_FILE}"
