@@ -45,17 +45,17 @@ DEEPSEEK_BASE_URL = os.environ.get(
 )
 DEEPSEEK_MODEL = os.environ.get("DEEPSEEK_MODEL", "deepseek-chat")
 
-# Feishu — Hermes identity with CC_CONNECT fallback
-# open_id is per-app — switching app requires updating TARGET_OPEN_ID
+# Feishu — priority: explicit FEISHU_APP_ID > CC_CONNECT > LARK_CLI
+# CC_CONNECT before LARK_CLI because its open_id is known and working
 FEISHU_APP_ID = os.environ.get(
     "FEISHU_APP_ID",
-    os.environ.get("LARK_CLI_APP_ID",
-        os.environ.get("CC_CONNECT_FEISHU_APP_ID", "")),
+    os.environ.get("CC_CONNECT_FEISHU_APP_ID",
+        os.environ.get("LARK_CLI_APP_ID", "")),
 )
 FEISHU_APP_SECRET = os.environ.get(
     "FEISHU_APP_SECRET",
-    os.environ.get("LARK_CLI_APP_SECRET",
-        os.environ.get("CC_CONNECT_FEISHU_APP_SECRET", "")),
+    os.environ.get("CC_CONNECT_FEISHU_APP_SECRET",
+        os.environ.get("LARK_CLI_APP_SECRET", "")),
 )
 FEISHU_AUTH_URL = (
     "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"

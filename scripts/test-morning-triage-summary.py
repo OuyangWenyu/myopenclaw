@@ -198,8 +198,8 @@ class TestFeishuCredentialResolution(unittest.TestCase):
             self.assertEqual(mts2.FEISHU_APP_ID, "hermes-app")
             self.assertEqual(mts2.FEISHU_APP_SECRET, "hermes-secret")
 
-    def test_fallback_to_lark_cli(self):
-        """Without FEISHU_APP_ID, fall back to LARK_CLI (Hermes bot)."""
+    def test_fallback_to_cc_connect_before_lark(self):
+        """Without FEISHU_APP_ID, CC_CONNECT takes priority over LARK_CLI."""
         with patch.dict("os.environ", {
             "LARK_CLI_APP_ID": "lark-app",
             "LARK_CLI_APP_SECRET": "lark-secret",
@@ -209,8 +209,19 @@ class TestFeishuCredentialResolution(unittest.TestCase):
             import importlib
             import morning_triage_summary as mts2
             importlib.reload(mts2)
+            self.assertEqual(mts2.FEISHU_APP_ID, "cc-app")
+            self.assertEqual(mts2.FEISHU_APP_SECRET, "cc-secret")
+
+    def test_lark_cli_as_last_resort(self):
+        """Only LARK_CLI available — use it."""
+        with patch.dict("os.environ", {
+            "LARK_CLI_APP_ID": "lark-app",
+            "LARK_CLI_APP_SECRET": "lark-secret",
+        }, clear=True):
+            import importlib
+            import morning_triage_summary as mts2
+            importlib.reload(mts2)
             self.assertEqual(mts2.FEISHU_APP_ID, "lark-app")
-            self.assertEqual(mts2.FEISHU_APP_SECRET, "lark-secret")
 
     def test_ultimate_fallback_to_cc_connect(self):
         """Without FEISHU or LARK_CLI, fall back to CC_CONNECT."""
