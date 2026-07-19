@@ -199,7 +199,7 @@ class TestFeishuCredentialResolution(unittest.TestCase):
             self.assertEqual(mts2.FEISHU_APP_SECRET, "hermes-secret")
 
     def test_fallback_to_lark_cli(self):
-        """Without FEISHU_APP_ID, should fall back to LARK_CLI (Hermes)."""
+        """Without FEISHU_APP_ID, fall back to LARK_CLI (Hermes bot)."""
         with patch.dict("os.environ", {
             "LARK_CLI_APP_ID": "lark-app",
             "LARK_CLI_APP_SECRET": "lark-secret",
@@ -212,7 +212,19 @@ class TestFeishuCredentialResolution(unittest.TestCase):
             self.assertEqual(mts2.FEISHU_APP_ID, "lark-app")
             self.assertEqual(mts2.FEISHU_APP_SECRET, "lark-secret")
 
-    def test_cc_connect_not_in_chain(self):
+    def test_ultimate_fallback_to_cc_connect(self):
+        """Without FEISHU or LARK_CLI, fall back to CC_CONNECT."""
+        with patch.dict("os.environ", {
+            "CC_CONNECT_FEISHU_APP_ID": "cc-app",
+            "CC_CONNECT_FEISHU_APP_SECRET": "cc-secret",
+        }, clear=True):
+            import importlib
+            import morning_triage_summary as mts2
+            importlib.reload(mts2)
+            self.assertEqual(mts2.FEISHU_APP_ID, "cc-app")
+            self.assertEqual(mts2.FEISHU_APP_SECRET, "cc-secret")
+
+    def test_no_credentials_is_empty(self):
         """CC_CONNECT_FEISHU should NOT be in the fallback chain."""
         with patch.dict("os.environ", {}, clear=True):
             import importlib
