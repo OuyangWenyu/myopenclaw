@@ -69,6 +69,13 @@ MANUAL_OVERRIDE_PATH = SKILL_DIR / "manual-override.md"
 MORNING_TRIAGE_PROMPT = """
 你是用户的每日决策信息编辑。从以下原始数据生成一份 3-5 分钟可读完的飞书推送。
 
+## 用户身份（Ground Truth — 以此为唯一锚点）
+
+{persona_raw}
+
+⚠️ 上述是用户本人的画像。记忆搜索可能混入论文作者、协作者、第三方人员的信息。
+**绝不要把论文作者/第三方的属性当作用户的属性。**
+
 ## 数据
 
 ### AgentOps 系统健康
@@ -83,9 +90,13 @@ MORNING_TRIAGE_PROMPT = """
 ## 规则
 1. AgentOps 全绿时一句话带过"系统健康"，只展开异常信号
 2. 记忆要点按重要性排列，3-5 条，每条 1-2 句。无数据时写"记忆数据积累中，暂无昨日增量"
-3. L2 活跃场景列出当前上下文，无时省略此段
-4. 不要编造任何信息——原始数据没有的就是没有
-5. 输出纯文本，不要 Markdown 标题符号（##），用 emoji + 分段
+3. **过滤规则（关键）**：
+   - 论文下载/元数据修复/zotero 相关的事实 → 跳过（不是用户决策信息）
+   - 涉及论文作者姓名（如 Fanxuan Zeng 等）的记忆 → 跳过（是论文协作者，非用户本人）
+   - 只保留与用户（庄赖宏/OuyangWenyu/owen）直接相关的事实、决策、偏好、计划
+4. L2 活跃场景列出当前上下文，无时省略此段
+5. 不要编造任何信息——原始数据没有的就是没有
+6. 输出纯文本，不要 Markdown 标题符号（##），用 emoji + 分段
 
 ## 输出格式
 🟢 Daily Command Center — {{日期}} {{星期}}
@@ -373,6 +384,7 @@ def summarize_with_llm(
     agentops_signals: list[dict],
     memory_items: list[str],
     scenarios: list[str],
+    persona: str,
 ) -> str:
     """Use DeepSeek to generate a natural language summary of the raw data.
 
@@ -391,11 +403,13 @@ def summarize_with_llm(
         f"- {m[:200]}" for m in memory_items[:10]
     )
     scenarios_raw = "暂无" if not scenarios else "\n".join(f"- {s}" for s in scenarios)
+    persona_raw = persona[:2000] if persona else "（用户画像尚未生成，请仅根据记忆事实判断哪些与用户本人相关）"
 
     prompt = MORNING_TRIAGE_PROMPT.format(
         agentops_raw=agentops_raw,
         memory_raw=memory_raw,
         scenarios_raw=scenarios_raw,
+        persona_raw=persona_raw,
     ).replace("{{日期}}", f"{today.month}月{today.day}日").replace(
         "{{星期}}", _weekday_cn(today)
     )
@@ -463,13 +477,21 @@ def main():
     memory_items = search_memories_batch()
     logger.info("  记忆事实: %d 条", len(memory_items))
 
-    # 2. Recall L2 scenarios
+    # 2. Recall L2 scenarios (includes persona profile)
     scenarios = []
+    persona_text = ""
     try:
         recall = _gateway_post("/recall", {"query": "最近活动", "session_key": "personal_hermes"})
         ctx = _extract_text(recall)
         if ctx and "No matching" not in ctx:
-            scenarios.append(ctx[:500])
+            # /recall returns composite context — first chunk is usually persona
+            if "<user-persona>" in ctx:
+                parts = ctx.split("<user-persona>", 1)
+                persona_text = ("<user-persona>" + parts[1])[:3000] if len(parts) > 1 else ""
+                if persona_text:
+                    logger.info("  persona: %d chars", len(persona_text))
+            else:
+                scenarios.append(ctx[:500])
     except RuntimeError as e:
         logger.warning("L2 recall failed: %s", e)
 
@@ -489,7 +511,7 @@ def main():
 
     # 5. Generate report (LLM with template fallback)
     logger.info("生成汇总报告...")
-    report = summarize_with_llm(agentops_signals, memory_items, scenarios)
+    report = summarize_with_llm(agentops_signals, memory_items, scenarios, persona_text)
 
     # Append manual override to output
     if manual_override.strip():
