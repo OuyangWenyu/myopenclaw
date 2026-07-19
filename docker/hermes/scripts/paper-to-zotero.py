@@ -175,25 +175,85 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
         }
         item["itemType"] = type_map.get(cr_type, "preprint")
 
-        # Journal info → extra
+        # Route journal/container metadata based on itemType
+        itype = item["itemType"]
         container = cr.get("container-title", [])
-        if container:
-            extra["publicationTitle"] = container[0]
         vol = cr.get("volume")
-        if vol:
-            extra["volume"] = str(vol)
         issue = cr.get("issue")
-        if issue:
-            extra["issue"] = str(issue)
         page = cr.get("page")
-        if page:
-            extra["pages"] = str(page)
-        issn = cr.get("ISSN", [])
-        if issn:
-            extra["ISSN"] = issn[0] if isinstance(issn, list) else str(issn)
+        issn_val = cr.get("ISSN", [])
+        if isinstance(issn_val, list):
+            issn_val = issn_val[0] if issn_val else None
+        # Crossref has a dedicated ISBN field for books / proceedings;
+        # prefer it over ISSN for non-journal types.
+        isbn_vals = cr.get("ISBN", [])
+        if isinstance(isbn_vals, list):
+            isbn_val = isbn_vals[0] if isbn_vals else None
+        else:
+            isbn_val = isbn_vals  # handle bare string edge case
         publisher = cr.get("publisher")
-        if publisher:
-            extra["publisher"] = publisher
+
+        # Resolve identifier for book-ish types: prefer ISBN, fall back to ISSN
+        _book_id = isbn_val or issn_val
+
+        if itype == "journalArticle":
+            if container:
+                item["publicationTitle"] = container[0]
+            if vol:
+                item["volume"] = str(vol)
+            if issue:
+                item["issue"] = str(issue)
+            if page:
+                item["pages"] = str(page)
+            if issn_val:
+                item["ISSN"] = issn_val
+            if publisher:
+                item["publisher"] = publisher
+        elif itype == "conferencePaper":
+            if container:
+                item["proceedingsTitle"] = container[0]
+            if vol:
+                extra["volume"] = str(vol)
+            if issue:
+                extra["issue"] = str(issue)
+            if page:
+                extra["pages"] = str(page)
+            if _book_id:
+                item["ISBN"] = _book_id
+            if publisher:
+                item["publisher"] = publisher
+        elif itype == "bookSection":
+            if container:
+                item["bookTitle"] = container[0]
+            if vol:
+                extra["volume"] = str(vol)
+            if issue:
+                extra["issue"] = str(issue)
+            if page:
+                extra["pages"] = str(page)
+            if _book_id:
+                item["ISBN"] = _book_id
+            if publisher:
+                item["publisher"] = publisher
+        elif itype == "book":
+            if _book_id:
+                item["ISBN"] = _book_id
+            if publisher:
+                item["publisher"] = publisher
+        else:
+            # preprints and unknown types — everything goes to extra
+            if container:
+                extra["publicationTitle"] = container[0]
+            if vol:
+                extra["volume"] = str(vol)
+            if issue:
+                extra["issue"] = str(issue)
+            if page:
+                extra["pages"] = str(page)
+            if issn_val:
+                extra["ISSN"] = issn_val
+            if publisher:
+                extra["publisher"] = publisher
 
     else:
         # Crossref failed — try arXiv (may have been pre-fetched above)
@@ -256,8 +316,13 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
     item["DOI"] = doi
     item["url"] = f"https://doi.org/{doi}"
 
-    # Try to build citationKey from extra
-    pub = extra.get("publicationTitle", "")
+    # Try to build citationKey
+    pub = (
+        item.get("publicationTitle")
+        or item.get("proceedingsTitle")
+        or item.get("bookTitle")
+        or extra.get("publicationTitle", "")
+    )
     if item.get("title") and pub:
         # Simple citation key: firstAuthorYear_JournalAbbrev
         first_author = ""
