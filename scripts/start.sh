@@ -316,12 +316,13 @@ else
   if docker compose ps hermes 2>/dev/null | grep -q 'Up'; then
   EXISTING=$(docker compose exec -T hermes hermes cron list 2>/dev/null | grep -c "Daily Command Center" || true)
   if [ "${EXISTING:-0}" -lt 1 ]; then
-    docker compose exec -T hermes hermes cron create \
-      "0 50 7 * * *" \
+    docker compose exec -T hermes /opt/hermes/.venv/bin/hermes cron create \
+      "50 23 * * *" \
       "执行 morning-triage-v2 skill：查询 TDAI 记忆 + AgentOps 健康信号 + 生成 Daily Command Center 汇总。回复即飞书推送。" \
       --skill morning-triage-v2 \
+      --deliver origin \
       --name "Daily Command Center" 2>/dev/null && \
-      echo "   📋 Morning Triage v2 cron job 已注册 (每日 7:50)" || \
+      echo "   📋 Morning Triage v2 cron job 已注册 (每日 7:50 北京)" || \
       echo "   ⚠️  Morning Triage v2 cron job 注册失败"
   else
     echo "   📋 Morning Triage v2 cron job 已存在，跳过"
