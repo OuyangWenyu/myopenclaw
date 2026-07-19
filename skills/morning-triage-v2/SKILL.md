@@ -1,80 +1,134 @@
 ---
 name: morning-triage-v2
-description: 记忆驱动的每日自动汇总 — 查询 TDAI Memory + AgentOps，生成飞书决策推送
-version: 2.0.0
+description: 每日决策信息汇总 — 查询 TDAI 记忆 + AgentOps 健康 + 生成 Daily Command Center 飞书推送。由 Hermes cron 自动调度。
+version: 3.0.0
 metadata:
   hermes:
-    tags: [daily, memory, triage, feishu]
-  replaces: myloop/morning-triage
-  schedule: launchd 每天 7:50 AM
-  exec_script: scripts/morning-triage-summary.py
+    tags: [daily, memory, triage, cron]
+  cron:
+    schedule: "0 50 7 * * *"
+    name: "Daily Command Center"
 ---
 
-# Morning Triage v2 — 记忆驱动的每日自动汇总
+# Morning Triage v2 — 每日决策信息汇总
 
-你是用户的每日决策信息编辑。每天早上，你从 TDAI 记忆管线和 AgentOps 采集昨日信息，生成一份 3-5 分钟的飞书推送。
+你是用户的 AI 秘书。每次运行你在 **全新 session** 中，没有上下文，所有数据和指令都在本 skill 中。
 
-**核心原则**：
-- 只展示信息增量（昨天有什么新的事实/决策/变化）
-- AgentOps 只报异常（正常运行时不占篇幅）
-- 不编造、不猜测——记忆没查到就说"暂无昨日记忆增量"，AgentOps 全绿就说"系统健康"
-- 推送是用户做决策的输入，不是监控告警
+## 数据采集
 
-## 数据源
+按顺序执行以下 Python 代码块。每个代码块是一个独立的 `python3 -c` 命令。
 
-### 1. TDAI 记忆（L1 结构化事实 + L2 场景）
+### 1. TDAI 记忆搜索（L1 结构化事实）
 
-查询 TDAI Memory Gateway (`tdai-memory:8420`)：
+```bash
+python3 -c "
+import json, urllib.request
 
-```python
-# L1 事实搜索 — 用一组高频关键词覆盖昨日交互主题
-POST /search/memories  {"query": "<keyword>", "limit": 10}
-
-# L2 场景召回 — 获取当前活跃上下文
-POST /recall  {"query": "最近活动", "session_key": "personal_hermes"}
-
-# L0 原始对话搜索 — 兜底（L1 稀疏时用）
-POST /search/conversations  {"query": "<keyword>", "limit": 5}
+keywords = ['决定,decision', '偏好,preference', '计划,plan,todo,待办', '重要,important', '发现,insight', '变更,change']
+for kw in keywords:
+    try:
+        body = json.dumps({'query': kw, 'limit': 5}).encode()
+        req = urllib.request.Request('http://tdai-memory:8420/search/memories', data=body, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+            results = data.get('results', '')
+            if results and 'No matching' not in str(results):
+                print(results[:300])
+    except Exception as e:
+        print(f'(gateway search error: {e})')
+" 2>/dev/null
 ```
 
-关键词覆盖：`decision,decision_made,偏好,preference,计划,plan,待办,todo,重要,important,发现,insight,变更,change,提醒,reminder`
+### 2. L2 场景召回
 
-### 2. AgentOps 健康信号
+```bash
+python3 -c "
+import json, urllib.request
+try:
+    body = json.dumps({'query': '最近活动', 'session_key': 'personal_hermes'}).encode()
+    req = urllib.request.Request('http://tdai-memory:8420/recall', data=body, method='POST')
+    req.add_header('Content-Type', 'application/json')
+    with urllib.request.urlopen(req, timeout=10) as r:
+        data = json.loads(r.read())
+        ctx = data.get('context', '')
+        if ctx and 'No matching' not in ctx:
+            print(ctx[:500])
+except Exception as e:
+    print(f'(gateway recall error: {e})')
+" 2>/dev/null
+```
 
-运行 `collect_agentops.py` 的采集逻辑（容器状态、备份新鲜度、磁盘使用率、网关错误循环）。只关注异常信号；全绿时一句话带过。
+### 3. AgentOps — 容器健康
 
-### 3. 可选：手动 override
+```bash
+python3 -c "
+import json, urllib.request
+try:
+    req = urllib.request.Request('http://localhost/containers/json?all=true', method='GET')
+    req.add_header('Host', 'localhost')
+    # Docker socket
+    import socket
+    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    sock.connect('/var/run/docker.sock')
+    sock.sendall(b'GET /containers/json?all=true HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
+    resp = b''
+    while True:
+        chunk = sock.recv(4096)
+        if not chunk: break
+        resp += chunk
+    sock.close()
+    body = resp.split(b'\r\n\r\n', 1)[1] if b'\r\n\r\n' in resp else b''
+    containers = json.loads(body)
+    for c in containers:
+        state = c.get('State', '')
+        status = c.get('Status', '')
+        name = c.get('Names', ['?'])[0].lstrip('/')
+        if state != 'running' or '(unhealthy)' in status:
+            print(f'{name}: {state} {status}')
+except Exception as e:
+    print(f'(docker socket error: {e})')
+" 2>/dev/null
+```
 
-如果 `skills/morning-triage-v2/manual-override.md` 有内容，作为用户手动追记的额外信息附在推送末尾。
+### 4. 磁盘使用
 
-## 输出
+```bash
+python3 -c "
+import os
+try:
+    s = os.statvfs('/')
+    total = s.f_frsize * s.f_blocks
+    avail = s.f_frsize * s.f_bavail
+    used = total - avail
+    pct = round(used / total * 100) if total > 0 else 0
+    print(f'{pct}% used (avail {avail//(1024**3)}G)')
+except Exception as e:
+    print(f'(disk error: {e})')
+"
+```
 
-飞书交互卡片，Markdown 格式，三段式结构：
+## 汇总规则
 
-```markdown
-🟢 **Daily Command Center — {日期} {星期}**
+1. **过滤论文元数据**: 涉及论文作者、zotero、paper-to-zotero 的记忆 → 跳过
+2. 只保留与用户（庄赖宏/OuyangWenyu/owen）直接相关的事实、决策、偏好
+3. AgentOps 全绿时一句话带过，只展开异常
+4. 磁盘使用 > 85% 时报一下
+5. 记忆为空时写"记忆数据积累中，暂无昨日增量"
+6. 不要编造任何信息——没有数据就说没有
+
+## 输出格式（你的响应即飞书推送）
+
+```
+🟢 Daily Command Center — {月}月{日}日 {星期}
 
 ━━━ 系统健康 ━━━
-{AgentOps 异常信号列表，或 "✅ 所有服务正常运行"}
+{AgentOps 摘要，或 "✅ 所有服务正常运行"}
 
 ━━━ 昨日记忆 ━━━
-{从 TDAI L1 事实总结的要点，3-5 条。无数据时写 "📝 记忆数据积累中，暂无昨日增量"}
+{3-5 条关键事实/决策/偏好，每条 1-2 句}
+{无数据时: "📝 记忆数据积累中，暂无昨日增量"}
 
 ━━━ 活跃场景 ━━━
-{当前 L2 活跃场景列表，无时写 "—"}
+{当前活跃上下文，或 "—"}
 ```
-
-## 执行
-
-本 skill 不是对话式 skill。它由 `scripts/morning-triage-summary.py` 脚本调用，脚本负责：
-1. 查询 TDAI Gateway
-2. 运行 AgentOps 采集
-3. 调用 LLM（DeepSeek）生成自然语言摘要
-4. 通过飞书 Bot API 推送到用户
-
-脚本通过 launchd 每天 7:50 AM 在宿主机触发（需要 Docker socket 访问 + `scripts/collect_agentops.py` 的 AgentOps 采集能力）：
-```
-cd ~/code/myopenclaw && python3 scripts/morning_triage_summary.py
-```
-
-SKILL.md 提供 prompt 上下文给 LLM 汇总时使用。日常运行不依赖 Hermes agent 对话——脚本直接调 HTTP API + LLM。

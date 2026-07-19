@@ -19,6 +19,7 @@ services:
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
