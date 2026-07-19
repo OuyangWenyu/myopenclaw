@@ -1,28 +1,33 @@
 #!/usr/bin/env python3
 """
-Send a Feishu interactive card via Hermes's own bot identity.
+Send a Feishu interactive card via Hermes's bot identity.
 
 Reads Markdown content from stdin, wraps it in a Feishu interactive card,
-and sends via lark-cli (Hermes bot) to the configured chat.
+and sends to the configured chat via Feishu Bot API.
+
+Credentials: FEISHU_APP_ID/SECRET or LARK_CLI_APP_ID/SECRET (env vars).
 
 Usage (inside hermes container):
-  echo "## Test" | python3 send_card.py
-  python3 send_card.py < summary.md
+  echo "## Daily Command Center" | python3 send_card.py
 
 Env (optional):
-  LARK_CHAT_ID — target chat_id (default: AI秘书项目 group)
+  LARK_CHAT_ID — target chat_id (default: AI秘书项目)
 """
 
 import json
 import os
-import subprocess
 import sys
+import urllib.error
+import urllib.request
 from datetime import date
 
 CHAT_ID = os.environ.get(
     "LARK_CHAT_ID",
-    "oc_cee7a420564a62bffabb5503d368663a",  # AI秘书项目
+    "oc_cee7a420564a62bffabb5503d368663a",
 )
+
+APP_ID = os.environ.get("FEISHU_APP_ID") or os.environ.get("LARK_CLI_APP_ID", "")
+APP_SECRET = os.environ.get("FEISHU_APP_SECRET") or os.environ.get("LARK_CLI_APP_SECRET", "")
 
 
 def _weekday_cn(d: date) -> str:
@@ -30,10 +35,49 @@ def _weekday_cn(d: date) -> str:
     return days[d.weekday()]
 
 
+def get_tenant_token() -> str:
+    """Get Feishu tenant_access_token."""
+    body = json.dumps({
+        "app_id": APP_ID,
+        "app_secret": APP_SECRET,
+    }).encode()
+    req = urllib.request.Request(
+        "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal",
+        data=body, method="POST",
+    )
+    req.add_header("Content-Type", "application/json")
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.loads(r.read())
+    return data["tenant_access_token"]
+
+
+def send_card(token: str, chat_id: str, card_json: str) -> dict:
+    """Send an interactive card to a chat."""
+    payload = json.dumps({
+        "receive_id": chat_id,
+        "msg_type": "interactive",
+        "content": card_json,
+    }, ensure_ascii=False).encode("utf-8")
+
+    req = urllib.request.Request(
+        "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=chat_id",
+        data=payload, method="POST",
+    )
+    req.add_header("Authorization", f"Bearer {token}")
+    req.add_header("Content-Type", "application/json; charset=utf-8")
+
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read())
+
+
 def main():
     content = sys.stdin.read().strip()
     if not content:
-        print("❌ 无输入内容", file=sys.stderr)
+        print("No input content", file=sys.stderr)
+        sys.exit(1)
+
+    if not APP_ID or not APP_SECRET:
+        print("Missing FEISHU_APP_ID/SECRET or LARK_CLI_APP_ID/SECRET", file=sys.stderr)
         sys.exit(1)
 
     today = date.today()
@@ -43,7 +87,10 @@ def main():
         "header": {
             "title": {
                 "tag": "plain_text",
-                "content": f"Daily Command Center — {today.strftime('%-m月%-d日')} {_weekday_cn(today)}",
+                "content": (
+                    f"Daily Command Center — "
+                    f"{today.strftime('%-m月%-d日')} {_weekday_cn(today)}"
+                ),
             },
             "template": "blue",
         },
@@ -51,45 +98,25 @@ def main():
             {"tag": "markdown", "content": content}
         ],
     }
-
-    body = json.dumps({
-        "receive_id": CHAT_ID,
-        "msg_type": "interactive",
-        "content": json.dumps(card, ensure_ascii=False),
-    }, ensure_ascii=False)
-
-    # Bind lark-cli to Hermes context (idempotent)
-    subprocess.run(
-        ["lark-cli", "config", "bind", "--source", "hermes", "--identity", "bot-only"],
-        capture_output=True,
-    )
-
-    # Send via lark-cli
-    result = subprocess.run(
-        [
-            "lark-cli", "--as", "bot", "api", "POST",
-            f"/open-apis/im/v1/messages?receive_id_type=chat_id",
-            "--data", body,
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-
-    if result.returncode != 0:
-        print(f"❌ lark-cli 发送失败: {result.stderr}", file=sys.stderr)
-        sys.exit(1)
+    card_json = json.dumps(card, ensure_ascii=False)
 
     try:
-        resp = json.loads(result.stdout)
-        code = resp.get("code", -1)
+        token = get_tenant_token()
+        result = send_card(token, CHAT_ID, card_json)
+        code = result.get("code", -1)
         if code == 0:
-            print("✅ 推送成功", file=sys.stderr)
+            print("OK", file=sys.stderr)
         else:
-            print(f"❌ 飞书 API 错误: code={code} msg={resp.get('msg', 'unknown')}", file=sys.stderr)
+            print(
+                f"Feishu API error: code={code} msg={result.get('msg', 'unknown')}",
+                file=sys.stderr,
+            )
             sys.exit(1)
-    except json.JSONDecodeError:
-        print(f"❌ lark-cli 返回非 JSON: {result.stdout[:200]}", file=sys.stderr)
+    except urllib.error.HTTPError as e:
+        print(f"HTTP {e.code}: {e.read().decode()[:500]}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Send failed: {e}", file=sys.stderr)
         sys.exit(1)
 
 
