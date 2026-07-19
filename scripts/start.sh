@@ -285,6 +285,17 @@ echo "   备份目录: ${BACKUP_ROOT}"
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
 
+# ── Hermes 默认模型 → deepseek-v4-pro ──────────────────────────
+if grep -q 'default: deepseek-v4-flash' "${HERMES_CONFIG}" 2>/dev/null; then
+  python3 -c "
+import yaml
+cfg = yaml.safe_load(open('${HERMES_CONFIG}'))
+cfg['model']['default'] = 'deepseek-v4-pro'
+yaml.dump(cfg, open('${HERMES_CONFIG}', 'w'), default_flow_style=False, allow_unicode=True)
+"
+  echo "   🧠 Hermes 默认模型 → deepseek-v4-pro"
+fi
+
 # ── 启用 Hermes Cron Scheduler ─────────────────────────────────
 HERMES_CONFIG="${HOME}/.hermes/config.yaml"
 if [[ -f "${HERMES_CONFIG}" ]]; then
