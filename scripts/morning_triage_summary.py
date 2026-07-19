@@ -432,10 +432,20 @@ def summarize_with_llm(
 
 
 def read_manual_override() -> str:
-    """Read manual-override.md if it exists and has content."""
+    """Read manual-override.md, stripping HTML comments and blank lines."""
     try:
         if MANUAL_OVERRIDE_PATH.is_file():
-            content = MANUAL_OVERRIDE_PATH.read_text().strip()
+            raw = MANUAL_OVERRIDE_PATH.read_text()
+            # Strip HTML comments
+            cleaned = re.sub(r"<!--.*?-->", "", raw, flags=re.DOTALL)
+            # Strip leading/trailing whitespace per line
+            lines = [l.rstrip() for l in cleaned.split("\n")]
+            # Remove leading blank lines and trailing blank lines
+            while lines and not lines[0].strip():
+                lines.pop(0)
+            while lines and not lines[-1].strip():
+                lines.pop()
+            content = "\n".join(lines).strip()
             if content:
                 return content
     except OSError:
