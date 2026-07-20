@@ -109,17 +109,19 @@ python3 scripts/collect_agentops.py --dry-run                 # 预览模式（�
 launchctl start ai.myopenclaw.collect-agentops                # 手动触发采集
 tail -f logs/collect-agentops.log                             # 查看采集日志
 
-# Repo scanner（仓库动态采集 + 推送）
-python3 scripts/collect-repos.py                              # 手动运行 24h 仓库采集（写入 SQLite）
-python3 scripts/collect-repos.py --dry-run                    # 预览模式（输出到 stdout，不写库）
-python3 scripts/repo-summary.py --json                        # 查询 SQLite 仓库摘要（JSON 输出）
-python3 scripts/repo-triage-send.py                           # 手动运行仓库动态推送（SQLite → LLM → 飞书）
-python3 scripts/repo-triage-send.py --dry-run                 # 预览模式（输出到 stdout，不推送）
-./scripts/launchd/install-collect-repos.sh                    # 安装每天 7:45 仓库采集
-./scripts/launchd/install-repo-triage.sh                      # 安装每天 7:55 仓库动态推送
-launchctl start ai.myopenclaw.collect-repos                   # 手动触发采集
-launchctl start ai.myopenclaw.repo-triage                     # 手动触发推送
-tail -f logs/repo-triage.log                                  # 查看推送日志
+# Repo scanner — git-contribution-stats（27 仓库每日采集 + 研发日报推送）
+cd ~/code/git-contribution-stats && python3 scripts/collect.py           # 手动全量采集（写入 SQLite）
+cd ~/code/git-contribution-stats && python3 scripts/collect.py --dry-run # 预览模式
+python3 ~/code/git-contribution-stats/core/report.py                     # 查看日报数据
+bash ~/code/git-contribution-stats/scripts/launchd/install-collect.sh    # 安装每天 07:45 采集
+launchctl start ai.git-contribution-stats.collect                        # 手动触发采集
+tail -f ~/code/git-contribution-stats/logs/collect.log                   # 查看采集日志
+
+# Daily dev report — Hermes skill（研发日报 MCP + LLM + 飞书推送）
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep daily-dev  # 查看 cron 状态
+docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp list | grep repo-scanner  # 查看 MCP 连接
+docker compose exec repo-scanner-mcp python3 -c "from core.report import daily_report_as_dict; print(daily_report_as_dict())"  # 查看日报数据
+cat /tmp/report.txt | docker compose exec -T hermes python3 /opt/hermes-skills/daily-dev-report/tools/send_card.py  # 手动推送测试
 ```
 
 ## ⚠️ OpenClaw 配置安全规则
@@ -154,7 +156,7 @@ docker compose pull openclaw-gateway
 
 ## Architecture
 
-**Seven Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+**Eight Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
@@ -169,6 +171,8 @@ docker compose pull openclaw-gateway
 5. **hermes-dashboard** — Stock Hermes image running `dashboard --host 0.0.0.0`. Read-only, shares the hermes data volume.
 
 6. **tdai-memory** — Custom image (`docker/tdai-memory/Dockerfile`) based on `ubuntu:24.04` with Node.js 22 and `@tencentdb-agent-memory/memory-tencentdb@0.3.6`. Port 8420. Provides shared L0→L3 memory pipeline (Gateway HTTP API) for personal agents. LLM backend: DeepSeek (`TDAI_LLM_API_KEY` env). Data stored at `~/.myagentdata/tdai-memory/`. Resource limit 1G (OOM at 512M during large-JSON init). 4 agents share this Gateway bidirectionally — see **Agent Memory (TDAI)** design decision below.
+
+7. **repo-scanner-mcp** — Custom image from `../git-contribution-stats` (`docker/mcp-server/Dockerfile`) using `python:3.12-slim` + `mcp==1.28.1`. Port 8001. Streamable HTTP MCP server exposing 3 tools: `get_daily_report` (person-centric daily R&D report), `query_commits` (raw commit query), `query_authors` (active authors). Data source: `~/.myagentdata/repo-scanner/repos.sqlite` (read-only mount). Used by Hermes via MCP client (`~/.hermes/config.yaml` → `mcp_servers.repo-scanner`). Resource limits: 256M/0.5 CPU.
 
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
@@ -238,6 +242,8 @@ myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
   - **CC飞总 read** (claude-code): MCP server `docker/tdai-memory/mcp-server/server.py` (stdio, 4 read tools: `memory_search`/`conversation_search`/`read_scenario`/`read_core`), registered in `settings.json` mcpServers by `entrypoint.sh`.
   - **CC飞总 write** (claude-code): `docker/claude-code/capture-to-gateway.py` Stop hook, registered in `settings.json` hooks.Stop. Every turn end, it reads the transcript's last user+assistant turn (merges contiguous assistant records, extracts only `text` blocks, skips slash-commands/caveats/tool output), POSTs to Gateway `/capture` with `session_id=personal_ccfeizong`. **Never blocks CC飞总** (exit 0 on any error) but writes a heartbeat/failure log to `~/.myagentdata/tdai-memory/capture-hook.log` (RotatingFileHandler, 1MB×2 — bounded, unlike the 762MB incident) so a broken pipeline is diagnosable. TDAI pipeline handles L1 value-filtering/dedup/layering, so raw verbosity in gets distilled to key facts.
   - **Restart auto-recovery**: `docker compose up -d` / `./scripts/start.sh` recovers all memory wiring with zero manual steps — hermes entrypoint re-installs the plugin + re-injects config; claude-code entrypoint re-registers the Stop hook. Verified by force-recreate. LLM key reuses `DEEPSEEK_API_KEY` (4th independent key domain per isolation philosophy). Bearer auth off (Docker internal network). Full design in `.claude/prds/agent-memory.prd.md`.
+
+- **Daily R&D Report (repo-scanner MCP + Hermes skill)**: git-contribution-stats collects 27 repos daily (GitHub + GitCode) into SQLite (`~/.myagentdata/repo-scanner/repos.sqlite`). A streamable HTTP MCP server (`repo-scanner-mcp`, port 8001) exposes `get_daily_report` / `query_commits` / `query_authors`. Hermes `daily-dev-report` skill calls MCP → DeepSeek LLM polish → Feishu private chat push. Cron: 07:45 launchd collection → 07:55 Hermes cron push. MCP config: `~/.hermes/config.yaml` (`mcp_servers.repo-scanner` + `platform_toolsets.cli`). Skill at `skills/daily-dev-report/SKILL.md`. Full design in `.claude/prds/daily-dev-report.prd.md`.
 
 - **⚠️ Hermes image cannot be rebuilt with `docker compose build`**: The current `myopenclaw/hermes:latest` was patched (based on an existing image, COPYing the updated `entrypoint-wrapper.sh`) rather than built clean, because the cardamum Rust build stage fails against an upstream `io-addressbook` incompatible change (unrelated to this project). **Daily `docker compose up` / restart / host reboot all work fine** (uses the existing image + entrypoint automation). Only `docker compose build hermes` or `up --build` hits the cardamum error. Do NOT touch the cardamum stage — contacts work as-is. If the hermes image ever needs a clean rebuild, the cardamum upstream issue must be fixed first (or pin to a compilable rev / use the v0.1.0 binary).
 
