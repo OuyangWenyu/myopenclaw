@@ -467,6 +467,60 @@ PYEOF
     done
 fi
 
+# ── Ensure profile auto-starts after container restart ──────────
+# v0.18.2 multi-profile reconciliation reads desired_state from per-profile
+# gateway_state.json. Multiple containers share $HERMES_HOME; when one gateway
+# stops another container's profile, it writes gateway_state:stopped. Without
+# an explicit desired_state:running, the next reconcile registers but does NOT
+# auto-start the profile — so the bot stays silent.
+#
+# Write operator intent for THIS container's profile, and REMOVE desired_state
+# from other profiles so they don't auto-start here (each container only owns
+# one profile). Deleting the state file doesn't affect already-running gateways
+# in other containers — reconcile only matters at boot time.
+HERMES_HOME="${HERMES_HOME:-/opt/data}"
+PROFILE="${HERMES_PROFILE:-default}"
+
+# Ensure this profile's state says desired_state=running
+STATE_FILE="${HERMES_HOME}/gateway_state.json"
+if [ "${PROFILE}" != "default" ]; then
+    STATE_FILE="${HERMES_HOME}/profiles/${PROFILE}/gateway_state.json"
+    mkdir -p "$(dirname "${STATE_FILE}")"
+fi
+if [ ! -f "${STATE_FILE}" ] || ! grep -q '"desired_state"' "${STATE_FILE}" 2>/dev/null; then
+    python3 - "${STATE_FILE}" << 'PYEOF'
+import sys, json, time
+state_file = sys.argv[1]
+try:
+    with open(state_file) as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+data["desired_state"] = "running"
+data.setdefault("gateway_state", "running")
+data["timestamp"] = int(time.time())
+with open(state_file, 'w') as f:
+    json.dump(data, f)
+PYEOF
+    echo "   🔄 ${PROFILE} desired_state → running"
+fi
+
+# Delete gateway_state.json for OTHER profiles so reconcile doesn't
+# auto-start them in this container. A missing file → prior_state=None →
+# not in _AUTOSTART_STATES → registered but not started. This is safe
+# because other containers' already-running gateways are unaffected by
+# the file deletion (reconcile only matters at boot time).
+if [ -d "${HERMES_HOME}/profiles" ]; then
+    for pdir in "${HERMES_HOME}/profiles"/*/; do
+        pname="$(basename "${pdir}")"
+        [ "${pname}" = "${PROFILE}" ] && continue
+        rm -f "${pdir}/gateway_state.json"
+    done
+fi
+if [ "${PROFILE}" != "default" ]; then
+    rm -f "${HERMES_HOME}/gateway_state.json"
+fi
+
 # Hand off to s6-overlay init (v0.18+). The init system runs cont-init.d
 # scripts, then executes its first argument as the "main program".
 # main-wrapper.sh routes "$@" (Docker CMD, e.g. "gateway run") to "hermes gateway run".

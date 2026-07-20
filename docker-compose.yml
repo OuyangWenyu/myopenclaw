@@ -67,7 +67,7 @@ services:
     image: myopenclaw/hermes:latest
     container_name: hermes-coder
     restart: unless-stopped
-    command: gateway run --profile coder
+    command: gateway run --profile coder --replace
     ports:
       - "${HERMES_CODER_PORT:-8643}:8642"
     volumes:
