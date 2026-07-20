@@ -50,6 +50,8 @@ services:
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - FEISHU_DOMAIN=feishu
+      - FEISHU_CONNECTION_MODE=websocket
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -114,6 +116,8 @@ services:
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - FEISHU_DOMAIN=feishu
+      - FEISHU_CONNECTION_MODE=websocket
     shm_size: "1g"
     deploy:
       resources:

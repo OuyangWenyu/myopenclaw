@@ -73,6 +73,11 @@ RUN RCLONE_VER="1.69.2" && \
     dpkg -i /tmp/rclone.deb && \
     rm /tmp/rclone.deb
 
+# ── Install TDAI Memory plugin (npm) ──────────────────────────
+# Pre-installed at build time to avoid blocking gateway startup.
+# Version pinned to 0.3.6 for provider API stability.
+RUN npm install -g @tencentdb-agent-memory/memory-tencentdb@0.3.6
+
 # ── Install uv (Python package manager) ──────────────────────
 # Copy the static binary from the official uv image — no pip/python3-pip needed.
 # https://docs.astral.sh/uv/guides/integration/docker/

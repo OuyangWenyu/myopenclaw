@@ -416,11 +416,6 @@ PKG_DIR="/usr/local/lib/node_modules/${PKG}"
 PLUGIN_SRC="${PKG_DIR}/hermes-plugin/memory/memory_tencentdb"
 PLUGIN_DST="/opt/hermes/plugins/memory/memory_tencentdb"
 
-if [ ! -d "${PKG_DIR}" ]; then
-    echo "   📦 安装 TDAI Memory plugin (${PKG}@0.3.6)..."
-    npm install -g "${PKG}@0.3.6" >/dev/null 2>&1 || echo "   ⚠️  TDAI Memory plugin 安装失败"
-fi
-
 if [ -d "${PLUGIN_SRC}" ]; then
     # Copy (not symlink) so Hermes's plugin scanner discovers it.
     rm -rf "${PLUGIN_DST}"
@@ -473,5 +468,6 @@ PYEOF
 fi
 
 # Hand off to s6-overlay init (v0.18+). The init system runs cont-init.d
-# scripts, then starts the main-hermes service via s6-rc.
-exec /init
+# scripts, then executes its first argument as the "main program".
+# main-wrapper.sh routes "$@" (Docker CMD, e.g. "gateway run") to "hermes gateway run".
+exec /init /opt/hermes/docker/main-wrapper.sh "$@"
