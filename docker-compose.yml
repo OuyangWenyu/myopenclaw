@@ -112,11 +112,8 @@ services:
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-<<<<<<< HEAD
-=======
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
->>>>>>> worktree-morning-triage-v2
     shm_size: "1g"
     deploy:
       resources:
