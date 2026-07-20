@@ -29,7 +29,7 @@ fi
 # ── 检查依赖仓库（非阻塞，仅警告）─────────────────────────────
 echo "🔍 检查依赖仓库..."
 MISSING_REPOS=()
-for repo in "${HOME}/code/aisecretary" "${HOME}/code/git-contribution-stats" "${HOME}/code/myloop" "${HOME}/code/dailyinfo"; do
+for repo in "${HOME}/code/aisecretary" "${HOME}/code/git-contribution-stats" "${HOME}/code/dailyinfo"; do
   if [[ ! -d "${repo}" ]]; then
     MISSING_REPOS+=("$(basename "${repo}")")
   fi

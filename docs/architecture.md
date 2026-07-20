@@ -1,6 +1,6 @@
 # 架构
 
-myopenclaw 由 11 个 Docker 服务组成，运行在共享的 `myopenclaw-net` 桥接网络上。
+myopenclaw 由 12 个 Docker 服务组成（不含 profile-gated 的 openclaw-cli），运行在共享的 `myopenclaw-net` 桥接网络上。
 
 ## 服务拓扑
 
@@ -17,14 +17,14 @@ myopenclaw 由 11 个 Docker 服务组成，运行在共享的 `myopenclaw-net` 
 
 ### 数据与支撑服务
 
-| 服务 | 说明 |
-|------|------|
-| tdai-memory | Agent 长期记忆 Gateway，L0→L3 分层管线，sqlite-vec 本地向量库 |
-| aisecretary | 事务数据库 MCP 服务，7 个 tools，SQLite 持久化 |
-| repo-scanner-mcp | 研发日报 MCP 数据服务，来自 git-contribution-stats |
-| freshrss | RSS 聚合，dailyinfo 数据源 |
-| uptime-kuma | 服务监控面板，HTTP + Docker 容器状态 |
-| backup-cron | 定时快照备份，默认每周日凌晨 2:00 |
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| tdai-memory | 8420 | Agent 长期记忆 Gateway，L0→L3 分层管线 |
+| aisecretary | 8000 | 事务数据库 MCP 服务，7 个 tools，SQLite 持久化 |
+| repo-scanner-mcp | 8001 | 研发日报 MCP 数据服务，来自 git-contribution-stats |
+| freshrss | 8081 | RSS 聚合，dailyinfo 数据源 |
+| uptime-kuma | 3001 | 服务监控面板，HTTP + Docker 容器状态 |
+| backup-cron | — | 定时快照备份 |
 
 ## 数据目录映射
 

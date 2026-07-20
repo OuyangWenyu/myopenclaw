@@ -56,13 +56,7 @@ clone_or_update \
   "${CODE_DIR}/git-contribution-stats" \
   "git-contribution-stats（研发日报数据服务）"
 
-# ── 3. myloop（软依赖：skills symlink）────────────────────────
-clone_or_update \
-  "https://github.com/OuyangWenyu/myloop.git" \
-  "${CODE_DIR}/myloop" \
-  "myloop（loop 设计层 + 晨间三签）"
-
-# ── 4. dailyinfo（软依赖：launchd 调度）───────────────────────
+# ── 3. dailyinfo（软依赖：launchd 调度）───────────────────────
 clone_or_update \
   "https://github.com/iHeadWater/dailyinfo.git" \
   "${CODE_DIR}/dailyinfo" \
@@ -75,7 +69,6 @@ echo "============================================"
 for dir in \
   "${CODE_DIR}/aisecretary" \
   "${CODE_DIR}/git-contribution-stats" \
-  "${CODE_DIR}/myloop" \
   "${CODE_DIR}/dailyinfo"; do
   if [[ -d "${dir}/.git" ]]; then
     echo "  ✅ $(basename "${dir}")"

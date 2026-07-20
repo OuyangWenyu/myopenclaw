@@ -14,7 +14,6 @@ myopenclaw (本仓库)
 │   └── ~/code/git-contribution-stats/ ← build context for repo-scanner-mcp
 │
 ├── [可选·软依赖·运行时 graceful skip]
-│   ├── ~/code/myloop/               ← skills symlink 注入 CC飞总
 │   └── ~/code/dailyinfo/            ← launchd 调度 + ai-news-weekly-polish skill
 │
 ├── [配置文件·需要手动创建]
@@ -46,7 +45,6 @@ myopenclaw (本仓库)
 
 | 仓库 | 期望路径 | 缺失时的影响 |
 |------|----------|-------------|
-| [myloop](https://github.com/OuyangWenyu/myloop) | `~/code/myloop` | 晨间三签、session-memory 等 loop 功能不可用。启动日志显示 `myloop 未挂载，跳过 skill 安装` |
 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) | `~/code/dailyinfo` | AI 情报聚合不可用。launchd 定时任务找不到可执行文件 |
 
 ## 一键克隆
@@ -93,6 +91,5 @@ myopenclaw (本仓库)
 以下内容由各自的仓库独立管理，myopenclaw 只负责引用：
 
 - dailyinfo 的 secret、数据源、业务逻辑 → dailyinfo 仓
-- myloop 的 skill 设计、分类规则、ledger → myloop 仓
 - git-contribution-stats 的采集逻辑、SQLite schema → git-contribution-stats 仓
 - aisecretary 的 MCP tools 实现 → aisecretary 仓

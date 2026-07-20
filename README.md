@@ -10,18 +10,18 @@
 | 跨 Agent 长期记忆 | TDAI Memory L0→L3 分层管线，4 agent 双向共享 | — |
 | 飞书直连 | cc-connect（Claude Code）+ lark-cli（Hermes） | — |
 | Discord 桥接 | Hermes coder（爱码士）+ OpenClaw（虾酱） | — |
-| 晨间三签 | MyLoop morning-triage → 飞书推送决策支撑报告 | [myloop](https://github.com/OuyangWenyu/myloop) |
+| 晨间三签 | Hermes cron skill → TDAI + AgentOps 信号 → 飞书推送 | — |
 | AI 情报聚合 | dailyinfo 多源抓取 + AI 摘要 → 飞书推送 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) |
 | 研发日报 | repo-scanner MCP 采集 27 仓库 → Hermes skill → 飞书推送 | [git-contribution-stats](https://github.com/OuyangWenyu/git-contribution-stats) |
 | 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |
 | 事务追踪 | aisecretary MCP 服务 → SQLite 持久化 | [aisecretary](https://github.com/OuyangWenyu/aisecretary) |
+| 服务健康监控 | AgentOps 采集（容器/备份/磁盘/网关信号）→ 晨间三签输入 | — |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 | — |
 
 ## 仓库配合
 
 ```
-myloop/                    ← loop 设计层（skill 合同、分类规则）
 dailyinfo/                 ← AI 情报聚合（RSS + AI 摘要）
 aisecretary/               ← 事务数据库 MCP
 git-contribution-stats/    ← 多仓库 Git 贡献统计
@@ -38,8 +38,7 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层
     └─ uptime-kuma   (服务监控)
 ```
 
-- **设计归 myloop，执行归 myopenclaw** — skill 通过 symlink 注入，不复制不分叉
-- **数据归 myopenclaw 管** — 统一落 `~/.myagentdata/`，备份管线自动覆盖
+- **所有数据落 `~/.myagentdata/`** — 备份管线自动覆盖
 - **每个仓库独立克隆** — 放在 `~/code/<repo>`，Docker 通过 volume mount 访问
 
 ## 快速开始
@@ -54,7 +53,7 @@ cp .env.example .env          # 编辑 .env，至少填入 DEEPSEEK_API_KEY
 cp .cloud.conf.example .cloud.conf
 
 # 3. （可选）克隆依赖仓库
-./scripts/clone-deps.sh       # 克隆 myloop、dailyinfo、aisecretary、git-contribution-stats
+./scripts/clone-deps.sh       # 克隆 dailyinfo、aisecretary、git-contribution-stats
 
 # 4. 启动所有服务
 ./scripts/start.sh
