@@ -481,17 +481,14 @@ CC飞总 (claude-code)              ← 执行层：读 skill → 分类 → 飞
 
 ### Morning Triage（晨间三签）
 
-每天早上 07:50 自动读取四个信息账本，生成决策支撑报告推送到飞书：
+每天早上 07:50，Hermes 定时 skill `morning-triage-v2` 自动查询 TDAI 记忆，LLM 深度分析后推送到飞书私聊：
 
 ```bash
-# 安装定时任务（新机器首次）
-./scripts/launchd/install-morning-triage.sh
+# 查看 cron 状态
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep "Daily Command"
 
-# 手动触发一次
-launchctl start ai.myloop.morning-triage
-
-# 容器内直接运行
-docker compose exec claude-code python3 /home/node/code/myloop/scripts/morning-triage-send.py
+# 手动触发
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>
 ```
 
 详见 [`docs/myloop-integration.md`](docs/myloop-integration.md)。
@@ -528,7 +525,6 @@ myopenclaw/
     ├── start.sh                # 启动服务（含自动配置 + skill 安装）
     ├── stop.sh                 # 停止服务
     ├── setup-cloud.sh          # 初始化云盘备份目录
-    ├── morning-triage-send.py  # MyLoop morning-triage 执行脚本
     ├── healthchecks-ping.sh    # Healthchecks.io 心跳 ping
     ├── backup-data.sh          # ~/.myagentdata 通用快照脚本
     ├── backup-all.sh           # 本机全量备份（不依赖容器）
@@ -538,7 +534,6 @@ myopenclaw/
     ├── test-aisecretary-integration.sh  # aisecretary 集成验证（TDD，9 项检查）
     └── launchd/
         ├── install-dailyinfo.sh                    # dailyinfo 调度安装
-        ├── install-morning-triage.sh               # morning-triage 调度安装
         ├── install-healthchecks-ping.sh            # Healthchecks 心跳任务安装
         └── *.plist.template                        # launchd plist 模板
 ```
@@ -600,7 +595,7 @@ FreshRSS 配了 `restart: unless-stopped`，起一次之后宿主机重启也会
 | 06:00 | `ai.dailyinfo.push-papers` | `uv run dailyinfo push --categories papers` |
 | 07:00 | `ai.dailyinfo.push-arxiv` | `uv run dailyinfo push --categories arxiv` |
 | 07:45 | `ai.myopenclaw.collect-agentops` | `python3 scripts/collect_agentops.py`（AgentOps 信号自动采集）|
-| 07:50 | `ai.myloop.morning-triage` | `docker compose exec claude-code python3 .../morning-triage-send.py`（MyLoop 晨间三签）|
+| 07:50 | Hermes cron `morning-triage-v2` | TDAI 记忆查询 + LLM 分析 + 飞书推送（Daily Command Center）|
 | 每 60s | `ai.myopenclaw.healthchecks-ping` | `scripts/healthchecks-ping.sh`（Healthchecks.io 心跳）|
 
 日志统一落在 `/Users/owen/code/dailyinfo/logs/dailyinfo-*.log`。
