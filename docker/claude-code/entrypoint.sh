@@ -65,21 +65,6 @@ for skill_dir in /opt/dailyinfo-skills/*/; do
     ln -sf "$skill_dir" "$target"
 done
 
-# ── myloop skills -> Claude Code skills ───────────────────────
-# myloop 是独立的 loop 设计项目，通过 volume 挂载到 /home/node/code/myloop
-# 如果存在则 symlink 其 skills/ 到 CC飞总 skills 目录（不复制、不分叉）
-if [ -d "/home/node/code/myloop/skills" ]; then
-    for skill_dir in /home/node/code/myloop/skills/*/; do
-        skill_name=$(basename "$skill_dir")
-        target="/home/node/.claude/skills/${skill_name}"
-        rm -rf "$target"
-        ln -sf "$skill_dir" "$target"
-    done
-    echo "📎 myloop skills: $(ls /home/node/code/myloop/skills/ 2>/dev/null | tr '\n' ' ')"
-else
-    echo "ℹ️  myloop 未挂载，跳过 skill 安装（clone myloop 到 ~/code/myloop 即可自动加载）"
-fi
-
 # ── API key mapping: DeepSeek → Anthropic ─────────────────────
 # Claude Code reads ANTHROPIC_API_KEY; map DEEPSEEK_API_KEY → ANTHROPIC_API_KEY
 export ANTHROPIC_API_KEY="${DEEPSEEK_API_KEY:-${ANTHROPIC_API_KEY:-}}"

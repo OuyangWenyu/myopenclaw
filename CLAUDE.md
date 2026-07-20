@@ -161,7 +161,7 @@ docker compose pull openclaw-gateway
 
 1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Three profiles: default (port 8642), coder (8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644). Dashboard on port 9119.
 
-2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), auto-symlinks myloop skills from `/home/node/code/myloop/skills/` into CC飞总's skill directory, maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-pro` as the default model. Port 9090 (cc-connect web admin).
+2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-pro` as the default model. Port 9090 (cc-connect web admin).
 
 3. **openclaw-gateway** — Stock `ghcr.io/openclaw/openclaw:latest` image. Port 18789. Has healthcheck via `/healthz`.
 
@@ -177,44 +177,7 @@ docker compose pull openclaw-gateway
 
 **dailyinfo scheduling**: Managed via host launchd (not Docker). `scripts/launchd/` contains plist templates and install/uninstall scripts. dailyinfo is a sibling repo (`../dailyinfo`) with its own Docker services (FreshRSS).
 
-## MyLoop Integration（赛博永生）
-
-myopenclaw 是 MyLoop 的**执行层**。MyLoop 定义 loop 设计（skill 合同、分类规则、输出格式），myopenclaw 负责执行（CC飞总、脚本、调度）。
-
-### Skill 加载机制
-
-myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
-
-```
-~/code/myloop/skills/*/  ──symlink──→  ~/.claude/skills/*/
-       (设计源)                              (CC飞总可读)
-```
-
-容器启动时 `entrypoint.sh` 自动检测 `/home/node/code/myloop/skills/`，存在则 symlink 全部 skill 目录。新机器只需 `git clone myloop ~/code/myloop` 即可自动加载。
-
-```
-📎 myloop skills: knowledge-sync morning-triage paper-ingest session-memory verify-and-ship weekly-digest
-```
-
-### 当前已实现的 Loop
-
-| Loop | 状态 | 触发方式 |
-|------|------|----------|
-| morning-triage | ✅ v2 | Hermes cron 每天 07:50，skill `morning-triage-v2`（TDAI 记忆 + LLM 分析 + 飞书推送）|
-| session-memory | 设计完成 | 待实现 |
-| knowledge-sync | 设计完成 | 待实现 |
-| paper-ingest | 设计完成 | 待实现 |
-| verify-and-ship | 设计完成 | 待实现 |
-| weekly-digest | 设计完成 | 待实现 |
-
-### 架构规则
-
-- **设计归 myloop，执行归 myopenclaw**。Skill 文件永远不复制、不分叉。
-- myloop skill 修改后，CC飞总 下次启动自动加载新版本（symlink 跟随）。
-- 执行层由 Hermes cron skill 直接处理（如 morning-triage-v2），不依赖宿主机 launchd。
-- cc-connect cron 不可用于 myloop skills（session→platform 解析限制）。
-
-**Monitoring**: Dual-layer via Uptime Kuma (service-level, Docker container) + Healthchecks.io (host-level, cloud dead man's switch). See `docs/monitoring.md` for full architecture and setup instructions. Healthchecks.io heartbeat via host launchd every 60s.
+**Monitoring**: Dual-layer via Uptime Kuma (service-level, Docker container) + Healthchecks.io (host-level, cloud dead man's switch). AgentOps auto-collects health signals (container restart, backup freshness, disk usage, gateway errors) daily at 07:45 for morning-triage. See `docs/monitoring.md` and `docs/agentops.md` for full architecture and setup instructions. Healthchecks.io heartbeat via host launchd every 60s.
 
 ## Key Design Decisions
 
@@ -265,7 +228,7 @@ When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains,
 - `docker/<service>/Dockerfile` — custom images (hermes, claude-code, backup-cron)
 - `hermes/scripts/`, `openclaw/scripts/`, `claude/scripts/` — per-service backup scripts, mounted read-only into backup-cron
 - `scripts/` — top-level orchestration scripts (start, stop, restore, cloud setup, launchd)
-- `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, agentops）
-- `skills/` — 执行层 skill（仅 myopenclaw 特有的 skill；myloop skills 通过 symlink 加载，不放在这里）
+- `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, agentops, healthchecks）
+- `skills/` — 执行层 skill（morning-triage-v2 等 Hermes cron skill）
 - `.secrets/` — encrypted via git-crypt (hermes.env.example, openclaw.env.example)
 - All scripts use `set -euo pipefail` and Chinese-language output/emojis

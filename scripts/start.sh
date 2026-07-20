@@ -26,6 +26,23 @@ if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
   fi
 fi
 
+# ── 检查依赖仓库（非阻塞，仅警告）─────────────────────────────
+echo "🔍 检查依赖仓库..."
+MISSING_REPOS=()
+for repo in "${HOME}/code/aisecretary" "${HOME}/code/git-contribution-stats" "${HOME}/code/dailyinfo"; do
+  if [[ ! -d "${repo}" ]]; then
+    MISSING_REPOS+=("$(basename "${repo}")")
+  fi
+done
+if [[ ${#MISSING_REPOS[@]} -gt 0 ]]; then
+  echo "   ⚠️  未找到依赖仓库: ${MISSING_REPOS[*]}"
+  echo "   部分功能可能不可用。克隆依赖仓库: ./scripts/clone-deps.sh"
+  echo "   详情: docs/portability.md"
+else
+  echo "   ✅ 所有依赖仓库已就绪"
+fi
+echo ""
+
 # ── 从 .cloud.conf 解析 BACKUP_ROOT ─────────────────────────
 CONF_FILE="${REPO_ROOT}/.cloud.conf"
 if [[ ! -f "${CONF_FILE}" ]]; then
