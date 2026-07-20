@@ -105,3 +105,19 @@ emoji 对应关系：
 
 ### JSON 输出异常
 如果 Python 命令执行了但输出的不是合法 JSON（极少见），回复「⚠️ 仓库数据暂时无法解析，请检查 collect-repos 日志」，不猜测内容。
+
+## 发送
+
+生成摘要后，将 Markdown 内容通过管道发送给 `send_card.py` 推送到飞书私聊：
+
+```bash
+cat <<'EOF' | python3 /opt/hermes-skills/repo-triage/tools/send_card.py
+<摘要内容>
+EOF
+```
+
+**注意**：
+- 直接输出摘要到 stdout，通过管道传给 send_card.py
+- send_card.py 使用 Hermes 飞书应用凭证（LARK_CLI_APP_ID/SECRET）发送
+- 消息发送到庄赖宏的个人私聊窗口
+- 不要在回复中重复输出摘要内容，飞书卡片已经包含了

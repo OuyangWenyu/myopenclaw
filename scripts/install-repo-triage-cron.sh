@@ -61,8 +61,8 @@ new_job = {
     "deliver": "origin",
     "origin": {
         "platform": "feishu",
-        "chat_id": "oc_d2fbe8b5bc4d5bed46877c0b1ca2d963",
-        "chat_name": "oc_d2fbe8b5bc4d5bed46877c0b1ca2d963",
+        "chat_id": "${LARK_CHAT_ID:-}",
+        "chat_name": "${LARK_CHAT_NAME:-}",
         "thread_id": None
     }
 }
@@ -93,7 +93,7 @@ echo ""
 echo "📋 任务详情:"
 echo "   skill:  repo-triage"
 echo "   调度:   UTC 23:50 Sun-Thu = BJT 07:50 Mon-Fri"
-echo "   推送:   飞书 Hermes 私聊 (oc_d2fbe8b5bc4d5bed46877c0b1ca2d963)"
+echo "   推送:   飞书 Hermes 私聊 (LARK_CHAT_ID=${LARK_CHAT_ID:-未设置})"
 echo "   静默:   无活动时回复 [SILENT]，不推送"
 echo ""
 echo "⚠️  需要重启 Hermes 使 cron 生效:"

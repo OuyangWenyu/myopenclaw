@@ -97,6 +97,13 @@ if [ -d /opt/hermes-skills/morning-triage-v2 ] && [ ! -L /opt/data/skills/mornin
   echo "   📋 morning-triage-v2 skill 已安装"
 fi
 
+# ── repo-triage skill → Hermes skills ────────────────────────────
+if [ -d /opt/hermes-skills/repo-triage ] && [ ! -L /opt/data/skills/repo-triage ]; then
+  mkdir -p /opt/data/skills
+  ln -sf /opt/hermes-skills/repo-triage /opt/data/skills/repo-triage
+  echo "   📋 repo-triage skill 已安装"
+fi
+
 # ── Patch: add "OSError" to Hermes transient transport errors ─────
 # [Errno 9] EBADF (bad file descriptor) from asyncio finalizer closing
 # fds that httpx sockets reuse. OSError is not in the upstream whitelist,

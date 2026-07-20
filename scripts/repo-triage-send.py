@@ -44,7 +44,8 @@ FEISHU_APP_SECRET = os.environ.get(
 )
 FEISHU_AUTH_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
 FEISHU_MSG_URL = "https://open.feishu.cn/open-apis/im/v1/messages?receive_id_type=open_id"
-TARGET_OPEN_ID = "ou_dbaed85f08cfdd46a38a3a8c47d5fe9a"
+# Hermes 应用下庄赖宏的 open_id（私聊，从 .env 读取）
+TARGET_OPEN_ID = os.environ["LARK_USER_OPEN_ID"]
 
 logger = logging.getLogger("repo-triage")
 logging.basicConfig(
@@ -348,8 +349,18 @@ def main() -> None:
         logger.error("无法导入 repo-summary.py，请确认 scripts/repo-summary.py 存在")
         sys.exit(1)
 
-    today = date.today()
-    date_str = today.strftime("%Y-%m-%d")
+    # Support --date YYYY-MM-DD override (default: today)
+    date_str = None
+    for i, arg in enumerate(sys.argv):
+        if arg == "--date" and i + 1 < len(sys.argv):
+            date_str = sys.argv[i + 1]
+            break
+    if date_str is None:
+        today = date.today()
+        date_str = today.strftime("%Y-%m-%d")
+    else:
+        from datetime import datetime
+        today = datetime.strptime(date_str, "%Y-%m-%d").date()
     summary = repo_summary.build_summary(date_str)
 
     if summary is None:

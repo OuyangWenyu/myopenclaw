@@ -21,10 +21,7 @@ import urllib.error
 import urllib.request
 from datetime import date
 
-CHAT_ID = os.environ.get(
-    "LARK_CHAT_ID",
-    "oc_cee7a420564a62bffabb5503d368663a",
-)
+CHAT_ID = os.environ["LARK_CHAT_ID"]
 
 APP_ID = os.environ.get("FEISHU_APP_ID") or os.environ.get("LARK_CLI_APP_ID", "")
 APP_SECRET = os.environ.get("FEISHU_APP_SECRET") or os.environ.get("LARK_CLI_APP_SECRET", "")
