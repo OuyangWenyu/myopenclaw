@@ -103,22 +103,6 @@ if [ -d /opt/hermes-skills/daily-dev-report ] && [ ! -L /opt/data/skills/daily-d
   ln -sf /opt/hermes-skills/daily-dev-report /opt/data/skills/daily-dev-report
   echo "   📋 daily-dev-report skill 已安装"
 fi
-
-# ── Patch: add "OSError" to Hermes transient transport errors ─────
-# [Errno 9] EBADF (bad file descriptor) from asyncio finalizer closing
-# fds that httpx sockets reuse. OSError is not in the upstream whitelist,
-# so retries recycle the same dead fd. Adding it triggers client rebuild
-# + fresh fd on retry. See: run_agent.py _TRANSIENT_TRANSPORT_ERRORS
-RUN_AGENT_PY="/opt/hermes/run_agent.py"
-if [ -f "${RUN_AGENT_PY}" ]; then
-	if ! grep -q '"OSError"' "${RUN_AGENT_PY}" 2>/dev/null; then
-		sed -i 's/"APIConnectionError", "APITimeoutError",/"APIConnectionError", "APITimeoutError", "OSError",/' "${RUN_AGENT_PY}"
-		echo "   🔧 run_agent.py: added OSError to transient transport errors"
-	else
-		echo "   ✅ run_agent.py: OSError already patched"
-	fi
-fi
-
 # Auto-configure lark-cli if credentials are available via env vars
 # LARK_CLI_APP_ID / LARK_CLI_APP_SECRET — primary app (Hermes)
 # LARK_CLI_IDM_APP_ID / LARK_CLI_IDM_APP_SECRET — secondary app (爱码士)
@@ -432,11 +416,6 @@ PKG_DIR="/usr/local/lib/node_modules/${PKG}"
 PLUGIN_SRC="${PKG_DIR}/hermes-plugin/memory/memory_tencentdb"
 PLUGIN_DST="/opt/hermes/plugins/memory/memory_tencentdb"
 
-if [ ! -d "${PKG_DIR}" ]; then
-    echo "   📦 安装 TDAI Memory plugin (${PKG}@0.3.6)..."
-    npm install -g "${PKG}@0.3.6" >/dev/null 2>&1 || echo "   ⚠️  TDAI Memory plugin 安装失败"
-fi
-
 if [ -d "${PLUGIN_SRC}" ]; then
     # Copy (not symlink) so Hermes's plugin scanner discovers it.
     rm -rf "${PLUGIN_DST}"
@@ -488,5 +467,7 @@ PYEOF
     done
 fi
 
-# Hand off to original Hermes entrypoint (handles UID mapping + gosu)
-exec /opt/hermes/docker/entrypoint.sh "$@"
+# Hand off to s6-overlay init (v0.18+). The init system runs cont-init.d
+# scripts, then executes its first argument as the "main program".
+# main-wrapper.sh routes "$@" (Docker CMD, e.g. "gateway run") to "hermes gateway run".
+exec /init /opt/hermes/docker/main-wrapper.sh "$@"
