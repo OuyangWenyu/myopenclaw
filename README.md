@@ -88,8 +88,6 @@ cp .cloud.conf.example .cloud.conf
 
 ```
 myopenclaw/
-```
-myopenclaw/
 ├── docker-compose.yml          # 服务编排
 ├── .env.example                # 环境变量模板
 ├── .cloud.conf.example         # 云盘路径模板
@@ -101,7 +99,6 @@ myopenclaw/
 ├── scripts/                    # 运维脚本（启动/停止/备份/恢复/调度/监控）
 ├── skills/                     # 执行层 skill
 └── tests/                      # 集成测试
-```
 ```
 
 ## 文档
