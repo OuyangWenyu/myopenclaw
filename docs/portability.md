@@ -34,8 +34,8 @@ myopenclaw (本仓库)
 
 | 仓库 | 期望路径 | 用途 |
 |------|----------|------|
-| [aisecretary](https://github.com/OuyangWenyu/aisecretary) | `~/code/aisecretary` | aisecretary MCP 服务镜像构建 |
-| [git-contribution-stats](https://github.com/OuyangWenyu/git-contribution-stats) | `~/code/git-contribution-stats` | repo-scanner-mcp 镜像构建 |
+| [aisecretary](https://github.com/iHeadWater/aisecretary) | `~/code/aisecretary` | aisecretary MCP 服务镜像构建 |
+| [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) | `~/code/git-contribution-stats` | repo-scanner-mcp 镜像构建 |
 
 **不需要 build 的情况**（`./scripts/start.sh` 不加 `--build`）：使用已有的 Docker 镜像即可，这两个仓库不需要存在。
 
