@@ -19,7 +19,6 @@ services:
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
-      - /var/run/docker.sock:/var/run/docker.sock:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -43,7 +42,6 @@ services:
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      # Morning Triage v2 飞书推送（复用 Hermes 飞书应用）
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
     extra_hosts:
@@ -103,7 +101,6 @@ services:
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      # Morning Triage v2 飞书推送（复用 Hermes 飞书应用）
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
     shm_size: "1g"

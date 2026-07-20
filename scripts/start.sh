@@ -285,19 +285,10 @@ echo "   备份目录: ${BACKUP_ROOT}"
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
 
-# ── Hermes 默认模型 → deepseek-v4-pro ──────────────────────────
-if grep -q 'default: deepseek-v4-flash' "${HERMES_CONFIG}" 2>/dev/null; then
-  python3 -c "
-import yaml
-cfg = yaml.safe_load(open('${HERMES_CONFIG}'))
-cfg['model']['default'] = 'deepseek-v4-pro'
-yaml.dump(cfg, open('${HERMES_CONFIG}', 'w'), default_flow_style=False, allow_unicode=True)
-"
-  echo "   🧠 Hermes 默认模型 → deepseek-v4-pro"
-fi
+HERMES_BIN="/opt/hermes/.venv/bin/hermes"
+HERMES_CONFIG="${HOME}/.hermes/config.yaml"
 
 # ── 启用 Hermes Cron Scheduler ─────────────────────────────────
-HERMES_CONFIG="${HOME}/.hermes/config.yaml"
 if [[ -f "${HERMES_CONFIG}" ]]; then
   if ! grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 2>/dev/null; then
     python3 -c "
@@ -316,30 +307,29 @@ fi
 
 # ── 注册 Morning Triage v2 Cron Job ───────────────────────────
 # 仅在 cron_mode=allow 时注册
-if ! grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 2>/dev/null; then
-  echo "   ⚠️  cron_mode 未启用，跳过 Morning Triage cron job 注册"
-else
+if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 2>/dev/null; then
   # 等待 Hermes 就绪
   for i in $(seq 1 15); do
     if docker compose ps hermes 2>/dev/null | grep -q 'Up'; then break; fi
     sleep 2
   done
   if docker compose ps hermes 2>/dev/null | grep -q 'Up'; then
-  EXISTING=$(docker compose exec -T hermes hermes cron list 2>/dev/null | grep -c "Daily Command Center" || true)
-  if [ "${EXISTING:-0}" -lt 1 ]; then
-    docker compose exec -T hermes /opt/hermes/.venv/bin/hermes cron create \
-      "50 23 * * *" \
-      "执行 morning-triage-v2 skill：查询 TDAI 记忆 + AgentOps 健康信号 + 生成 Daily Command Center 汇总。回复即飞书推送。" \
-      --skill morning-triage-v2 \
-      --deliver origin \
-      --name "Daily Command Center" 2>/dev/null && \
-      echo "   📋 Morning Triage v2 cron job 已注册 (每日 7:50 北京)" || \
-      echo "   ⚠️  Morning Triage v2 cron job 注册失败"
-  else
-    echo "   📋 Morning Triage v2 cron job 已存在，跳过"
+    EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "Daily Command Center" || true)
+    if [ "${EXISTING:-0}" -lt 1 ]; then
+      docker compose exec -T hermes "${HERMES_BIN}" cron create \
+        "50 23 * * *" \
+        "执行 morning-triage-v2 skill：查询 TDAI 记忆 + AgentOps 健康信号 + 生成 Daily Command Center 汇总。回复即飞书推送。" \
+        --skill morning-triage-v2 \
+        --name "Daily Command Center" 2>/dev/null && \
+        echo "   📋 Morning Triage v2 cron job 已注册 (每日 7:50 北京)" || \
+        echo "   ⚠️  Morning Triage v2 cron job 注册失败"
+    else
+      echo "   📋 Morning Triage v2 cron job 已存在，跳过"
+    fi
   fi
+else
+  echo "   ⚠️  cron_mode 未启用，跳过 Morning Triage cron job 注册"
 fi
-fi  # cron_mode=allow check
 
 # ── 幂等初始化 Uptime Kuma 监控项 ──────────────────────────────
 if docker compose ps uptime-kuma 2>/dev/null | grep -q 'Up'; then
@@ -347,12 +337,3 @@ if docker compose ps uptime-kuma 2>/dev/null | grep -q 'Up'; then
 fi
 
 docker compose ps
-
-# ── 自动部署 Morning Triage v2（记忆驱动的每日汇总推送）──────────
-MORNING_TRIAGE_INSTALLER="${REPO_ROOT}/scripts/launchd/install-morning-triage-v2.sh"
-if [[ -x "${MORNING_TRIAGE_INSTALLER}" ]]; then
-  echo ""
-  "${MORNING_TRIAGE_INSTALLER}"
-else
-  echo "   ℹ️  Morning Triage v2 安装脚本未找到，跳过"
-fi

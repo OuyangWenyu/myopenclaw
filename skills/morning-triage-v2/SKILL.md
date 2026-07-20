@@ -1,13 +1,10 @@
 ---
 name: morning-triage-v2
-description: 每日决策信息汇总 — 查询 TDAI 记忆 + AgentOps 健康 + 生成 Daily Command Center 飞书推送。由 Hermes cron 自动调度。
+description: 每日决策信息汇总 — 查询 TDAI 记忆，LLM 深度分析，飞书私聊推送。当用户说「morning triage」「晨间汇总」「日报」时触发。
 version: 3.0.0
 metadata:
   hermes:
-    tags: [daily, memory, triage, cron]
-  cron:
-    schedule: "0 50 7 * * *"
-    name: "Daily Command Center"
+    tags: [daily, memory, triage, feishu]
 ---
 
 # Morning Triage v2 — 每日决策信息汇总
@@ -16,119 +13,101 @@ metadata:
 
 ## 数据采集
 
-按顺序执行以下 Python 代码块。每个代码块是一个独立的 `python3 -c` 命令。
+按以下步骤查询 TDAI Memory Gateway（`tdai-memory:8420`），使用 Python urllib（Hermes 内置，无需额外安装）。
 
-### 1. TDAI 记忆搜索（L1 结构化事实）
+### 1. L1 结构化事实搜索
 
-```bash
-python3 -c "
+用以下关键词逐个搜索 `/search/memories`（每个 `limit=5`）：
+
+```
+决定,decision | 偏好,preference | 计划,plan,todo,待办 | 重要,important | 发现,insight | 变更,change
+```
+
+示例请求：
+```python
 import json, urllib.request
-
-keywords = ['决定,decision', '偏好,preference', '计划,plan,todo,待办', '重要,important', '发现,insight', '变更,change']
-for kw in keywords:
-    try:
-        body = json.dumps({'query': kw, 'limit': 5}).encode()
-        req = urllib.request.Request('http://tdai-memory:8420/search/memories', data=body, method='POST')
-        req.add_header('Content-Type', 'application/json')
-        with urllib.request.urlopen(req, timeout=10) as r:
-            data = json.loads(r.read())
-            results = data.get('results', '')
-            if results and 'No matching' not in str(results):
-                print(results[:300])
-    except Exception as e:
-        print(f'(gateway search error: {e})')
-" 2>/dev/null
+body = json.dumps({"query": "决定,decision", "limit": 5}).encode()
+req = urllib.request.Request("http://tdai-memory:8420/search/memories", data=body, method="POST")
+req.add_header("Content-Type", "application/json")
+with urllib.request.urlopen(req, timeout=10) as r:
+    print(json.loads(r.read()))
 ```
 
 ### 2. L2 场景召回
 
-```bash
-python3 -c "
-import json, urllib.request
-try:
-    body = json.dumps({'query': '最近活动', 'session_key': 'personal_hermes'}).encode()
-    req = urllib.request.Request('http://tdai-memory:8420/recall', data=body, method='POST')
-    req.add_header('Content-Type', 'application/json')
-    with urllib.request.urlopen(req, timeout=10) as r:
-        data = json.loads(r.read())
-        ctx = data.get('context', '')
-        if ctx and 'No matching' not in ctx:
-            print(ctx[:500])
-except Exception as e:
-    print(f'(gateway recall error: {e})')
-" 2>/dev/null
+调用 `/recall` 获取当前活跃上下文：
+```python
+body = json.dumps({"query": "最近活动", "session_key": "personal_hermes"}).encode()
+req = urllib.request.Request("http://tdai-memory:8420/recall", data=body, method="POST")
+req.add_header("Content-Type", "application/json")
+with urllib.request.urlopen(req, timeout=10) as r:
+    print(json.loads(r.read()))
 ```
 
-### 3. AgentOps — 容器健康
+## 静默规则
 
-```bash
-python3 -c "
-import json, urllib.request
-try:
-    req = urllib.request.Request('http://localhost/containers/json?all=true', method='GET')
-    req.add_header('Host', 'localhost')
-    # Docker socket
-    import socket
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.connect('/var/run/docker.sock')
-    sock.sendall(b'GET /containers/json?all=true HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n')
-    resp = b''
-    while True:
-        chunk = sock.recv(4096)
-        if not chunk: break
-        resp += chunk
-    sock.close()
-    body = resp.split(b'\r\n\r\n', 1)[1] if b'\r\n\r\n' in resp else b''
-    containers = json.loads(body)
-    for c in containers:
-        state = c.get('State', '')
-        status = c.get('Status', '')
-        name = c.get('Names', ['?'])[0].lstrip('/')
-        if state != 'running' or '(unhealthy)' in status:
-            print(f'{name}: {state} {status}')
-except Exception as e:
-    print(f'(docker socket error: {e})')
-" 2>/dev/null
-```
+以下情况直接回复 `[SILENT]`，不发送推送：
+- 所有 L1 关键词搜索均返回空或 `"No matching"`
+- L2 召回也无有效内容
+- 记忆管线明显故障（所有请求超时或返回 5xx）
 
-### 4. 磁盘使用
+## 分析规则
 
-```bash
-python3 -c "
-import os
-try:
-    s = os.statvfs('/')
-    total = s.f_frsize * s.f_blocks
-    avail = s.f_frsize * s.f_bavail
-    used = total - avail
-    pct = round(used / total * 100) if total > 0 else 0
-    print(f'{pct}% used (avail {avail//(1024**3)}G)')
-except Exception as e:
-    print(f'(disk error: {e})')
-"
-```
+你拿到原始数据后，用你自己的 LLM 能力进行分析。特别注意：
 
-## 汇总规则
+1. **过滤论文元数据**：涉及论文作者、zotero、paper-to-zotero 的记忆 → 跳过
+2. **只保留用户相关**：只保留与用户（庄赖宏/OuyangWenyu/owen）直接相关的事实、决策、偏好
+3. **AgentOps 健康**：从系统类记忆中提取容器/备份/磁盘信号，全绿时一句话带过，只展开异常
+4. **磁盘使用**：超过 85% 时报一下
+5. **不编造信息**：记忆没查到就说"记忆数据积累中，暂无昨日增量"
 
-1. **过滤论文元数据**: 涉及论文作者、zotero、paper-to-zotero 的记忆 → 跳过
-2. 只保留与用户（庄赖宏/OuyangWenyu/owen）直接相关的事实、决策、偏好
-3. AgentOps 全绿时一句话带过，只展开异常
-4. 磁盘使用 > 85% 时报一下
-5. 记忆为空时写"记忆数据积累中，暂无昨日增量"
-6. 不要编造任何信息——没有数据就说没有
+## 输出格式
 
-## 输出格式（你的响应即飞书推送）
+生成 Markdown 报告，使用纯文本 + emoji + 粗体，**不要用 `###` Markdown 标题**：
 
 ```
 🟢 Daily Command Center — {月}月{日}日 {星期}
 
 ━━━ 系统健康 ━━━
-{AgentOps 摘要，或 "✅ 所有服务正常运行"}
+✅ 所有服务正常运行
+或
+⚠️ <具体异常>
 
 ━━━ 昨日记忆 ━━━
-{3-5 条关键事实/决策/偏好，每条 1-2 句}
-{无数据时: "📝 记忆数据积累中，暂无昨日增量"}
+• <关键事实 1>
+• <关键事实 2>
+...
+或无数据时: 📝 记忆数据积累中，暂无昨日增量
 
 ━━━ 活跃场景 ━━━
-{当前活跃上下文，或 "—"}
+• <场景 1>
+或: —
 ```
+
+## 发送
+
+生成报告后，将 Markdown 通过管道发送给 `send_card.py` 推送到飞书私聊：
+
+```bash
+cat <<'CARD_EOF' | python3 /opt/hermes-skills/morning-triage-v2/tools/send_card.py
+<报告 Markdown 内容>
+CARD_EOF
+```
+
+**注意**：
+- 卡片内容使用纯文本 + emoji + 粗体，不要用 Markdown 标题（`###`）
+- send_card.py 使用 Hermes 飞书应用凭证（LARK_CLI_APP_ID/SECRET）发送到用户私聊（LARK_USER_OPEN_ID）
+- 所有内容来自 TDAI 记忆数据 + LLM 分析，不得编造
+
+## 边界情况
+
+### 数据量过大
+如果某关键词返回超过 5 条记忆，只取前 3 条最相关的用于报告，其余忽略。
+
+### 周末或节假日
+如果记忆量极低（所有关键词均无有效结果）：
+- 仍然推送，但只输出系统健康段 + "📝 记忆数据积累中，暂无昨日增量"
+- 不编造任何信息
+
+### TDAI Gateway 故障
+如果所有请求超时或返回 5xx，回复 `[SILENT]`。
