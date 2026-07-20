@@ -17,7 +17,12 @@ services:
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
+      - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
+      - ./skills/repo-triage:/opt/hermes-skills/repo-triage:ro
+      - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
+      - ${HOME}/.myagentdata:/opt/myagentdata:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -30,6 +35,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
+      - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
+      - LARK_CHAT_ID=${LARK_CHAT_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
@@ -68,7 +75,11 @@ services:
       - ${HOME}/.gitcode:/opt/gitcode-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
+      - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
+      - ./skills/repo-triage:/opt/hermes-skills/repo-triage:ro
+      - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
+      - ${HOME}/.myagentdata:/opt/myagentdata:ro
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
@@ -81,6 +92,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
+      - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
+      - LARK_CHAT_ID=${LARK_CHAT_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
@@ -131,6 +144,8 @@ services:
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
+      - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
+      - LARK_CHAT_ID=${LARK_CHAT_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
@@ -347,6 +362,29 @@ services:
       - DATABASE_PATH=/data/transactions.sqlite
     volumes:
       - ${HOME}/.myagentdata/aisecretary:/data
+    networks:
+      - myopenclaw-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
+  # ── repo-scanner MCP — 每日研发贡献报告数据服务 ──────────────
+  repo-scanner-mcp:
+    build:
+      context: ../../../../git-contribution-stats
+      dockerfile: docker/mcp-server/Dockerfile
+    image: myopenclaw/repo-scanner-mcp:latest
+    container_name: repo-scanner-mcp
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - ${HOME}/.myagentdata/repo-scanner:/data:ro
+    command: ["--transport", "sse", "--host", "0.0.0.0", "--port", "8001"]
+    environment:
+      - REPO_SCANNER_DB_PATH=/data/repos.sqlite
     networks:
       - myopenclaw-net
     deploy:

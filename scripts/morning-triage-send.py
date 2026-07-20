@@ -27,9 +27,11 @@ MYLOOP_ROOT = "/home/node/code/myloop"
 LEDGER_DIR = f"{MYLOOP_ROOT}/memory"
 PROJECTS_FILE = f"{MYLOOP_ROOT}/configs/projects.toml"
 
-# 从 cc-connect session 提取的目标用户 open_id
-# feishu:oc_710194e84841147b1e16ee5d5eaac1e5:ou_dbaed85f08cfdd46a38a3a8c47d5fe9a
-TARGET_OPEN_ID = "ou_dbaed85f08cfdd46a38a3a8c47d5fe9a"
+# 推送目标用户 open_id（从 .env 读取，CC飞总 或 Hermes 应用下）
+TARGET_OPEN_ID = os.environ.get(
+    "MORNING_TRIAGE_OPEN_ID",
+    os.environ["LARK_USER_OPEN_ID"],
+)
 
 # 飞书 API
 FEISHU_AUTH_URL = "https://open.feishu.cn/open-apis/auth/v3/tenant_access_token/internal"
