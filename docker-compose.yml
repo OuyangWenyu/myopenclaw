@@ -19,7 +19,6 @@ services:
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
-      - ./skills/repo-triage:/opt/hermes-skills/repo-triage:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -77,7 +76,6 @@ services:
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
-      - ./skills/repo-triage:/opt/hermes-skills/repo-triage:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
 
