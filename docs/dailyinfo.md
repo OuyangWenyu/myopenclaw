@@ -1,5 +1,7 @@
 # dailyinfo 调度
 
+> 本文是 dailyinfo 8 个 launchd 任务的详细说明。全部 14 个定时任务的总览见 [调度系统](scheduling.md)。
+
 [dailyinfo](https://github.com/iHeadWater/dailyinfo) 是独立的 AI for Science 情报聚合仓，提供幂等 CLI。myopenclaw 通过宿主机 launchd 托管其定时调度。数据落在 `~/.myagentdata/dailyinfo/`，由 `backup-cron` 自动备份。
 
 ## 前置条件

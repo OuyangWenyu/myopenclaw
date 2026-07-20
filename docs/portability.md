@@ -80,7 +80,7 @@ myopenclaw (本仓库)
 | Healthchecks.io 心跳 | systemd timer 或 cron |
 | collect-agentops 采集 | systemd timer 或 cron |
 
-所有 launchd plist 模板在 `scripts/launchd/`，对应的 systemd 等价物尚未提供。
+所有 launchd 任务依赖 macOS launchd。Linux 上的替代方案见 [调度系统](scheduling.md) 的 Linux 等价物说明。
 
 ## Docker 路径
 

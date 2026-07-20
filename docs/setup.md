@@ -81,6 +81,25 @@ cp .cloud.conf.example .cloud.conf
 | 映射 DEEPSEEK_API_KEY → ANTHROPIC_API_KEY | claude-code 容器环境变量 |
 | 初始化 lark-cli 配置 | `~/.lark-cli/` |
 
+### 启动后：安装宿主机定时任务
+
+Docker 容器内的定时任务（备份、晨间三签、AI News 周报）由 `start.sh` 自动注册。宿主机 launchd 定时任务需要手动安装：
+
+```bash
+# 一键安装所有宿主机定时任务（幂等）
+./scripts/launchd/install-all-schedulers.sh
+```
+
+或按需选择：
+
+```bash
+./scripts/launchd/install-dailyinfo.sh        # dailyinfo AI 情报聚合
+./scripts/launchd/install-healthchecks-ping.sh # Healthchecks.io 心跳
+./scripts/launchd/install-collect-agentops.sh  # AgentOps 健康采集
+```
+
+全部定时任务的总览和时序依赖详见 [调度系统](scheduling.md)。
+
 ## 5. 从云盘恢复数据（可选）
 
 新机器首次部署可跳过。从旧机器迁移时：

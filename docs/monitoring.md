@@ -158,6 +158,8 @@ cp -r ~/.uptime-kuma ~/.uptime-kuma.bak
 
 Healthchecks.io 是 Uptime Kuma 的**独立保险**。当整台 Mac mini 死机或 Docker 全部崩掉时，Uptime Kuma 自身也挂了，无法告警。Healthchecks.io 运行在云端，检测宿主机的心跳 silence。
 
+> Healthchecks.io 心跳是全部 14 个定时任务之一，详见 [调度系统](scheduling.md)。
+
 ### 首次设置
 
 1. 注册 https://healthchecks.io（免费版：20 个 Check）。

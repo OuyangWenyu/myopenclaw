@@ -1,5 +1,7 @@
 # AgentOps 健康采集
 
+> 本文是 AgentOps 健康采集的详细说明。全部 14 个定时任务的总览见 [调度系统](scheduling.md)。
+
 每天 07:45 自动采集 5 种系统健康信号，写入 ledger 供晨间三签（morning-triage-v2）消费。
 
 ## 采集的信号

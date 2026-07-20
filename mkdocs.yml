@@ -66,6 +66,7 @@ nav:
       - 研发日报: daily-dev-report.md
       - 事务追踪 (aisecretary): aisecretary.md
   - 运维:
+      - 调度系统: scheduling.md
       - 备份系统: backup.md
       - 服务监控: monitoring.md
       - AgentOps 健康采集: agentops.md
