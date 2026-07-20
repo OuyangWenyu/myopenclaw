@@ -62,6 +62,9 @@ RUN git clone --depth 1 https://github.com/affaan-m/everything-claude-code.git /
     && cd /opt/ecc-seed && npm install --no-audit --no-fund --loglevel=error \
     && chown -R node:node /opt/ecc-seed
 
+# ── Zotero Web API MCP server (stdlib Python, no npm dependency) ──
+COPY zotero-mcp-server.py /opt/zotero-mcp-server.py
+
 # ── Weekly AI News generate script ────────────────────────────────
 COPY docker/claude-code/weekly-ai-news-generate.sh /opt/claude-code/weekly-ai-news-generate.sh
 RUN chmod +x /opt/claude-code/weekly-ai-news-generate.sh
