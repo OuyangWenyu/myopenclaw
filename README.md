@@ -62,6 +62,12 @@ cp .cloud.conf.example .cloud.conf
 
 首次启动自动完成：配置模板创建、API Key 物化、skill 安装。详见 [快速开始指南](https://ouyangwenyu.github.io/myopenclaw/setup/)。
 
+镜像变更后需重新构建：
+
+```bash
+./scripts/start.sh --build
+```
+
 ## 服务一览
 
 | 服务 | 端口 | 说明 |
@@ -83,17 +89,20 @@ cp .cloud.conf.example .cloud.conf
 
 ```
 myopenclaw/
-├── docker-compose.yml       # 服务编排
-├── .env.example             # 环境变量模板
-├── .cloud.conf.example      # 云盘路径模板
-├── docs/                    # 文档（→ GitHub Pages）
-├── docker/                  # 自定义镜像（hermes, claude-code, backup-cron, tdai-memory）
-├── hermes/                  # Hermes 配置模板 + 备份脚本
-├── claude/                  # Claude Code / cc-connect 配置模板 + 备份脚本
-├── openclaw/                # OpenClaw 配置模板 + 备份脚本
-├── scripts/                 # 运维脚本（启动/停止/备份/恢复/调度）
-├── skills/                  # 执行层 skill
-└── tests/                   # 集成测试
+```
+myopenclaw/
+├── docker-compose.yml          # 服务编排
+├── .env.example                # 环境变量模板
+├── .cloud.conf.example         # 云盘路径模板
+├── docs/                       # 文档（→ GitHub Pages）
+├── docker/                     # 自定义镜像（hermes, claude-code, backup-cron, tdai-memory, repo-scanner-mcp）
+├── hermes/                     # Hermes 配置模板 + 备份脚本
+├── claude/                     # Claude Code / cc-connect 配置模板 + 备份脚本
+├── openclaw/                   # OpenClaw 配置模板 + 备份脚本
+├── scripts/                    # 运维脚本（启动/停止/备份/恢复/调度/监控）
+├── skills/                     # 执行层 skill
+└── tests/                      # 集成测试
+```
 ```
 
 ## 文档

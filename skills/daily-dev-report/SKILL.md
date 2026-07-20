@@ -69,7 +69,7 @@ arguments: {date: "YYYY-MM-DD"}  // 昨日日期，UTC
 你拿到确定性数据后，用**你自己的 LLM 能力**对数据进行深度分析。特别注意：
 
 1. **不要编造任何信息** — 数据里没有的，就不要写
-2. **用 email_name_mapping.csv 映射用户名** — 如果 MCP 返回的 author 是 Git 用户名（如 `owenyy`），尝试从 `/opt/hermes-skills/repo-triage/../` 或项目中的 `email_name_mapping.csv` 查找对应的真实姓名
+2. **用 email_name_mapping.csv 映射用户名** — 如果 MCP 返回的 author 是 Git 用户名（如 `owenyy`），尝试从 `/opt/hermes-skills/daily-dev-report/email_name_mapping.csv` 查找对应的真实姓名
 3. **忽略 trivial commits** — 如 "update docs"、"bump version"、"fix typo"、bot 自动提交。除非某人当天只有这种 commit
 4. **重点关注**：
    - 代码量大的提交（additions/deletions 突出）

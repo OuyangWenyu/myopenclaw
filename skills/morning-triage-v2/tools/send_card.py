@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Send repo-triage summary as a Feishu interactive card to the user's private chat.
+Send morning-triage summary as a Feishu interactive card to the user's private chat.
 
 Reads Markdown content from stdin, wraps it in a Feishu interactive card,
 and sends via Hermes's Feishu bot identity (LARK_CLI_APP_ID/SECRET).
 
 Usage (inside hermes container):
-  echo "## 仓库动态" | python3 /opt/hermes-skills/repo-triage/tools/send_card.py
+  echo "## Daily Command Center" | python3 /opt/hermes-skills/morning-triage-v2/tools/send_card.py
 
 Env:
   LARK_CLI_APP_ID/SECRET — Hermes Feishu bot credentials
-  LARK_USER_OPEN_ID — target user's open_id (default: 庄赖宏)
+  LARK_USER_OPEN_ID — target user's open_id (OuyangWenyu)
 """
 
 import json
@@ -79,7 +79,7 @@ def main() -> None:
         sys.exit(1)
 
     today = date.today()
-    header = f"仓库动态 — {today.month}月{today.day}日 {_weekday_cn(today)}"
+    header = f"Daily Command Center — {today.month}月{today.day}日 {_weekday_cn(today)}"
 
     # Build Feishu card
     card = {
@@ -106,19 +106,19 @@ def main() -> None:
         except Exception:
             pass
         print(
-            f"[repo-triage] Feishu HTTP {e.code}: {body}",
+            f"[morning-triage] Feishu HTTP {e.code}: {body}",
             file=sys.stderr,
         )
         sys.exit(1)
     except Exception as e:
-        print(f"[repo-triage] Send failed: {e}", file=sys.stderr)
+        print(f"[morning-triage] Send failed: {e}", file=sys.stderr)
         sys.exit(1)
 
     if resp.get("code") == 0:
-        print(f"[repo-triage] 私聊推送成功 → {header}", file=sys.stderr)
+        print(f"[morning-triage] 私聊推送成功 → {header}", file=sys.stderr)
     else:
         print(
-            f"[repo-triage] 推送失败: code={resp.get('code')} "
+            f"[morning-triage] 推送失败: code={resp.get('code')} "
             f"msg={resp.get('msg')}",
             file=sys.stderr,
         )

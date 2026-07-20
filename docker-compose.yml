@@ -19,7 +19,6 @@ services:
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
-      - ./skills/repo-triage:/opt/hermes-skills/repo-triage:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -48,6 +47,10 @@ services:
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - FEISHU_DOMAIN=feishu
+      - FEISHU_CONNECTION_MODE=websocket
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -64,7 +67,7 @@ services:
     image: myopenclaw/hermes:latest
     container_name: hermes-coder
     restart: unless-stopped
-    command: gateway run --profile coder
+    command: gateway run --profile coder --replace
     ports:
       - "${HERMES_CODER_PORT:-8643}:8642"
     volumes:
@@ -77,7 +80,6 @@ services:
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
-      - ./skills/repo-triage:/opt/hermes-skills/repo-triage:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
 
@@ -110,6 +112,10 @@ services:
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - FEISHU_DOMAIN=feishu
+      - FEISHU_CONNECTION_MODE=websocket
     shm_size: "1g"
     deploy:
       resources:

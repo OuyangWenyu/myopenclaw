@@ -1,80 +1,113 @@
 ---
 name: morning-triage-v2
-description: 记忆驱动的每日自动汇总 — 查询 TDAI Memory + AgentOps，生成飞书决策推送
-version: 2.0.0
+description: 每日决策信息汇总 — 查询 TDAI 记忆，LLM 深度分析，飞书私聊推送。当用户说「morning triage」「晨间汇总」「日报」时触发。
+version: 3.0.0
 metadata:
   hermes:
     tags: [daily, memory, triage, feishu]
-  replaces: myloop/morning-triage
-  schedule: launchd 每天 7:50 AM
-  exec_script: scripts/morning-triage-summary.py
 ---
 
-# Morning Triage v2 — 记忆驱动的每日自动汇总
+# Morning Triage v2 — 每日决策信息汇总
 
-你是用户的每日决策信息编辑。每天早上，你从 TDAI 记忆管线和 AgentOps 采集昨日信息，生成一份 3-5 分钟的飞书推送。
+你是用户的 AI 秘书。每次运行你在 **全新 session** 中，没有上下文，所有数据和指令都在本 skill 中。
 
-**核心原则**：
-- 只展示信息增量（昨天有什么新的事实/决策/变化）
-- AgentOps 只报异常（正常运行时不占篇幅）
-- 不编造、不猜测——记忆没查到就说"暂无昨日记忆增量"，AgentOps 全绿就说"系统健康"
-- 推送是用户做决策的输入，不是监控告警
+## 数据采集
 
-## 数据源
+按以下步骤查询 TDAI Memory Gateway（`tdai-memory:8420`），使用 Python urllib（Hermes 内置，无需额外安装）。
 
-### 1. TDAI 记忆（L1 结构化事实 + L2 场景）
+### 1. L1 结构化事实搜索
 
-查询 TDAI Memory Gateway (`tdai-memory:8420`)：
+用以下关键词逐个搜索 `/search/memories`（每个 `limit=5`）：
 
-```python
-# L1 事实搜索 — 用一组高频关键词覆盖昨日交互主题
-POST /search/memories  {"query": "<keyword>", "limit": 10}
-
-# L2 场景召回 — 获取当前活跃上下文
-POST /recall  {"query": "最近活动", "session_key": "personal_hermes"}
-
-# L0 原始对话搜索 — 兜底（L1 稀疏时用）
-POST /search/conversations  {"query": "<keyword>", "limit": 5}
+```
+决定,decision | 偏好,preference | 计划,plan,todo,待办 | 重要,important | 发现,insight | 变更,change
 ```
 
-关键词覆盖：`decision,decision_made,偏好,preference,计划,plan,待办,todo,重要,important,发现,insight,变更,change,提醒,reminder`
+示例请求：
+```python
+import json, urllib.request
+body = json.dumps({"query": "决定,decision", "limit": 5}).encode()
+req = urllib.request.Request("http://tdai-memory:8420/search/memories", data=body, method="POST")
+req.add_header("Content-Type", "application/json")
+with urllib.request.urlopen(req, timeout=10) as r:
+    print(json.loads(r.read()))
+```
 
-### 2. AgentOps 健康信号
+### 2. L2 场景召回
 
-运行 `collect_agentops.py` 的采集逻辑（容器状态、备份新鲜度、磁盘使用率、网关错误循环）。只关注异常信号；全绿时一句话带过。
+调用 `/recall` 获取当前活跃上下文：
+```python
+body = json.dumps({"query": "最近活动", "session_key": "personal_hermes"}).encode()
+req = urllib.request.Request("http://tdai-memory:8420/recall", data=body, method="POST")
+req.add_header("Content-Type", "application/json")
+with urllib.request.urlopen(req, timeout=10) as r:
+    print(json.loads(r.read()))
+```
 
-### 3. 可选：手动 override
+## 静默规则
 
-如果 `skills/morning-triage-v2/manual-override.md` 有内容，作为用户手动追记的额外信息附在推送末尾。
+以下情况直接回复 `[SILENT]`，不发送推送：
+- 所有 L1 关键词搜索均返回空或 `"No matching"`
+- L2 召回也无有效内容
+- 记忆管线明显故障（所有请求超时或返回 5xx）
 
-## 输出
+## 分析规则
 
-飞书交互卡片，Markdown 格式，三段式结构：
+你拿到原始数据后，用你自己的 LLM 能力进行分析。特别注意：
 
-```markdown
-🟢 **Daily Command Center — {日期} {星期}**
+1. **过滤论文元数据**：涉及论文作者、zotero、paper-to-zotero 的记忆 → 跳过
+2. **只保留用户相关**：只保留与用户（庄赖宏/OuyangWenyu/owen）直接相关的事实、决策、偏好
+3. **AgentOps 健康**：从系统类记忆中提取容器/备份/磁盘信号，全绿时一句话带过，只展开异常
+4. **磁盘使用**：超过 85% 时报一下
+5. **不编造信息**：记忆没查到就说"记忆数据积累中，暂无昨日增量"
+
+## 输出格式
+
+生成 Markdown 报告，使用纯文本 + emoji + 粗体，**不要用 `###` Markdown 标题**：
+
+```
+🟢 Daily Command Center — {月}月{日}日 {星期}
 
 ━━━ 系统健康 ━━━
-{AgentOps 异常信号列表，或 "✅ 所有服务正常运行"}
+✅ 所有服务正常运行
+或
+⚠️ <具体异常>
 
 ━━━ 昨日记忆 ━━━
-{从 TDAI L1 事实总结的要点，3-5 条。无数据时写 "📝 记忆数据积累中，暂无昨日增量"}
+• <关键事实 1>
+• <关键事实 2>
+...
+或无数据时: 📝 记忆数据积累中，暂无昨日增量
 
 ━━━ 活跃场景 ━━━
-{当前 L2 活跃场景列表，无时写 "—"}
+• <场景 1>
+或: —
 ```
 
-## 执行
+## 发送
 
-本 skill 不是对话式 skill。它由 `scripts/morning-triage-summary.py` 脚本调用，脚本负责：
-1. 查询 TDAI Gateway
-2. 运行 AgentOps 采集
-3. 调用 LLM（DeepSeek）生成自然语言摘要
-4. 通过飞书 Bot API 推送到用户
+生成报告后，将 Markdown 通过管道发送给 `send_card.py` 推送到飞书私聊：
 
-脚本通过 launchd 每天 7:50 AM 在宿主机触发（需要 Docker socket 访问 + `scripts/collect_agentops.py` 的 AgentOps 采集能力）：
-```
-cd ~/code/myopenclaw && python3 scripts/morning_triage_summary.py
+```bash
+cat <<'CARD_EOF' | python3 /opt/hermes-skills/morning-triage-v2/tools/send_card.py
+<报告 Markdown 内容>
+CARD_EOF
 ```
 
-SKILL.md 提供 prompt 上下文给 LLM 汇总时使用。日常运行不依赖 Hermes agent 对话——脚本直接调 HTTP API + LLM。
+**注意**：
+- 卡片内容使用纯文本 + emoji + 粗体，不要用 Markdown 标题（`###`）
+- send_card.py 使用 Hermes 飞书应用凭证（LARK_CLI_APP_ID/SECRET）发送到用户私聊（LARK_USER_OPEN_ID）
+- 所有内容来自 TDAI 记忆数据 + LLM 分析，不得编造
+
+## 边界情况
+
+### 数据量过大
+如果某关键词返回超过 5 条记忆，只取前 3 条最相关的用于报告，其余忽略。
+
+### 周末或节假日
+如果记忆量极低（所有关键词均无有效结果）：
+- 仍然推送，但只输出系统健康段 + "📝 记忆数据积累中，暂无昨日增量"
+- 不编造任何信息
+
+### TDAI Gateway 故障
+如果所有请求超时或返回 5xx，回复 `[SILENT]`。

@@ -97,35 +97,12 @@ if [ -d /opt/hermes-skills/morning-triage-v2 ] && [ ! -L /opt/data/skills/mornin
   echo "   📋 morning-triage-v2 skill 已安装"
 fi
 
-# ── repo-triage skill → Hermes skills ────────────────────────────
-if [ -d /opt/hermes-skills/repo-triage ] && [ ! -L /opt/data/skills/repo-triage ]; then
-  mkdir -p /opt/data/skills
-  ln -sf /opt/hermes-skills/repo-triage /opt/data/skills/repo-triage
-  echo "   📋 repo-triage skill 已安装"
-fi
-
 # ── daily-dev-report skill → Hermes skills ───────────────────────
 if [ -d /opt/hermes-skills/daily-dev-report ] && [ ! -L /opt/data/skills/daily-dev-report ]; then
   mkdir -p /opt/data/skills
   ln -sf /opt/hermes-skills/daily-dev-report /opt/data/skills/daily-dev-report
   echo "   📋 daily-dev-report skill 已安装"
 fi
-
-# ── Patch: add "OSError" to Hermes transient transport errors ─────
-# [Errno 9] EBADF (bad file descriptor) from asyncio finalizer closing
-# fds that httpx sockets reuse. OSError is not in the upstream whitelist,
-# so retries recycle the same dead fd. Adding it triggers client rebuild
-# + fresh fd on retry. See: run_agent.py _TRANSIENT_TRANSPORT_ERRORS
-RUN_AGENT_PY="/opt/hermes/run_agent.py"
-if [ -f "${RUN_AGENT_PY}" ]; then
-	if ! grep -q '"OSError"' "${RUN_AGENT_PY}" 2>/dev/null; then
-		sed -i 's/"APIConnectionError", "APITimeoutError",/"APIConnectionError", "APITimeoutError", "OSError",/' "${RUN_AGENT_PY}"
-		echo "   🔧 run_agent.py: added OSError to transient transport errors"
-	else
-		echo "   ✅ run_agent.py: OSError already patched"
-	fi
-fi
-
 # Auto-configure lark-cli if credentials are available via env vars
 # LARK_CLI_APP_ID / LARK_CLI_APP_SECRET — primary app (Hermes)
 # LARK_CLI_IDM_APP_ID / LARK_CLI_IDM_APP_SECRET — secondary app (爱码士)
@@ -439,11 +416,6 @@ PKG_DIR="/usr/local/lib/node_modules/${PKG}"
 PLUGIN_SRC="${PKG_DIR}/hermes-plugin/memory/memory_tencentdb"
 PLUGIN_DST="/opt/hermes/plugins/memory/memory_tencentdb"
 
-if [ ! -d "${PKG_DIR}" ]; then
-    echo "   📦 安装 TDAI Memory plugin (${PKG}@0.3.6)..."
-    npm install -g "${PKG}@0.3.6" >/dev/null 2>&1 || echo "   ⚠️  TDAI Memory plugin 安装失败"
-fi
-
 if [ -d "${PLUGIN_SRC}" ]; then
     # Copy (not symlink) so Hermes's plugin scanner discovers it.
     rm -rf "${PLUGIN_DST}"
@@ -495,5 +467,61 @@ PYEOF
     done
 fi
 
-# Hand off to original Hermes entrypoint (handles UID mapping + gosu)
-exec /opt/hermes/docker/entrypoint.sh "$@"
+# ── Ensure profile auto-starts after container restart ──────────
+# v0.18.2 multi-profile reconciliation reads desired_state from per-profile
+# gateway_state.json. Multiple containers share $HERMES_HOME; when one gateway
+# stops another container's profile, it writes gateway_state:stopped. Without
+# an explicit desired_state:running, the next reconcile registers but does NOT
+# auto-start the profile — so the bot stays silent.
+#
+# Write operator intent for THIS container's profile, and REMOVE desired_state
+# from other profiles so they don't auto-start here (each container only owns
+# one profile). Deleting the state file doesn't affect already-running gateways
+# in other containers — reconcile only matters at boot time.
+HERMES_HOME="${HERMES_HOME:-/opt/data}"
+PROFILE="${HERMES_PROFILE:-default}"
+
+# Ensure this profile's state says desired_state=running
+STATE_FILE="${HERMES_HOME}/gateway_state.json"
+if [ "${PROFILE}" != "default" ]; then
+    STATE_FILE="${HERMES_HOME}/profiles/${PROFILE}/gateway_state.json"
+    mkdir -p "$(dirname "${STATE_FILE}")"
+fi
+if [ ! -f "${STATE_FILE}" ] || ! grep -q '"desired_state"' "${STATE_FILE}" 2>/dev/null; then
+    python3 - "${STATE_FILE}" << 'PYEOF'
+import sys, json, time
+state_file = sys.argv[1]
+try:
+    with open(state_file) as f:
+        data = json.load(f)
+except Exception:
+    data = {}
+data["desired_state"] = "running"
+data.setdefault("gateway_state", "running")
+data["timestamp"] = int(time.time())
+with open(state_file, 'w') as f:
+    json.dump(data, f)
+PYEOF
+    echo "   🔄 ${PROFILE} desired_state → running"
+fi
+
+# Delete gateway_state.json for OTHER profiles so reconcile doesn't
+# auto-start them in this container. A missing file → prior_state=None →
+# not in _AUTOSTART_STATES → registered but not started. This is safe
+# because other containers' already-running gateways are unaffected by
+# the file deletion (reconcile only matters at boot time).
+if [ -d "${HERMES_HOME}/profiles" ]; then
+    for pdir in "${HERMES_HOME}/profiles"/*/; do
+        pname="$(basename "${pdir}")"
+        [ "${pname}" = "${PROFILE}" ] && continue
+        rm -f "${pdir}/gateway_state.json"
+    done
+fi
+if [ "${PROFILE}" != "default" ]; then
+    rm -f "${HERMES_HOME}/gateway_state.json"
+fi
+
+# Hand off to s6-overlay init (v0.18+). The init system runs cont-init.d
+# scripts, then executes its first argument as the "main program".
+# main-wrapper.sh routes "$@" (Docker CMD, e.g. "gateway run") to "hermes gateway run".
+exec /init /opt/hermes/docker/main-wrapper.sh "$@"
