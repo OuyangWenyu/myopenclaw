@@ -373,7 +373,7 @@ services:
   # ── repo-scanner MCP — 每日研发贡献报告数据服务 ──────────────
   repo-scanner-mcp:
     build:
-      context: ../../../../git-contribution-stats
+      context: ../git-contribution-stats
       dockerfile: docker/mcp-server/Dockerfile
     image: myopenclaw/repo-scanner-mcp:latest
     container_name: repo-scanner-mcp
