@@ -17,10 +17,12 @@ MyLoop 是本项目的 **loop 设计层** — 定义 agent 自主循环的 skill
 ┌─────────────────────────────────────┐
 │ myopenclaw（执行层）                  │
 │ ~/code/myopenclaw/                  │
-│   CC飞总 (claude-code container)     │
-│     ~/.claude/skills/morning-triage → myloop/skills/morning-triage
-│   scripts/morning-triage-send.py    │
-│   launchd @ 7:50 AM                 │
+│   爱玛士 (hermes container)          │
+│     Hermes cron @ 7:50 AM           │
+│     skill: morning-triage-v2        │
+│   skills/morning-triage-v2/         │
+│     SKILL.md  — 数据采集 + 分析规则   │
+│     tools/send_card.py — 飞书推送   │
 └──────────┬──────────────────────────┘
            │ 飞书 Bot API
            ▼
@@ -52,102 +54,63 @@ git clone https://github.com/OuyangWenyu/myloop.git ~/code/myloop
 
 # 2. 启动（entrypoint 自动加载 skills）
 cd ~/code/myopenclaw && ./scripts/start.sh
-
-# 3. 安装 morning-triage 定时任务
-./scripts/launchd/install-morning-triage.sh
 ```
+
+Morning triage 由 Hermes 内置 cron 自动触发，无需额外安装 launchd 任务。
 
 无需额外配置。myloop skills 通过 symlink 加载，修改 myloop 后自动生效。
 
-## Morning Triage（晨间三签）
+## Morning Triage（晨间简报）
 
 ### 数据流
 
 ```
-四个 ledger (markdown)
-  memory/task-ledger/inbox.md      ← 个人任务
-  memory/data-ledger/inbox.md      ← 数据/模型信号
-  memory/people-ledger/inbox.md    ← 人员状态
-  memory/agentops-ledger/inbox.md  ← 基础设施
-
-configs/projects.toml              ← 项目注册表
+TDAI Memory Gateway (tdai-memory:8420)
+  /search/memories      ← L1 结构化事实
+  /recall               ← L2 场景上下文
        │
        ▼
-morning-triage-send.py
-  1. parse_ledger()     → 解析 markdown item
-  2. classify()         → Needs / Today / Watch / Resolved
-  3. generate_report()  → Markdown 格式化
-  4. send_feishu_message() → 飞书交互卡片
+Hermes cron skill: morning-triage-v2
+  1. 查询 TDAI Gateway（多关键词搜索）
+  2. LLM 深度分析（DeepSeek，过滤论文元数据/第三方信息）
+  3. 生成 Markdown 报告（系统健康 + 昨日记忆 + 活跃场景）
+  4. send_card.py → 飞书交互卡片
        │
        ▼
-   📱 飞书 CC飞总 私聊
+   📱 飞书 爱玛士 私聊
 ```
-
-### 分类规则
-
-对齐 `myloop/skills/morning-triage/SKILL.md` §4：
-
-| 分类 | 触发条件 |
-|------|----------|
-| ⚡ Needs Human Decision | status=blocked/waiting_feedback, needs_human_decision=yes, 生产故障 |
-| 📋 Today Candidates | status=in_progress/ongoing, follow_up_at=today |
-| 🔭 Watch | status=watch, 自动恢复但原因未明 |
-| ✅ Resolved | status=done |
 
 ### 手动操作
 
 ```bash
-# 触发一次（立即发送飞书）
-launchctl start ai.myloop.morning-triage
+# 查看 cron 状态
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep "Daily Command"
 
-# 容器内直接运行（调试用）
-docker compose exec claude-code python3 /home/node/code/myloop/scripts/morning-triage-send.py
-
-# 查看日志
-cat logs/morning-triage.log
+# 手动触发
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>
 ```
-
-### 添加 ledger item
-
-编辑对应 `~/code/myloop/memory/<ledger>/inbox.md`，按格式添加：
-
-```markdown
-## <简短标题>
-
-- date: YYYY-MM-DD
-- source: manual | docker logs | git | ...
-- project: <projects.toml 中的 key>
-- axis: task | data | org | agentops
-- status: new | ongoing | blocked | done | watch
-- owner: <负责人>
-- evidence: <数据来源引用>
-- why_it_matters: <为什么需要关注>
-- suggested_next_action: <建议操作>
-- needs_human_decision: yes | no
-```
-
-下次 triage 运行时自动纳入。
 
 ## 添加新 Loop
 
 1. 在 myloop 创建 skill 设计：`myloop/skills/<loop-name>/SKILL.md`
 2. 在 myloop 注册到 `configs/loops.toml`
 3. 容器重启后自动 symlink 到 CC飞总
-4. 在 myopenclaw 创建执行脚本（如需要）
-5. 添加 launchd plist 模板 + install 脚本（如需要定时触发）
+4. 在 myopenclaw 创建执行脚本或 Hermes skill（如需要）
+5. 如需定时触发，使用 Hermes 内置 cron 而非宿主机 launchd
 
 ### 规则
 
 - **设计归 myloop，执行归 myopenclaw**
 - Skill 文件永远不复制、不分叉（symlink only）
-- 执行脚本依赖容器环境变量（API key、路径），放在 myopenclaw
+- 定时任务优先使用 Hermes 内置 cron，避免宿主机 launchd 依赖
+- 执行层依赖容器环境变量（API key、路径），放在 myopenclaw
 - 不在 myloop 中引用 myopenclaw 的路径或凭证
 
 ## 当前 Loop 状态
 
 | Loop | 设计 | 执行 | 触发 |
 |------|------|------|------|
-| morning-triage | ✅ | ✅ | launchd 07:50 |
+| morning-triage | ✅ | ✅ | Hermes cron 07:50 (morning-triage-v2) |
 | session-memory | ✅ | ⬜ | 待实现 |
 | knowledge-sync | ✅ | ⬜ | 待实现 |
 | paper-ingest | ✅ | ⬜ | 待实现 |
@@ -168,21 +131,22 @@ docker compose logs claude-code | grep "myloop"
 ### morning-triage 未触发
 
 ```bash
-# 检查 launchd 任务状态
-launchctl list | grep morning-triage
+# 检查 Hermes cron 状态
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep "Daily Command"
 
-# 检查日志
-cat ~/code/myopenclaw/logs/morning-triage.log
+# 查看 Hermes agent 日志
+docker compose exec hermes tail -50 /opt/data/logs/agent.log | grep "Daily Command"
 
 # 手动触发测试
-launchctl start ai.myloop.morning-triage
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>
 ```
 
 ### 飞书未收到消息
 
-1. 检查 `CC_CONNECT_FEISHU_APP_ID` / `CC_CONNECT_FEISHU_APP_SECRET` 在 `.env` 中已配置
-2. 检查容器内环境变量：`docker compose exec claude-code env | grep FEISHU`
-3. 手动运行脚本查看错误输出：
+1. 检查 `LARK_CLI_APP_ID` / `LARK_CLI_APP_SECRET` 在 `.env` 中已配置
+2. 检查容器内环境变量：`docker compose exec hermes env | grep LARK`
+3. 手动触发 cron 查看 agent 日志：
    ```bash
-   docker compose exec claude-code python3 /home/node/code/myloop/scripts/morning-triage-send.py
+   docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>
+   docker compose logs hermes --tail 30
    ```

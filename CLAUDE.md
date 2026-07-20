@@ -87,10 +87,9 @@ docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_
 ./scripts/launchd/install-dailyinfo.sh
 ./scripts/launchd/uninstall-dailyinfo.sh
 
-# Morning triage — MyLoop Daily Command Center
-./scripts/launchd/install-morning-triage.sh     # Install daily 7:50 AM schedule
-launchctl start ai.myloop.morning-triage         # Manual trigger (one-shot)
-docker compose exec claude-code python3 /home/node/code/myloop/scripts/morning-triage-send.py  # Run directly in container
+# Morning triage — Hermes cron skill (morning-triage-v2)
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep "Daily Command"  # 查看 cron 状态
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>                 # 手动触发
 
 # Gateway error loop detection（检测 OpenClaw 配置兼容性导致的日志刷屏）
 ./scripts/check-gateway-errors.sh            # 人类可读
@@ -201,7 +200,7 @@ myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
 
 | Loop | 状态 | 触发方式 |
 |------|------|----------|
-| morning-triage | ✅ MVP | launchd 每天 07:50，调用 `scripts/morning-triage-send.py` |
+| morning-triage | ✅ v2 | Hermes cron 每天 07:50，skill `morning-triage-v2`（TDAI 记忆 + LLM 分析 + 飞书推送）|
 | session-memory | 设计完成 | 待实现 |
 | knowledge-sync | 设计完成 | 待实现 |
 | paper-ingest | 设计完成 | 待实现 |
@@ -212,8 +211,8 @@ myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
 
 - **设计归 myloop，执行归 myopenclaw**。Skill 文件永远不复制、不分叉。
 - myloop skill 修改后，CC飞总 下次启动自动加载新版本（symlink 跟随）。
-- 执行脚本（如 `morning-triage-send.py`）放在 myopenclaw，因为它依赖容器环境、飞书 API 凭证等执行层细节。
-- cc-connect cron 不可用于 myloop skills（session→platform 解析限制），改用宿主机 launchd。
+- 执行层由 Hermes cron skill 直接处理（如 morning-triage-v2），不依赖宿主机 launchd。
+- cc-connect cron 不可用于 myloop skills（session→platform 解析限制）。
 
 **Monitoring**: Dual-layer via Uptime Kuma (service-level, Docker container) + Healthchecks.io (host-level, cloud dead man's switch). See `docs/monitoring.md` for full architecture and setup instructions. Healthchecks.io heartbeat via host launchd every 60s.
 
@@ -266,8 +265,7 @@ When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains,
 - `docker/<service>/Dockerfile` — custom images (hermes, claude-code, backup-cron)
 - `hermes/scripts/`, `openclaw/scripts/`, `claude/scripts/` — per-service backup scripts, mounted read-only into backup-cron
 - `scripts/` — top-level orchestration scripts (start, stop, restore, cloud setup, launchd)
-- `scripts/morning-triage-send.py` — MyLoop morning-triage 执行脚本（读 ledger → 分类 → 飞书推送）
-- `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, morning-triage）
+- `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, agentops）
 - `skills/` — 执行层 skill（仅 myopenclaw 特有的 skill；myloop skills 通过 symlink 加载，不放在这里）
 - `.secrets/` — encrypted via git-crypt (hermes.env.example, openclaw.env.example)
 - All scripts use `set -euo pipefail` and Chinese-language output/emojis
