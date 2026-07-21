@@ -97,7 +97,8 @@ docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>       
 
 # Monitoring（Uptime Kuma + Healthchecks.io）
 open http://localhost:3001                                    # Uptime Kuma 监控面板
-./scripts/launchd/install-healthchecks-ping.sh                # 安装 Healthchecks.io 心跳任务
+./scripts/launchd/install-all-schedulers.sh                   # 一键安装所有宿主机定时任务
+./scripts/launchd/install-healthchecks-ping.sh                # 单独安装 Healthchecks.io 心跳任务
 launchctl start ai.myopenclaw.healthchecks-ping               # 手动触发心跳
 tail -f logs/healthchecks-ping.log                            # 查看心跳日志
 

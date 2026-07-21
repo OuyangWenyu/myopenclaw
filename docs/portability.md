@@ -76,9 +76,11 @@ myopenclaw (本仓库)
 | 功能 | 替代方案 (Linux) |
 |------|-----------------|
 | dailyinfo 定时调度 | systemd user timer |
-| morning-triage 定时触发 | systemd user timer 或 cron |
+| git-contribution-stats 采集 | systemd user timer |
 | Healthchecks.io 心跳 | systemd timer 或 cron |
 | collect-agentops 采集 | systemd timer 或 cron |
+
+> **注意**：Hermes cron 任务（Daily Command Center、daily-dev-report、工作日晨间简报、眼保健操提醒）运行在 Docker 容器内，不依赖 macOS launchd，Linux 上可直接使用。
 
 所有 launchd 任务依赖 macOS launchd。Linux 上的替代方案见 [调度系统](scheduling.md) 的 Linux 等价物说明。
 

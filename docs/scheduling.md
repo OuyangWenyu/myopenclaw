@@ -1,6 +1,6 @@
 # 调度系统
 
-myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 14 个定时任务的 single source of truth。
+myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 17 个定时任务的 single source of truth（个人 cron 不在此列）。
 
 ## 总览
 
@@ -22,8 +22,6 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 07:45 | 宿主机 | launchd | **AgentOps 健康信号采集** | `install-all-schedulers.sh` |
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
-| 10:00 | Docker | Hermes cron | 眼保健操提醒 | 备份恢复（个人 cron） |
-| 16:00 | Docker | Hermes cron | 眼保健操提醒 | 备份恢复（个人 cron） |
 | 每周日 02:00 | Docker | crond (backup-cron) | 快照备份到云盘 | entrypoint 自动 |
 | 每周日 08:00 | Docker | cc-connect cron | AI News 周报生成 | entrypoint 自动 |
 | 每周日 08:10 | Docker | cc-connect cron | AI News 周报润色 + 飞书推送 | entrypoint 自动 |
@@ -57,7 +55,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 bash ${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh  # Git 数据采集
 ```
 
-Docker 容器内的定时任务（backup、morning-triage、AI News）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。
+Docker 容器内的定时任务（3 个 Hermes cron + backup + AI News）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。
 
 ## 验证
 
@@ -65,23 +63,23 @@ Docker 容器内的定时任务（backup、morning-triage、AI News）由 `./scr
 # 1. 检查所有 launchd 任务
 launchctl list | grep -E 'ai\.(dailyinfo|myopenclaw)'
 
-# 预期输出（12 个 launchd 任务，ExitCode 0 或 1 均为正常）：
-# ai.dailyinfo.run-arxiv      0
-# ai.dailyinfo.run-resource   0
-# ai.dailyinfo.run-code       0
-# ai.dailyinfo.run-papers     0
-# ai.dailyinfo.run-ai_news    0
-# ai.dailyinfo.push-early     0
-# ai.dailyinfo.push-papers    0
-# ai.dailyinfo.push-arxiv     0
-# ai.git-contribution-stats.collect  0
-# ai.myopenclaw.collect-agentops     0
-# ai.myopenclaw.healthchecks-ping    0
+# 预期输出（11 个 launchd 定时任务，ExitCode 0 或 1 均为正常）：
+# ai.dailyinfo.push-arxiv      0
+# ai.dailyinfo.push-early      0
+# ai.dailyinfo.push-papers     0
+# ai.dailyinfo.run-ai_news     0
+# ai.dailyinfo.run-arxiv       0
+# ai.dailyinfo.run-code        0
+# ai.dailyinfo.run-papers      0
+# ai.dailyinfo.run-resource    0
+# ai.git-contribution-stats.collect   0
+# ai.myopenclaw.collect-agentops      0
+# ai.myopenclaw.healthchecks-ping     0
 
 # 2. 检查 backup-cron
 docker compose exec backup-cron crontab -l
 
-# 3. 检查 Hermes cron（应包含 5 个 job）
+# 3. 检查 Hermes cron
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list
 
 # 4. 检查 cc-connect cron
