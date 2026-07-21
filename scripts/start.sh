@@ -349,6 +349,20 @@ if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 
       echo "   📋 Daily Command Center cron job 已存在，跳过"
     fi
 
+    # ── 工作日晨间简报（待办事务 + 未读邮件，仅工作日）────────
+    EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "工作日晨间简报" || true)
+    if [ "${EXISTING:-0}" -lt 1 ]; then
+      docker compose exec -T hermes "${HERMES_BIN}" cron create \
+        "30 23 * * 0-4" \
+        "执行 morning-briefing 技能生成晨间简报。收集待办事务和未读邮件，按 SKILL.md 中的规则筛选和呈现。今天是工作日，正常发送。" \
+        --deliver "${DELIVER}" \
+        --name "工作日晨间简报" 2>/dev/null && \
+        echo "   📋 工作日晨间简报 cron job 已注册 (工作日 7:30 北京)" || \
+        echo "   ⚠️  工作日晨间简报 cron job 注册失败"
+    else
+      echo "   📋 工作日晨间简报 cron job 已存在，跳过"
+    fi
+
     # ── daily-dev-report（研发贡献日报）────────────────────────────
     EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "daily-dev-report" || true)
     if [ "${EXISTING:-0}" -lt 1 ]; then

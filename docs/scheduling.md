@@ -22,8 +22,8 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 07:45 | 宿主机 | launchd | **AgentOps 健康信号采集** | `install-all-schedulers.sh` |
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
-| 10:00 | Docker | Hermes cron | 眼保健操提醒 | `start.sh` 自动注册 |
-| 16:00 | Docker | Hermes cron | 眼保健操提醒 | `start.sh` 自动注册 |
+| 10:00 | Docker | Hermes cron | 眼保健操提醒 | 备份恢复（个人 cron） |
+| 16:00 | Docker | Hermes cron | 眼保健操提醒 | 备份恢复（个人 cron） |
 | 每周日 02:00 | Docker | crond (backup-cron) | 快照备份到云盘 | entrypoint 自动 |
 | 每周日 08:00 | Docker | cc-connect cron | AI News 周报生成 | entrypoint 自动 |
 | 每周日 08:10 | Docker | cc-connect cron | AI News 周报润色 + 飞书推送 | entrypoint 自动 |
@@ -31,13 +31,15 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 ## 时序依赖
 
 ```
-07:30           工作日晨间简报（仅工作日）
-07:45 ──────── git-contribution-stats 采集 + AgentOps 采集 ← 并行
-07:50 ──────── Daily Command Center ← 消费 AgentOps + TDAI 记忆
-07:55 ──────── daily-dev-report ← 消费 git-contribution-stats SQLite
+07:30           工作日晨间简报（仅工作日）— 事务 + 邮件汇总
+07:45 ──────── git-contribution-stats + AgentOps 采集 ← 并行
+07:50 ──────── Daily Command Center ← 读 inbox.md + TDAI 记忆
+07:55 ──────── daily-dev-report ← 读 repo-scanner MCP (SQLite)
 ```
 
 三个早间推送在 25 分钟内完成，数据采集在推送前完成，保证数据新鲜。
+
+**AgentOps 数据流**：`collect-agentops (launchd) → inbox.md → Daily Command Center (morning-triage-v2)`。系统健康信号由宿主机采集脚本确定性生成，Hermes skill 直接读取结构化文件，不再依赖 TDAI 记忆搜索。
 
 ## 一键安装
 

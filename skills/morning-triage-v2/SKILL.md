@@ -13,9 +13,25 @@ metadata:
 
 ## 数据采集
 
-按以下步骤查询 TDAI Memory Gateway（`tdai-memory:8420`），使用 Python urllib（Hermes 内置，无需额外安装）。
+### 0. AgentOps 系统健康（本地文件）
+
+先读取 `collect-agentops` 定时采集的健康信号（容器重启、备份新鲜度、磁盘使用率、网关错误）：
+
+```python
+import pathlib
+inbox_path = pathlib.Path("/opt/myagentdata/agentops/inbox.md")
+if inbox_path.exists():
+    inbox = inbox_path.read_text()
+    print(inbox if inbox.strip() else "(empty — all systems nominal)")
+else:
+    print("(inbox.md not found — collect-agentops may not have run yet)")
+```
+
+如果文件为空或不存在，说明所有系统正常。
 
 ### 1. L1 结构化事实搜索
+
+按以下步骤查询 TDAI Memory Gateway（`tdai-memory:8420`），使用 Python urllib（Hermes 内置，无需额外安装）。
 
 用以下关键词逐个搜索 `/search/memories`（每个 `limit=5`）：
 
@@ -47,9 +63,11 @@ with urllib.request.urlopen(req, timeout=10) as r:
 ## 静默规则
 
 以下情况直接回复 `[SILENT]`，不发送推送：
-- 所有 L1 关键词搜索均返回空或 `"No matching"`
-- L2 召回也无有效内容
-- 记忆管线明显故障（所有请求超时或返回 5xx）
+- 所有 L1 关键词搜索均返回空或 `"No matching"` **且** inbox.md 无 `needs_human_decision: yes` 的项
+- L2 召回也无有效内容 **且** inbox.md 无关键告警
+- 记忆管线明显故障（所有请求超时或返回 5xx）**且** inbox.md 不可读
+
+**例外**：即使 TDAI 记忆为空，如果 inbox.md 存在且包含 `needs_human_decision: yes` 的关键告警，仍然推送最小报告（仅「系统健康」段）。
 
 ## 分析规则
 
@@ -57,9 +75,8 @@ with urllib.request.urlopen(req, timeout=10) as r:
 
 1. **过滤论文元数据**：涉及论文作者、zotero、paper-to-zotero 的记忆 → 跳过
 2. **只保留用户相关**：只保留与用户（庄赖宏/OuyangWenyu/owen）直接相关的事实、决策、偏好
-3. **AgentOps 健康**：从系统类记忆中提取容器/备份/磁盘信号，全绿时一句话带过，只展开异常
-4. **磁盘使用**：超过 85% 时报一下
-5. **不编造信息**：记忆没查到就说"记忆数据积累中，暂无昨日增量"
+3. **AgentOps 健康**：直接使用 inbox.md 的结构化数据。每个条目包含 `title`、`status`（new/watch）、`evidence`、`suggested_next_action`、`needs_human_decision`。`needs_human_decision: yes` 的项用 ⚠️ 优先展示，`status: new` 的项标注为新发现，`status: watch` 的项标注为持续观察。inbox.md 为空则显示 `✅ 所有服务正常运行`
+4. **不编造信息**：记忆没查到就说"记忆数据积累中，暂无昨日增量"
 
 ## 输出格式
 
