@@ -118,17 +118,18 @@ arguments: {date: "YYYY-MM-DD"}  // 昨日日期，UTC
 
 ## 发送
 
-生成报告后，将 Markdown 通过管道发送给 `send_card.py` 推送到飞书私聊：
+**自动推送（cron 模式）**：直接输出报告内容作为你的最终回复。cron 系统会自动将回复推送到飞书私聊。不要使用 send_message 或 send_card.py。
+
+**手动推送**：如果不是 cron 调用，将报告通过管道发送给 `send_card.py`：
 
 ```bash
 cat <<'CARD_EOF' | python3 /opt/hermes-skills/daily-dev-report/tools/send_card.py
-<报告 Markdown 内容，不要用 ### heading，用 **粗体** + emoji>
+<报告 Markdown 内容>
 CARD_EOF
 ```
 
 **注意**：
 - 卡片内容使用纯文本 + emoji + 粗体，不要用 Markdown 标题（`###`）
-- send_card.py 使用 Hermes 飞书应用凭证发送到用户私聊
 - 所有内容来自 MCP 数据 + LLM 分析，不得编造
 
 ## 边界情况

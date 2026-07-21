@@ -83,11 +83,12 @@ fi
 DOCKER_HOST_ID=$(sqlite3 "${KUMA_DB}" "SELECT id FROM docker_host WHERE docker_type='socket' LIMIT 1;")
 
 # ── 监控项定义 ────────────────────────────────────────────────
-# 格式: "名称|类型|URL|容器名|状态码"
+# 格式: "名称|类型|URL|容器名|状态码|auth_user|auth_pass"
 # 类型: http, docker
+# auth_user/auth_pass: 可选，仅 HTTP 监控需要 basic auth
 declare -a MONITORS=(
     # ── HTTP 监控 ──────────────────────────────────────────
-    "Hermes Dashboard|http|http://hermes-dashboard:9119||[\"200-299\"]"
+    "Hermes Dashboard|http|http://hermes-dashboard:9119||[\"200-299\",\"300-399\"]|admin|admin"
     "OpenClaw Gateway|http|http://openclaw-gateway:18789/healthz||[\"200-299\"]"
     "aisecretary|http|http://aisecretary:8000/health||[\"200-299\"]"
     "TDAI Memory|http|http://tdai-memory:8420/health||[\"200-299\"]"
@@ -114,12 +115,14 @@ ADDED=0
 SKIPPED=0
 
 for entry in "${MONITORS[@]}"; do
-    IFS='|' read -r name mon_type url container status_codes <<< "${entry}"
+    IFS='|' read -r name mon_type url container status_codes auth_user auth_pass <<< "${entry}"
 
     # Escape fields for safe embedding into SQL string literals
     esc_name=$(sql_escape <<< "${name}")
     esc_url=$(sql_escape <<< "${url}")
     esc_container=$(sql_escape <<< "${container}")
+    esc_auth_user=$(sql_escape <<< "${auth_user:-}")
+    esc_auth_pass=$(sql_escape <<< "${auth_pass:-}")
 
     EXISTS=$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM monitor WHERE name='${esc_name}';")
     if [[ "${EXISTS}" -gt 0 ]]; then
@@ -135,8 +138,8 @@ for entry in "${MONITORS[@]}"; do
     else
         STATUS_JSON="${status_codes:-[\"200-299\"]}"
         sqlite3 "${KUMA_DB}" "
-            INSERT INTO monitor (name, type, url, active, user_id, interval, accepted_statuscodes_json)
-            VALUES ('${esc_name}', 'http', '${esc_url}', 1, ${USER_ID}, 60, '${STATUS_JSON}');
+            INSERT INTO monitor (name, type, url, active, user_id, interval, accepted_statuscodes_json, basic_auth_user, basic_auth_pass)
+            VALUES ('${esc_name}', 'http', '${esc_url}', 1, ${USER_ID}, 60, '${STATUS_JSON}', '${esc_auth_user}', '${esc_auth_pass}');
         "
     fi
     ADDED=$((ADDED + 1))

@@ -331,21 +331,40 @@ if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 
     sleep 2
   done
   if docker compose ps hermes 2>/dev/null | grep -q 'Up'; then
+    # 读取飞书私聊 Open ID
+    FEISHU_OPEN_ID="${LARK_USER_OPEN_ID:?LARK_USER_OPEN_ID must be set in .env}"
+    DELIVER="feishu:${FEISHU_OPEN_ID}"
+
+    # ── Daily Command Center（TDAI 记忆 + 健康信号 + 活跃场景）──
     EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "Daily Command Center" || true)
     if [ "${EXISTING:-0}" -lt 1 ]; then
       docker compose exec -T hermes "${HERMES_BIN}" cron create \
         "50 23 * * *" \
-        "执行 morning-triage-v2 skill：查询 TDAI 记忆 + AgentOps 健康信号 + 生成 Daily Command Center 汇总。回复即飞书推送。" \
-        --skill morning-triage-v2 \
+        "执行 morning-triage-v2 技能：查询 TDAI Memory Gateway (http://tdai-memory:8420) 获取昨日记忆和活跃场景，汇总系统健康信号，输出 Daily Command Center 晨间简报。" \
+        --deliver "${DELIVER}" \
         --name "Daily Command Center" 2>/dev/null && \
-        echo "   📋 Morning Triage v2 cron job 已注册 (每日 7:50 北京)" || \
-        echo "   ⚠️  Morning Triage v2 cron job 注册失败"
+        echo "   📋 Daily Command Center cron job 已注册 (每日 7:50 北京)" || \
+        echo "   ⚠️  Daily Command Center cron job 注册失败"
     else
-      echo "   📋 Morning Triage v2 cron job 已存在，跳过"
+      echo "   📋 Daily Command Center cron job 已存在，跳过"
+    fi
+
+    # ── daily-dev-report（研发贡献日报）────────────────────────────
+    EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "daily-dev-report" || true)
+    if [ "${EXISTING:-0}" -lt 1 ]; then
+      docker compose exec -T hermes "${HERMES_BIN}" cron create \
+        "55 23 * * *" \
+        "执行 daily-dev-report 技能：调用 MCP get_daily_report 获取昨日研发贡献数据，DeepSeek 深度分析，输出每日研发贡献报告。" \
+        --deliver "${DELIVER}" \
+        --name "daily-dev-report" 2>/dev/null && \
+        echo "   📋 daily-dev-report cron job 已注册 (每日 7:55 北京)" || \
+        echo "   ⚠️  daily-dev-report cron job 注册失败"
+    else
+      echo "   📋 daily-dev-report cron job 已存在，跳过"
     fi
   fi
 else
-  echo "   ⚠️  cron_mode 未启用，跳过 Morning Triage cron job 注册"
+  echo "   ⚠️  cron_mode 未启用，跳过 Hermes cron job 注册"
 fi
 
 # ── 幂等初始化 Uptime Kuma 监控项 ──────────────────────────────

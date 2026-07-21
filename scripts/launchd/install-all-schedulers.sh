@@ -53,7 +53,13 @@ install_task \
   "${SCRIPT_DIR}/install-collect-agentops.sh" \
   "true"  # 无外部依赖
 
-# ── 3. dailyinfo 情报聚合 ───────────────────────────────────
+# ── 3. git-contribution-stats 每日采集 ────────────────────────
+install_task \
+  "git-contribution-stats.collect" \
+  "${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh" \
+  "[ -f \"${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh\" ]"
+
+# ── 4. dailyinfo 情报聚合 ───────────────────────────────────
 install_task \
   "dailyinfo" \
   "${SCRIPT_DIR}/install-dailyinfo.sh" \

@@ -86,7 +86,9 @@ with urllib.request.urlopen(req, timeout=10) as r:
 
 ## 发送
 
-生成报告后，将 Markdown 通过管道发送给 `send_card.py` 推送到飞书私聊：
+**自动推送（cron 模式）**：直接输出报告内容作为你的最终回复。cron 系统会自动将回复推送到飞书私聊。不要使用 send_message 或 send_card.py。
+
+**手动推送**：如果不是 cron 调用，将报告通过管道发送给 `send_card.py`：
 
 ```bash
 cat <<'CARD_EOF' | python3 /opt/hermes-skills/morning-triage-v2/tools/send_card.py
