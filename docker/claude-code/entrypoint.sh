@@ -5,6 +5,7 @@
 # cc-connect manages Claude Code sessions internally.
 # =============================================================
 set -euo pipefail
+umask 077
 
 # ── Symlink config dirs to host-mounted volumes ──────────────
 # Claude Code reads config from $HOME/.claude/
@@ -14,30 +15,36 @@ ln -sf /opt/claude-config /home/node/.claude
 ln -sf /opt/claude-config /root/.claude
 
 # gh CLI reads config from $HOME/.config/gh/
+# 必须先 rm -rf，否则如果目标已存在为目录，ln 会把链接建在目录里面而非替换它。
+rm -rf /home/node/.config/gh /root/.config/gh
 ln -sf /opt/gh-config /home/node/.config/gh
 ln -sf /opt/gh-config /root/.config/gh
 
 # ── gh hosts.yml 自动同步 ───────────────────────────────────
-# 每次容器启动时，用 .env 里的 GH_TOKEN 更新 hosts.yml 中的 oauth_token
-# 这样用户只需要改 .env 一个地方，重启即可生效
+# 每次容器启动时，用 .env 里的 GH_TOKEN（传入为 GITHUB_TOKEN）更新
+# hosts.yml 中的 oauth_token。始终用 heredoc 重新生成（不用 sed），
+# 避免 token 出现在 /proc/pid/cmdline 中。
+#
+# 使用 legacy 单账户格式（不加 users: 键），避免触发 gh 2.96+ 的
+# 多账户迁移路径——该路径需要 dbus secret service，在 Docker 容器里不可用。
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   mkdir -p /opt/gh-config
-  if [ -f /opt/gh-config/hosts.yml ]; then
-    sed -i "s/oauth_token:.*/oauth_token: ${GITHUB_TOKEN}/" /opt/gh-config/hosts.yml
-    echo "   🔑 gh hosts.yml 已同步当前 GITHUB_TOKEN"
-  else
-    cat > /opt/gh-config/hosts.yml << HOSTSEOF
+  # 清理旧格式 config.yml（触发多账户迁移的源头）
+  rm -f /opt/gh-config/config.yml
+  cat > /opt/gh-config/hosts.yml << HOSTSEOF
 github.com:
-    git_protocol: https
-    users:
-        OuyangWenyu:
-            oauth_token: ${GITHUB_TOKEN}
     user: OuyangWenyu
+    oauth_token: ${GITHUB_TOKEN}
+    git_protocol: https
 HOSTSEOF
-    chmod 600 /opt/gh-config/hosts.yml
-    echo "   🔑 gh hosts.yml 已创建并写入 GITHUB_TOKEN"
-  fi
+  echo "   🔑 gh hosts.yml 已同步当前 GITHUB_TOKEN"
 fi
+
+# 确保权限正确（放在 if 块外面：覆盖 token 更新和已有文件两种情况）
+[ -f /opt/gh-config/hosts.yml ] && {
+  chmod 600 /opt/gh-config/hosts.yml
+  chown node:node /opt/gh-config/hosts.yml 2>/dev/null || true
+}
 
 # cc-connect reads config from $HOME/.cc-connect/
 rm -rf /home/node/.cc-connect /root/.cc-connect
