@@ -17,7 +17,7 @@ metadata:
 
 ```
 tool: get_daily_report
-arguments: {date: "YYYY-MM-DD"}  // 昨日日期，UTC
+arguments: {date: "YYYY-MM-DD"}  // 昨日日期，北京时间 (UTC+8)
 ```
 
 返回格式示例：
