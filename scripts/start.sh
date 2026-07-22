@@ -16,6 +16,12 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   exit 1
 fi
 
+# ── 检查 GH_TOKEN 是否设置（gh CLI / git 认证用）────────────
+if ! grep -q '^GH_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "   ⚠️  GH_TOKEN 未设置 — gh CLI 和 git clone 私有仓库将不可用"
+  echo "   在 .env 中设置 GH_TOKEN（OuyangWenyu 个人 GitHub 令牌）"
+fi
+
 # Read GDRIVE_PAPERS_LOCAL_PATH from .env (can't source directly — cron expressions break bash)
 if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
   GDRIVE_PAPERS_LOCAL_PATH=$(grep '^GDRIVE_PAPERS_LOCAL_PATH=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)
@@ -322,6 +328,10 @@ with open('${HERMES_CONFIG}', 'w') as f:
   fi
 fi
 
+# 从 .env 读取 FEISHU_HOME_CHANNEL 和 LARK_USER_OPEN_ID（不能 source .env，cron 表达式会破坏 bash）
+FEISHU_HOME_CHANNEL="${FEISHU_HOME_CHANNEL:-$(grep '^FEISHU_HOME_CHANNEL=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+LARK_USER_OPEN_ID="${LARK_USER_OPEN_ID:-$(grep '^LARK_USER_OPEN_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+
 # ── 注册 Morning Triage v2 Cron Job ───────────────────────────
 # 仅在 cron_mode=allow 时注册
 if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 2>/dev/null; then
@@ -331,50 +341,56 @@ if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 
     sleep 2
   done
   if docker compose ps hermes 2>/dev/null | grep -q 'Up'; then
-    # 读取飞书私聊 Open ID
-    FEISHU_OPEN_ID="${LARK_USER_OPEN_ID:?LARK_USER_OPEN_ID must be set in .env}"
-    DELIVER="feishu:${FEISHU_OPEN_ID}"
+    # 读取飞书私聊推送目标：优先 LARK_USER_OPEN_ID，fallback 到 FEISHU_HOME_CHANNEL
+    FEISHU_OPEN_ID="${LARK_USER_OPEN_ID:-${FEISHU_HOME_CHANNEL:-}}"
+    if [[ -n "${FEISHU_OPEN_ID:-}" ]]; then
+      DELIVER="feishu:${FEISHU_OPEN_ID}"
 
-    # ── Daily Command Center（TDAI 记忆 + 健康信号 + 活跃场景）──
-    EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "Daily Command Center" || true)
-    if [ "${EXISTING:-0}" -lt 1 ]; then
-      docker compose exec -T hermes "${HERMES_BIN}" cron create \
-        "50 23 * * *" \
-        "执行 morning-triage-v2 技能：查询 TDAI Memory Gateway (http://tdai-memory:8420) 获取昨日记忆和活跃场景，汇总系统健康信号，输出 Daily Command Center 晨间简报。" \
-        --deliver "${DELIVER}" \
-        --name "Daily Command Center" 2>/dev/null && \
-        echo "   📋 Daily Command Center cron job 已注册 (每日 7:50 北京)" || \
-        echo "   ⚠️  Daily Command Center cron job 注册失败"
-    else
-      echo "   📋 Daily Command Center cron job 已存在，跳过"
-    fi
+      # ── Daily Command Center（TDAI 记忆 + 健康信号 + 活跃场景）──
+      EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "Daily Command Center" || true)
+      if [ "${EXISTING:-0}" -lt 1 ]; then
+        docker compose exec -T hermes "${HERMES_BIN}" cron create \
+          "50 23 * * *" \
+          "执行 morning-triage-v2 技能：查询 TDAI Memory Gateway (http://tdai-memory:8420) 获取昨日记忆和活跃场景，汇总系统健康信号，输出 Daily Command Center 晨间简报。" \
+          --deliver "${DELIVER}" \
+          --name "Daily Command Center" 2>/dev/null && \
+          echo "   📋 Daily Command Center cron job 已注册 (每日 7:50 北京)" || \
+          echo "   ⚠️  Daily Command Center cron job 注册失败"
+      else
+        echo "   📋 Daily Command Center cron job 已存在，跳过"
+      fi
 
-    # ── 工作日晨间简报（待办事务 + 未读邮件，仅工作日）────────
-    EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "工作日晨间简报" || true)
-    if [ "${EXISTING:-0}" -lt 1 ]; then
-      docker compose exec -T hermes "${HERMES_BIN}" cron create \
-        "30 23 * * 0-4" \
-        "执行 morning-briefing 技能生成晨间简报。收集待办事务和未读邮件，按 SKILL.md 中的规则筛选和呈现。今天是工作日，正常发送。" \
-        --deliver "${DELIVER}" \
-        --name "工作日晨间简报" 2>/dev/null && \
-        echo "   📋 工作日晨间简报 cron job 已注册 (工作日 7:30 北京)" || \
-        echo "   ⚠️  工作日晨间简报 cron job 注册失败"
-    else
-      echo "   📋 工作日晨间简报 cron job 已存在，跳过"
-    fi
+      # ── 工作日晨间简报（待办事务 + 未读邮件，仅工作日）────────
+      EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "工作日晨间简报" || true)
+      if [ "${EXISTING:-0}" -lt 1 ]; then
+        docker compose exec -T hermes "${HERMES_BIN}" cron create \
+          "30 23 * * 0-4" \
+          "执行 morning-briefing 技能生成晨间简报。收集待办事务和未读邮件，按 SKILL.md 中的规则筛选和呈现。今天是工作日，正常发送。" \
+          --deliver "${DELIVER}" \
+          --name "工作日晨间简报" 2>/dev/null && \
+          echo "   📋 工作日晨间简报 cron job 已注册 (工作日 7:30 北京)" || \
+          echo "   ⚠️  工作日晨间简报 cron job 注册失败"
+      else
+        echo "   📋 工作日晨间简报 cron job 已存在，跳过"
+      fi
 
-    # ── daily-dev-report（研发贡献日报）────────────────────────────
-    EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "daily-dev-report" || true)
-    if [ "${EXISTING:-0}" -lt 1 ]; then
-      docker compose exec -T hermes "${HERMES_BIN}" cron create \
-        "55 23 * * *" \
-        "执行 daily-dev-report 技能：调用 MCP get_daily_report 获取昨日研发贡献数据，DeepSeek 深度分析，输出每日研发贡献报告。" \
-        --deliver "${DELIVER}" \
-        --name "daily-dev-report" 2>/dev/null && \
-        echo "   📋 daily-dev-report cron job 已注册 (每日 7:55 北京)" || \
-        echo "   ⚠️  daily-dev-report cron job 注册失败"
+      # ── daily-dev-report（研发贡献日报）────────────────────────────
+      EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "daily-dev-report" || true)
+      if [ "${EXISTING:-0}" -lt 1 ]; then
+        docker compose exec -T hermes "${HERMES_BIN}" cron create \
+          "55 23 * * *" \
+          "执行 daily-dev-report 技能：调用 MCP get_daily_report 获取昨日研发贡献数据，DeepSeek 深度分析，输出每日研发贡献报告。" \
+          --deliver "${DELIVER}" \
+          --name "daily-dev-report" 2>/dev/null && \
+          echo "   📋 daily-dev-report cron job 已注册 (每日 7:55 北京)" || \
+          echo "   ⚠️  daily-dev-report cron job 注册失败"
+      else
+        echo "   📋 daily-dev-report cron job 已存在，跳过"
+      fi
+
     else
-      echo "   📋 daily-dev-report cron job 已存在，跳过"
+      echo "   ⚠️  LARK_USER_OPEN_ID 和 FEISHU_HOME_CHANNEL 都未设置，跳过 cron job 注册"
+      echo "   在 .env 中至少设置一个（推荐 FEISHU_HOME_CHANNEL）"
     fi
   fi
 else

@@ -9,32 +9,57 @@
 # (from ~/.config/gh) is found automatically.
 # =============================================================
 set -euo pipefail
+umask 077
 
-# hermes user home = /opt/data; Hermes bash subprocess runs as root (HOME=/root)
-# gh CLI reads $HOME/.config/gh/ — symlink both to the host-mounted config dir
-mkdir -p /opt/data/.config /root/.config
+# hermes user home = /opt/data; Hermes terminal HOME = /opt/data/home
+# gh CLI reads $HOME/.config/gh/ — symlink all three to the host-mounted config dir.
+# 必须先 rm -rf，否则如果目标已存在为目录，ln 会把链接建在目录里面而非替换它。
+mkdir -p /opt/data/.config /opt/data/home/.config /root/.config
+rm -rf /opt/data/.config/gh /opt/data/home/.config/gh /root/.config/gh
 ln -sf /opt/gh-config /opt/data/.config/gh
+ln -sf /opt/gh-config /opt/data/home/.config/gh
 ln -sf /opt/gh-config /root/.config/gh
 
 # ── gh hosts.yml 自动同步 ───────────────────────────────────
-# 每次容器启动时，用 .env 里的 GH_TOKEN 更新 hosts.yml 中的 oauth_token
-# 这样用户只需要改 .env 一个地方，重启即可生效
+# 每次容器启动时，用 .env 里的 GH_TOKEN（传入为 GITHUB_TOKEN）更新
+# hosts.yml 中的 oauth_token。始终用 heredoc 重新生成（不用 sed），
+# 避免 token 出现在 /proc/pid/cmdline 中。
+#
+# 使用 legacy 单账户格式（不加 users: 键），避免触发 gh 2.96+ 的
+# 多账户迁移路径——该路径需要 dbus secret service，在 Docker 容器里不可用。
 if [ -n "${GITHUB_TOKEN:-}" ]; then
   mkdir -p /opt/gh-config
-  if [ -f /opt/gh-config/hosts.yml ]; then
-    sed -i "s/oauth_token:.*/oauth_token: ${GITHUB_TOKEN}/" /opt/gh-config/hosts.yml
-    echo "   🔑 gh hosts.yml 已同步当前 GITHUB_TOKEN"
-  else
-    cat > /opt/gh-config/hosts.yml << HOSTSEOF
+  # 清理旧格式 config.yml（触发多账户迁移的源头）
+  rm -f /opt/gh-config/config.yml
+  cat > /opt/gh-config/hosts.yml << HOSTSEOF
 github.com:
-    git_protocol: https
-    users:
-        OuyangWenyu:
-            oauth_token: ${GITHUB_TOKEN}
     user: OuyangWenyu
+    oauth_token: ${GITHUB_TOKEN}
+    git_protocol: https
 HOSTSEOF
-    chmod 600 /opt/gh-config/hosts.yml
-    echo "   🔑 gh hosts.yml 已创建并写入 GITHUB_TOKEN"
+  echo "   🔑 gh hosts.yml 已同步当前 GITHUB_TOKEN"
+else
+  # GITHUB_TOKEN 未设置，检查 host 挂载的 hosts.yml 是否已有有效 token
+  if [ -f /opt/gh-config/hosts.yml ] && grep -q 'oauth_token: [a-zA-Z0-9_]' /opt/gh-config/hosts.yml; then
+    echo "   🔑 未检测到 GITHUB_TOKEN，使用 host 端已有 hosts.yml token"
+  else
+    echo "   ⚠️  GITHUB_TOKEN 未设置且 hosts.yml 无有效 token — gh CLI 将不可用"
+  fi
+fi
+
+# 确保权限正确（放在 if 块外面：覆盖 token 更新和 fallback 两种情况）
+[ -f /opt/gh-config/hosts.yml ] && {
+  chmod 600 /opt/gh-config/hosts.yml
+  chown hermes:hermes /opt/gh-config/hosts.yml 2>/dev/null || true
+}
+
+# ── 验证 gh auth 是否可用 ───────────────────────────────────
+# stdout 重定向到 /dev/null，避免 gh auth status 输出写入 Docker 日志
+if command -v gh &>/dev/null; then
+  if su -s /bin/bash hermes -c "gh auth status --hostname github.com" >/dev/null 2>&1; then
+    echo "   ✅ gh auth 验证通过"
+  else
+    echo "   ⚠️  gh auth 验证失败 — 请检查 GH_TOKEN 是否在 .env 中设置"
   fi
 fi
 
@@ -139,7 +164,8 @@ for pair in \
   "DEEPSEEK_API_KEY=deepseek-api-key" \
   "OPENROUTER_API_KEY=openrouter-api-key" \
   "OPENAI_API_KEY=openai-api-key" \
-  "OPENCODE_API_KEY=opencode-api-key"; do
+  "OPENCODE_API_KEY=opencode-api-key" \
+  "GITHUB_TOKEN=github-token"; do
   env_name="${pair%%=*}"
   file_name="${pair##*=}"
   if [[ -n "${!env_name:-}" ]]; then

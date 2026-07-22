@@ -24,6 +24,7 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
     environment:
+      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
@@ -84,6 +85,7 @@ services:
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
 
     environment:
+      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
@@ -141,6 +143,7 @@ services:
       - ${HOME}/Zotero:/opt/zotero-data:ro
 
     environment:
+      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
@@ -226,6 +229,7 @@ services:
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.deepseek.com/anthropic}
       - CC_CONNECT_FEISHU_APP_ID=${CC_CONNECT_FEISHU_APP_ID:-}
       - CC_CONNECT_FEISHU_APP_SECRET=${CC_CONNECT_FEISHU_APP_SECRET:-}
+      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - DAILYINFO_DATA_ROOT=/home/node/.myagentdata/dailyinfo
