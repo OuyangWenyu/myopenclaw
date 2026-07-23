@@ -27,6 +27,20 @@ not_contains() {
   ! grep -Fq -- "${text}" "${file}"
 }
 
+contains_implementation() {
+  local file="$1"
+  local text="$2"
+  grep -F -- "${text}" "${file}" | grep -vq '^check '
+}
+
+docker_host_path() {
+  local path="$1"
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*) cygpath -m "${path}" ;;
+    *) printf '%s\n' "${path}" ;;
+  esac
+}
+
 posix_root_start_fails_closed() {
   local fixture
   fixture="$(mktemp -d)"
@@ -90,6 +104,8 @@ check "compose maps Yuque UID and GID" contains "${COMPOSE_FILE}" 'user: "${YUQU
 check "compose passes snapshot permission mode" contains "${COMPOSE_FILE}" 'YUQUE_CHANGE_DATA_PERMISSION_MODE=${YUQUE_CHANGE_DATA_PERMISSION_MODE:-strict}'
 check "startup supports explicit yuque" contains "${START_SCRIPT}" 'yuque-mcp'
 check "Windows startup delegates snapshot permissions to host ACLs" contains "${START_SCRIPT}" 'YUQUE_CHANGE_DATA_PERMISSION_MODE=host'
+check "container tests define cross-platform path conversion" contains_implementation "${BASH_SOURCE[0]}" 'docker_host_path()'
+check "POSIX path conversion avoids cygpath" contains_implementation "${BASH_SOURCE[0]}" 'printf '\''%s\n'\'' "${path}"'
 check "shutdown includes yuque profile" contains "${STOP_SCRIPT}" '--profile yuque'
 check "POSIX startup maps current UID" contains "${START_SCRIPT}" 'YUQUE_MCP_UID="$(id -u)"'
 check "POSIX startup maps current GID" contains "${START_SCRIPT}" 'YUQUE_MCP_GID="$(id -g)"'
@@ -115,12 +131,12 @@ if [[ "${YUQUE_MCP_CONTAINER_TESTS:-0}" == "1" ]]; then
   printf 'INFO: container checks enabled\n'
   check "Docker is available" docker info >/dev/null 2>&1
   TEST_ROOT_UNIX="$(mktemp -d)"
-  TEST_ROOT="$(cygpath -m "${TEST_ROOT_UNIX}")"
+  TEST_ROOT="$(docker_host_path "${TEST_ROOT_UNIX}")"
   TEST_HOME_UNIX="${TEST_ROOT_UNIX}/home"
   TEST_PROJECT="yuque-mcp-test-$$"
   TEST_KEY="test-$RANDOM-$RANDOM-$$"
   TEST_PORT="${YUQUE_MCP_TEST_PORT:-28080}"
-  export HOME="$(cygpath -m "${TEST_HOME_UNIX}")"
+  export HOME="$(docker_host_path "${TEST_HOME_UNIX}")"
   export YUQUE_TOKEN="placeholder-token"
   export MCP_API_KEY="${TEST_KEY}"
   export YUQUE_MCP_PORT="${TEST_PORT}"
@@ -191,7 +207,7 @@ if [[ "${YUQUE_MCP_CONTAINER_TESTS:-0}" == "1" ]]; then
     sleep 1
   done
 
-  CLIENT_SCRIPT="$(cygpath -m "${ROOT}/scripts/verify-yuque-mcp-sse.py")"
+  CLIENT_SCRIPT="$(docker_host_path "${ROOT}/scripts/verify-yuque-mcp-sse.py")"
   CLIENT_BASE=(env MSYS_NO_PATHCONV=1 docker compose -p "${TEST_PROJECT}" --profile yuque run -T --rm --no-deps
     -v "${CLIENT_SCRIPT}:/tmp/verify-yuque-mcp-sse.py:ro" yuque-mcp
     uv run python /tmp/verify-yuque-mcp-sse.py --url http://yuque-mcp:18000/sse)
@@ -200,7 +216,7 @@ if [[ "${YUQUE_MCP_CONTAINER_TESTS:-0}" == "1" ]]; then
   check "correct Bearer discovers exactly six tools" \
     "${CLIENT_BASE[@]}" --key "${TEST_KEY}" --expect success
 
-  REPO_ROOT_MOUNT="$(cygpath -m "${ROOT}")"
+  REPO_ROOT_MOUNT="$(docker_host_path "${ROOT}")"
   check "Linux lifecycle preserves non-managed Skill paths" \
     env MSYS_NO_PATHCONV=1 docker run --rm \
       --entrypoint /opt/hermes/.venv/bin/python \
@@ -214,7 +230,7 @@ if [[ "${YUQUE_MCP_CONTAINER_TESTS:-0}" == "1" ]]; then
     MCP_YUQUE_MCP_API_KEY="${TEST_KEY}" \
     YUQUE_MANAGE_SKILL_LINK=false \
     python "${ROOT}/docker/hermes/configure-yuque-mcp.py"
-  HERMES_CLIENT_SCRIPT="$(cygpath -m "${ROOT}/scripts/verify-hermes-yuque-mcp.py")"
+  HERMES_CLIENT_SCRIPT="$(docker_host_path "${ROOT}/scripts/verify-hermes-yuque-mcp.py")"
   check "isolated Hermes consumes helper config and discovers six tools" \
     env MSYS_NO_PATHCONV=1 docker compose -p "${TEST_PROJECT}" --profile yuque run -T --rm --no-deps \
       --entrypoint /opt/hermes/.venv/bin/python \

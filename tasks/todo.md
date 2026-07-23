@@ -72,6 +72,13 @@
   - Files：集成测试脚本；必要时仅证据驱动修订 Spec
   - Depends on：Tasks 5–6
 
+## Follow-up
+
+- [ ] Replace the private Hermes `_probe_single_server` and
+  `_resolve_mcp_server_config` imports in `scripts/verify-hermes-yuque-mcp.py`
+  with a stable public CLI boundary. The current private API usage is limited
+  to integration verification and does not affect production runtime.
+
 ## Final Gate
 
 - [x] PRD/Spec 自动化 Acceptance Criteria 全部映射到证据。
