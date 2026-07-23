@@ -8,6 +8,35 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+ENABLE_YUQUE=true
+BUILD_FLAG=""
+for arg in "$@"; do
+  case "${arg}" in
+    --build) BUILD_FLAG="--build" ;;
+    --yuque) ENABLE_YUQUE=true ;;
+    *) echo "未知参数: ${arg}" >&2; exit 2 ;;
+  esac
+done
+
+if [[ "${ENABLE_YUQUE}" == "true" ]]; then
+  case "$(uname -s)" in
+    MINGW*|MSYS*|CYGWIN*)
+      YUQUE_CHANGE_DATA_PERMISSION_MODE=host
+      export YUQUE_CHANGE_DATA_PERMISSION_MODE
+      ;;
+    *)
+      YUQUE_CHANGE_DATA_PERMISSION_MODE="${YUQUE_CHANGE_DATA_PERMISSION_MODE:-strict}"
+      YUQUE_MCP_UID="$(id -u)"
+      YUQUE_MCP_GID="$(id -g)"
+      if [[ "${YUQUE_MCP_UID}" == "0" ]]; then
+        echo "❌ refusing to run yuque-mcp as root; use a non-root POSIX user" >&2
+        exit 1
+      fi
+      export YUQUE_CHANGE_DATA_PERMISSION_MODE YUQUE_MCP_UID YUQUE_MCP_GID
+      ;;
+  esac
+fi
+
 # ── 检查 .env ────────────────────────────────────────────────
 if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   echo "⚠️  .env 不存在，从模板创建..."
@@ -78,6 +107,13 @@ fi
 mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode" "${HOME}/.lark-cli"
 mkdir -p "${HOME}/.myagentdata/aisecretary"
 mkdir -p "${HOME}/.myagentdata/tdai-memory"
+
+if [[ "${ENABLE_YUQUE}" == "true" ]]; then
+  export YUQUE_MCP_ENABLED=true
+  mkdir -p \
+    "${HOME}/.myagentdata/yuque-mcp/change-data" \
+    "${HOME}/.myagentdata/yuque-mcp/backups"
+fi
 if [[ ! -f "${HOME}/.config/opencode/opencode.json" ]]; then
   cp "${REPO_ROOT}/hermes/config/opencode.json.example" "${HOME}/.config/opencode/opencode.json"
   echo "   📝 已创建 opencode 配置: ~/.config/opencode/opencode.json"
@@ -292,14 +328,14 @@ echo ""
 
 cd "${REPO_ROOT}"
 
-BUILD_FLAG=""
-if [[ "${1:-}" == "--build" ]]; then
-  BUILD_FLAG="--build"
-fi
-
 echo "🚀 启动服务..."
 echo "   备份目录: ${BACKUP_ROOT}"
-docker compose up -d ${BUILD_FLAG}
+COMPOSE_SERVICES=(hermes backup-cron yuque-mcp)
+COMPOSE_PROFILE_ARGS=()
+if [[ "${ENABLE_YUQUE}" == "true" ]]; then
+  COMPOSE_PROFILE_ARGS=(--profile yuque)
+fi
+docker compose "${COMPOSE_PROFILE_ARGS[@]}" up -d ${BUILD_FLAG} "${COMPOSE_SERVICES[@]}"
 echo "✅ 服务已启动"
 
 HERMES_BIN="/opt/hermes/.venv/bin/hermes"

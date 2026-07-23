@@ -103,6 +103,14 @@ if [ -d /opt/hermes-skills/daily-dev-report ] && [ ! -L /opt/data/skills/daily-d
   ln -sf /opt/hermes-skills/daily-dev-report /opt/data/skills/daily-dev-report
   echo "   📋 daily-dev-report skill 已安装"
 fi
+
+# ── Yuque MCP → Hermes（仅显式启用时）─────────────────────────
+if [[ "${YUQUE_MCP_ENABLED:-false}" == "true" ]]; then
+  /opt/hermes/configure-yuque-mcp.py
+  echo "   📚 yuque-mcp 已配置（transport: sse）"
+else
+  /opt/hermes/configure-yuque-mcp.py --disable
+fi
 # Auto-configure lark-cli if credentials are available via env vars
 # LARK_CLI_APP_ID / LARK_CLI_APP_SECRET — primary app (Hermes)
 # LARK_CLI_IDM_APP_ID / LARK_CLI_IDM_APP_SECRET — secondary app (爱码士)

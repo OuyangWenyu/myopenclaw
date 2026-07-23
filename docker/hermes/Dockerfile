@@ -133,6 +133,7 @@ RUN chmod +x /opt/hermes/scripts/test-paper-to-zotero.sh \
 # because hermes user home is /opt/data. We symlink it to the
 # mounted host dir so gh auth state survives container rebuilds.
 COPY entrypoint-wrapper.sh /opt/hermes/entrypoint-wrapper.sh
+COPY configure-yuque-mcp.py /opt/hermes/configure-yuque-mcp.py
 RUN chmod +x /opt/hermes/entrypoint-wrapper.sh
 
 ENTRYPOINT ["/opt/hermes/entrypoint-wrapper.sh"]
