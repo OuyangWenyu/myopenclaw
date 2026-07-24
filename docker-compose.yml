@@ -13,7 +13,9 @@ services:
     volumes:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
+      - ${HOME}/.config/gc:/root/.config/gc
       - ${HOME}/.config/opencode:/opt/opencode-config
+      - ${HOME}/.openclaw/bin/gc:/usr/local/bin/gc:ro
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
@@ -25,6 +27,7 @@ services:
 
     environment:
       - GITHUB_TOKEN=${GH_TOKEN:-}
+      - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
@@ -255,6 +258,8 @@ services:
       - "${OPENCLAW_PORT:-18789}:18789"
     volumes:
       - ${HOME}/.openclaw:/home/node/.openclaw
+      - ${HOME}/.config/gc:/home/node/.config/gc
+      - ${HOME}/.openclaw/bin/gc:/usr/local/bin/gc:ro
       - ./openclaw/scripts/fix-host-paths.sh:/fix-host-paths.sh:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
@@ -283,6 +288,8 @@ services:
       - cli
     volumes:
       - ${HOME}/.openclaw:/home/node/.openclaw
+      - ${HOME}/.config/gc:/home/node/.config/gc
+      - ${HOME}/.openclaw/bin/gc:/usr/local/bin/gc:ro
     network_mode: "service:openclaw-gateway"
     depends_on:
       - openclaw-gateway
