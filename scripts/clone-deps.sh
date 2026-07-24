@@ -8,6 +8,10 @@ set -euo pipefail
 CODE_DIR="${CODE_DIR:-${HOME}/code}"
 mkdir -p "${CODE_DIR}"
 
+readonly YUQUE_MCP_REPO_URL="https://gitcode.com/dlut-water/yuque_mcp_server.git"
+readonly YUQUE_MCP_SOURCE_REF="codex/docs-yuque-mcp-deployment-status"
+readonly YUQUE_MCP_PINNED_COMMIT="cc68fd0df172d3b8f24ae325998d56bdfd0e36e6"
+
 # ── 检查 gh CLI 认证状态 ──────────────────────────────────────
 check_gh_auth() {
   if command -v gh &>/dev/null && gh auth status &>/dev/null 2>&1; then
@@ -39,6 +43,40 @@ clone_or_update() {
   fi
 }
 
+clone_or_verify_pinned() {
+  local target_dir="${CODE_DIR}/yuque_mcp_server"
+
+  if [[ -d "${target_dir}/.git" ]]; then
+    local current_sha
+    current_sha="$(git -C "${target_dir}" rev-parse HEAD)"
+    if ! git -C "${target_dir}" cat-file -e "${YUQUE_MCP_PINNED_COMMIT}^{commit}" 2>/dev/null; then
+      echo "❌ yuque_mcp_server 缺少固定 commit: ${YUQUE_MCP_PINNED_COMMIT}"
+      echo "   请手动执行: git -C ${target_dir} fetch origin ${YUQUE_MCP_SOURCE_REF}"
+      return 1
+    fi
+    if [[ "${current_sha}" != "${YUQUE_MCP_PINNED_COMMIT}" ]]; then
+      echo "⚠️  yuque_mcp_server 当前版本偏离固定版本，未自动修改"
+      echo "   当前: ${current_sha}"
+      echo "   目标: ${YUQUE_MCP_PINNED_COMMIT}"
+      echo "   请确认工作区后手动执行: git -C ${target_dir} checkout ${YUQUE_MCP_PINNED_COMMIT}"
+      return 1
+    fi
+    echo "✅ yuque_mcp_server 已固定: ${YUQUE_MCP_PINNED_COMMIT}"
+    return 0
+  fi
+
+  if [[ -e "${target_dir}" ]]; then
+    echo "❌ 目录已存在但不是 git 仓库，跳过: ${target_dir}"
+    return 1
+  fi
+
+  echo "📥 克隆 yuque_mcp_server（语雀 MCP）..."
+  git clone --branch "${YUQUE_MCP_SOURCE_REF}" "${YUQUE_MCP_REPO_URL}" "${target_dir}"
+  git -C "${target_dir}" cat-file -e "${YUQUE_MCP_PINNED_COMMIT}^{commit}"
+  git -C "${target_dir}" checkout --detach "${YUQUE_MCP_PINNED_COMMIT}"
+  echo "   ✅ 已固定: ${YUQUE_MCP_PINNED_COMMIT}"
+}
+
 echo "============================================"
 echo "  myopenclaw 依赖仓库克隆"
 echo "============================================"
@@ -62,6 +100,9 @@ clone_or_update \
   "${CODE_DIR}/dailyinfo" \
   "dailyinfo（AI 情报聚合）"
 
+# ── 4. yuque_mcp_server（可选：Hermes 语雀知识库）────────────
+clone_or_verify_pinned
+
 echo ""
 echo "============================================"
 echo "  依赖仓库状态"
@@ -69,7 +110,8 @@ echo "============================================"
 for dir in \
   "${CODE_DIR}/aisecretary" \
   "${CODE_DIR}/git-contribution-stats" \
-  "${CODE_DIR}/dailyinfo"; do
+  "${CODE_DIR}/dailyinfo" \
+  "${CODE_DIR}/yuque_mcp_server"; do
   if [[ -d "${dir}/.git" ]]; then
     echo "  ✅ $(basename "${dir}")"
   else

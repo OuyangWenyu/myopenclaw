@@ -12,10 +12,10 @@ cd "${REPO_ROOT}"
 
 if [[ "${1:-}" == "--remove-volumes" ]]; then
   echo "⚠️  停止并移除容器（volumes 保留在云盘，不受影响）"
-  docker compose down
+  docker compose --profile yuque down
 else
   echo "🛑 停止服务..."
-  docker compose stop
+  docker compose --profile yuque stop
 fi
 
 echo "✅ 服务已停止"

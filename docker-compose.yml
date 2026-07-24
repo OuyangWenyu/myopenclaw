@@ -10,6 +10,7 @@ services:
     command: gateway run
     ports:
       - "${HERMES_PORT:-8642}:8642"
+      - "127.0.0.1:${HERMES_DASHBOARD_PORT:-9119}:9119"
     volumes:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
@@ -20,6 +21,7 @@ services:
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
+      - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
@@ -51,6 +53,12 @@ services:
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
+      - HERMES_DASHBOARD=true
+      - HERMES_DASHBOARD_HOST=0.0.0.0
+      - HERMES_DASHBOARD_PORT=9119
+      - HERMES_DASHBOARD_INSECURE=true
+      - MCP_YUQUE_MCP_API_KEY=${MCP_API_KEY:-}
+      - YUQUE_MCP_ENABLED=${YUQUE_MCP_ENABLED:-false}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -329,6 +337,47 @@ services:
       - myopenclaw-net
 
   # ── 定时快照备份 ─────────────────────────────────────────────
+  # ── Yuque MCP（可选；仅供 Hermes 使用）──────────────────────
+  yuque-mcp:
+    profiles: ["yuque"]
+    build:
+      context: ../yuque_mcp_server
+      dockerfile: Dockerfile
+    image: myopenclaw/yuque-mcp:latest
+    container_name: yuque-mcp
+    restart: unless-stopped
+    user: "${YUQUE_MCP_UID:-10001}:${YUQUE_MCP_GID:-10001}"
+    ports:
+      - "127.0.0.1:${YUQUE_MCP_PORT:-18000}:18000"
+    environment:
+      - RUN_MODE=cloud
+      - PORT=18000
+      - YUQUE_TOKEN=${YUQUE_TOKEN:-}
+      - MCP_API_KEY=${MCP_API_KEY:-}
+      - YUQUE_CHANGE_DATA_DIR=/data/change-data
+      - YUQUE_CHANGE_DATA_PERMISSION_MODE=${YUQUE_CHANGE_DATA_PERMISSION_MODE:-strict}
+      - YUQUE_CHANGE_RETENTION_DAYS=${YUQUE_CHANGE_RETENTION_DAYS:-30}
+    volumes:
+      - ${HOME}/.myagentdata/yuque-mcp/change-data:/data/change-data
+      - ${HOME}/.myagentdata/yuque-mcp/backups:/app/yuque/backup
+    command:
+      - /bin/sh
+      - -ec
+      - |
+        test "$$(id -u)" -ne 0 || { echo "refusing to run yuque-mcp as root" >&2; exit 1; }
+        test -n "$${YUQUE_TOKEN:-}" || { echo "YUQUE_TOKEN is required" >&2; exit 1; }
+        test -n "$${MCP_API_KEY:-}" || { echo "MCP_API_KEY is required" >&2; exit 1; }
+        export HOME="/tmp/yuque-home-$$(id -u)"
+        mkdir -p "$${HOME}"
+        exec uv run python yuque/server.py
+    networks:
+      - myopenclaw-net
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "0.5"
+
   backup-cron:
     build:
       context: ./docker/backup-cron
