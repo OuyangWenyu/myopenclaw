@@ -17,8 +17,10 @@ metadata:
 
 ```
 tool: get_daily_report
-arguments: {date: "YYYY-MM-DD"}  // 昨日日期，北京时间 (UTC+8)
+arguments: {}  // 不传 date，让服务端自动使用北京时间昨天（容器是 UTC 时区，你自己算会错）
 ```
+
+**重要**：不要自己计算日期传给 MCP。容器运行在 UTC 时区，cron 在 23:55 UTC（北京时间次日 07:55）触发时，你看到的系统日期会比北京时间晚一天。MCP 服务端内置了北京时区逻辑，不传 date 反而能拿到正确的昨天数据。报告标题中的日期从 MCP 返回的 `date` 字段获取。
 
 返回格式示例：
 
