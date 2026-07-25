@@ -10,7 +10,7 @@ mkdir -p "${CODE_DIR}"
 
 readonly YUQUE_MCP_REPO_URL="https://gitcode.com/dlut-water/yuque_mcp_server.git"
 readonly YUQUE_MCP_SOURCE_REF="codex/docs-yuque-mcp-deployment-status"
-readonly YUQUE_MCP_PINNED_COMMIT="cc68fd0df172d3b8f24ae325998d56bdfd0e36e6"
+readonly YUQUE_MCP_PINNED_COMMIT="362aba1877961e5bbf7ec1c2e24c4505fa15476f"
 
 # ── 检查 gh CLI 认证状态 ──────────────────────────────────────
 check_gh_auth() {

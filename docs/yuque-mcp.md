@@ -6,7 +6,7 @@ myopenclaw 将兄弟仓库 `yuque_mcp_server` 作为可选 Docker 服务运行�
 
 - Docker Desktop 已运行。
 - Windows 下使用 Git Bash 执行 `.sh` 脚本。
-- 上游仓库位于 `../yuque_mcp_server`，固定 commit 为 `cc68fd0df172d3b8f24ae325998d56bdfd0e36e6`；该版本包含 Docker 上下文隔离、HTTP timeout/异步隔离、同仓库备份 single-flight、专用 non-root 用户、`hmac.compare_digest` 认证、UID/GID 映射、root fail-closed 和 Windows bind mount 宿主机权限模式。
+- 上游仓库位于 `../yuque_mcp_server`，固定 commit 为 `362aba1877961e5bbf7ec1c2e24c4505fa15476f`；该版本包含 Docker 上下文隔离、HTTP timeout/异步隔离、知识库发现、同仓库备份 single-flight、专用 non-root 用户、`hmac.compare_digest` 认证、UID/GID 映射、root fail-closed 和 Windows bind mount 宿主机权限模式。
 
 执行 `./scripts/clone-deps.sh` 可克隆或核对依赖。已有仓库若偏离固定 commit，脚本只报告当前和目标 SHA，不会 reset、clean 或覆盖本地改动。
 
@@ -69,10 +69,11 @@ docker compose stop yuque-mcp
 
 ## Hermes 工具边界
 
-Hermes 的 `yuque-knowledge` Skill 使用 6 个上游工具：`list_docs`、`get_doc_content`、`get_repo_toc`、`search_docs`、`backup_repo`、`collect_and_get_change_summary`。
+Hermes 的 `yuque-knowledge` Skill 使用 7 个上游工具：`list_docs`、`get_doc_content`、`get_repo_toc`、`search_docs`、`list_repos`、`backup_repo`、`collect_and_get_change_summary`。
 
 Hermes 为 `yuque-mcp` 单独配置 900 秒工具调用超时，以支持大型知识库备份；该设置不影响其他 Hermes 工具。
 
+- 只知道知识库显示名称或需要查看可访问知识库时，先使用 `list_repos` 获取 `namespace`。`list_repos` 不读取正文、不创建快照、不推进变化基线。
 - 完整目录使用 `get_repo_toc`。
 - `list_docs` 和按标题工作的 `search_docs` 可能只覆盖前 100 篇。
 - 读取正文前先缩小到指定文档。
@@ -87,9 +88,9 @@ docker compose ps hermes backup-cron yuque-mcp
 docker compose exec -T hermes /opt/hermes/.venv/bin/hermes mcp test yuque-mcp
 ```
 
-容器为 `Up` 只证明进程运行；`hermes mcp test` 能发现 6 个工具才证明 MCP 连接可用；只有使用真实只读 Token 调用工具，才能证明真实语雀 API 可用。自动化契约测试不读取真实语雀正文。
+容器为 `Up` 只证明进程运行；`hermes mcp test` 能发现 7 个工具才证明 MCP 连接可用；只有使用真实只读 Token 调用工具，才能证明真实语雀 API 可用。自动化契约测试不读取真实语雀正文。
 
-自动化测试采用研发日报相同边界：检查 Skill、认证、工具发现、Hermes 真实 MCP loader 和五条确定性 mock 旅程。Hermes 的真实模型分析不使用 mock inference server，部署后再以只读方式人工验证；未执行时必须明确标为未验证。
+自动化测试采用研发日报相同边界：检查 Skill、认证、工具发现、Hermes 真实 MCP loader 和七条确定性 mock 旅程。Hermes 的真实模型分析不使用 mock inference server，部署后再以只读方式人工验证；未执行时必须明确标为未验证。
 
 常见问题：
 

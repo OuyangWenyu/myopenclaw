@@ -6,7 +6,7 @@
 ## Phase 0: Compatibility Gate
 
 - [x] **Task 0：验证 Hermes SSE、Bearer Header 与持久化配置**
-  - Acceptance：当前 Hermes 能以正确 Bearer 凭据发现精确 6 个工具；错误/缺失凭据失败；Spec 回写真实配置格式。
+  - Acceptance：当前 Hermes 能以正确 Bearer 凭据发现精确 7 个工具；错误/缺失凭据失败；Spec 回写真实配置格式。
   - Verify：Docker/Compose 版本、Hermes MCP 列表、服务日志敏感信息检查。
   - Files：`.claude/specs/yuque-mcp-integration.spec.md`
   - Depends on：None
@@ -24,7 +24,7 @@
   - Verify：临时目录克隆、偏离仓库保护、secret-like 扫描。
   - Files：`scripts/clone-deps.sh`, `.env.example`, `scripts/test-yuque-mcp-integration.sh`
   - Depends on：Task 1
-  - Evidence：固定 SHA 已更新为上游真实 commit `cc68fd0df172d3b8f24ae325998d56bdfd0e36e6`，包含 non-root、`compare_digest`、UID/GID 映射、root fail-closed 与 Windows bind mount 宿主机权限模式。
+  - Evidence：固定 SHA 已更新为上游真实 commit `362aba1877961e5bbf7ec1c2e24c4505fa15476f`，包含知识库发现、non-root、`compare_digest`、UID/GID 映射、root fail-closed 与 Windows bind mount 宿主机权限模式。
 
 - [x] **Task 3：增加可选 Compose 服务与本地持久化**
   - Acceptance：profile、localhost、内网、凭据安全失败、两个挂载均符合 Spec；默认流程不变。
@@ -47,14 +47,14 @@
   - Depends on：Checkpoint A
 
 - [x] **Task 5：增加 `yuque-knowledge` Skill 并验证调用边界**
-  - Acceptance：6 工具及语义边界准确；备份需要明确意图；Skill 安装幂等。
-  - Verify：静态 Skill 契约、Hermes 真实 MCP loader、五条确定性 mock 用户旅程；真实模型分析部署后人工只读验证。
+  - Acceptance：7 工具及语义边界准确；知识库显示名先发现 namespace；备份需要明确意图；Skill 安装幂等。
+  - Verify：静态 Skill 契约、Hermes 真实 MCP loader、七条确定性 mock 用户旅程；真实模型分析部署后人工只读验证。
   - Files：`skills/yuque-knowledge/SKILL.md`, Hermes entrypoint, Compose, 集成测试脚本
   - Depends on：Task 4
 
 ### Checkpoint B
 
-- [x] Hermes 认证发现 6 个工具。
+- [x] Hermes 认证发现 7 个工具。
 - [x] MCP 配置和 Skill 重建恢复、重复运行均幂等。
 - [x] 用户批准进入收尾验证。
 

@@ -15,6 +15,7 @@ EXPECTED_TOOLS = {
     "get_doc_content",
     "get_repo_toc",
     "search_docs",
+    "list_repos",
     "backup_repo",
     "collect_and_get_change_summary",
 }

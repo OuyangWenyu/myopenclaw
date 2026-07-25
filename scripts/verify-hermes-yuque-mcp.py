@@ -16,6 +16,7 @@ EXPECTED = {
     "get_doc_content",
     "get_repo_toc",
     "search_docs",
+    "list_repos",
     "backup_repo",
     "collect_and_get_change_summary",
 }
@@ -46,4 +47,4 @@ if "${" in resolved["headers"]["Authorization"]:
 tools = {name for name, _ in _probe_single_server("yuque-mcp", server)}
 if tools != EXPECTED:
     raise SystemExit(f"unexpected Hermes tool inventory: {sorted(tools)}")
-print("Hermes consumed helper config and discovered 6 expected Yuque tools")
+print("Hermes consumed helper config and discovered 7 expected Yuque tools")

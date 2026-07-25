@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deterministic mock/prompt checks for the five required Yuque journeys."""
+"""Deterministic mock/prompt checks for the required Yuque journeys."""
 
 from __future__ import annotations
 
@@ -21,6 +21,13 @@ class MockTools:
 
 def exercise(prompt: str, tools: MockTools) -> str:
     """Model the tool-selection contract expressed by the checked-in Skill."""
+    if "有哪些知识库" in prompt or "知识库列表" in prompt:
+        tools.call("list_repos")
+        return "已列出可见知识库；未读取正文、未创建快照"
+    if "技术交流" in prompt:
+        tools.call("list_repos")
+        tools.call("get_repo_toc", repo_namespace="team/tech")
+        return "已先发现知识库并使用 namespace 返回完整目录"
     if "备份" in prompt:
         tools.call("backup_repo", repo_namespace="team/docs", repo_display_name="团队文档")
         return "备份已写入本地持久化目录"
@@ -49,6 +56,8 @@ def assert_journey(prompt: str, expected_tool: str, expected_text: str) -> None:
 def main() -> None:
     skill = SKILL.read_text(encoding="utf-8")
     for required_rule in (
+        "先调用 `list_repos`",
+        "不读取正文、不创建快照、不推进变化基线",
         "完整枚举优先使用它",
         "最多可能只覆盖前 100 篇",
         "避免批量读取正文",
@@ -57,6 +66,7 @@ def main() -> None:
     ):
         assert required_rule in skill
 
+    assert_journey("列出我能访问的语雀知识库列表", "list_repos", "可见知识库")
     assert_journey("列出团队语雀知识库目录", "get_repo_toc", "完整目录")
     assert_journey("搜索标题包含架构的文档", "search_docs", "100 篇")
     assert_journey("总结 architecture 文档", "get_doc_content", "指定文档")
@@ -66,7 +76,12 @@ def main() -> None:
     non_backup_tools = MockTools()
     exercise("总结 architecture 文档", non_backup_tools)
     assert all(name != "backup_repo" for name, _ in non_backup_tools.calls)
-    print("five mock user journeys passed")
+
+    discovery_tools = MockTools()
+    response = exercise("列出技术交流知识库目录", discovery_tools)
+    assert [name for name, _ in discovery_tools.calls] == ["list_repos", "get_repo_toc"]
+    assert "namespace" in response
+    print("seven mock user journeys passed")
 
 
 if __name__ == "__main__":

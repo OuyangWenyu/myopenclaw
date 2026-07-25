@@ -8,7 +8,7 @@
 
 ## Overview
 
-按“研发日报”的本地托管模式，把固定 commit 的 `yuque_mcp_server` 作为可选 Compose 服务接入 myopenclaw，并让 Hermes 通过 Docker 内网和 Bearer 认证调用上游 6 个 MCP 工具。计划优先消除 Hermes SSE/Header 配置的不确定性，再以测试先行的增量完成依赖固定、服务编排、凭据隔离、持久化、Hermes 配置、Skill 和文档。
+按“研发日报”的本地托管模式，把固定 commit 的 `yuque_mcp_server` 作为可选 Compose 服务接入 myopenclaw，并让 Hermes 通过 Docker 内网和 Bearer 认证调用上游 7 个 MCP 工具。计划优先消除 Hermes SSE/Header 配置的不确定性，再以测试先行的增量完成依赖固定、服务编排、凭据隔离、持久化、Hermes 配置、Skill 和文档。
 
 本计划修改 `myopenclaw`，并包含已获授权的上游 `yuque_mcp_server` Required 安全修复；不添加健康检查，不使用真实语雀正文做自动化测试。
 
@@ -24,7 +24,7 @@
 ## Architecture Decisions
 
 1. **默认服务**：`yuque-mcp` 使用 Compose profile `yuque`，由 `scripts/start.sh` 显式启用并与 Hermes、backup-cron 一起启动。
-2. **可复现依赖**：记录来源分支，构建固定到完整 commit `cc68fd0df172d3b8f24ae325998d56bdfd0e36e6`；该提交包含 non-root、`compare_digest`、UID/GID 映射、root fail-closed 与 Windows bind mount 宿主机权限模式；已有仓库只核对，不自动 reset/clean。
+2. **可复现依赖**：记录来源分支，构建固定到完整 commit `362aba1877961e5bbf7ec1c2e24c4505fa15476f`；该提交包含知识库发现、non-root、`compare_digest`、UID/GID 映射、root fail-closed 与 Windows bind mount 宿主机权限模式；已有仓库只核对，不自动 reset/clean。
 3. **凭据最小化**：`YUQUE_TOKEN` 只进入 `yuque-mcp`；Hermes 只获得 MCP Bearer 凭据。
 4. **安全失败**：cloud/SSE 模式缺少 `YUQUE_TOKEN` 或 `MCP_API_KEY` 时，在 Python 服务启动前退出非零。
 5. **本地持久化**：快照挂载到 `~/.myagentdata/yuque-mcp/change-data`，备份挂载到 `~/.myagentdata/yuque-mcp/backups`；默认不进入云备份。
@@ -59,13 +59,13 @@ Task 2 和 Task 3 在契约稳定后理论上可并行，但二者都修改同�
 **Acceptance criteria:**
 
 - [x] 记录当前 Hermes 镜像/CLI 版本及实际配置文件路径。
-- [x] 正确 Bearer 凭据能 initialize 并发现精确 6 个工具；错误或缺失凭据不能连接。
+- [x] 正确 Bearer 凭据能 initialize 并发现精确 7 个工具；错误或缺失凭据不能连接。
 - [x] Spec 中不再保留 SSE/Header 字段格式的不确定描述，且没有调用真实语雀 API。
 
 **Verification:**
 
 - [x] `docker version` 与 `docker compose version` 成功。
-- [x] 隔离 Hermes 容器消费 helper 配置并显示 `yuque-mcp` 及 6 个工具（依赖例外：不重建用户当前 Hermes）。
+- [x] 隔离 Hermes 容器消费 helper 配置并显示 `yuque-mcp` 及 7 个工具（依赖例外：不重建用户当前 Hermes）。
 - [x] 检查服务日志，不包含测试 key、`YUQUE_TOKEN` 或正文。
 
 **Dependencies:** None
@@ -78,7 +78,7 @@ Task 2 和 Task 3 在契约稳定后理论上可并行，但二者都修改同�
 
 **Acceptance criteria:**
 
-- [x] 测试覆盖固定 commit、profile、localhost 端口、凭据隔离、两个持久化挂载、6 个工具、无健康检查和默认不启用。
+- [x] 测试覆盖固定 commit、profile、localhost 端口、凭据隔离、两个持久化挂载、7 个工具、无健康检查和默认不启用。
 - [x] 容器测试默认跳过，只有显式测试开关才执行。
 - [x] 初次运行失败原因仅指向尚未实现的语雀契约，不被现有无关脏文件干扰。
 
@@ -152,7 +152,7 @@ Task 2 和 Task 3 在契约稳定后理论上可并行，但二者都修改同�
 **Verification:**
 
 - [x] fixture 配置的添加、重复运行、已有同名项、禁用清理和异常输入测试通过。
-- [x] 隔离 Hermes 容器消费 helper 配置后发现 `yuque-mcp` 及精确 6 个工具。
+- [x] 隔离 Hermes 容器消费 helper 配置后发现 `yuque-mcp` 及精确 7 个工具。
 - [x] 容器环境检查确认 Hermes 中不存在 `YUQUE_TOKEN`。
 
 **Dependencies:** Checkpoint A
@@ -165,7 +165,7 @@ Task 2 和 Task 3 在契约稳定后理论上可并行，但二者都修改同�
 
 **Acceptance criteria:**
 
-- [x] Skill 准确覆盖 6 个工具、TOC/100 篇边界、最小正文读取和相邻快照语义。
+- [x] Skill 准确覆盖 7 个工具、知识库发现、TOC/100 篇边界、最小正文读取和相邻快照语义。
 - [x] `backup_repo` 只在用户明确要求备份时调用，并禁止同库并发/无意义重复。
 - [x] 重建或重复启动后 Skill 只存在一次，现有 Skill 不被覆盖。
 
@@ -173,7 +173,7 @@ Task 2 和 Task 3 在契约稳定后理论上可并行，但二者都修改同�
 
 - [x] frontmatter、工具名、风险规则和禁止项静态测试通过。
 - [x] Linux lifecycle fixture 验证托管 Skill 链接可见、幂等且安全清理。
-- [x] 使用 mock 工具返回完成五条确定性用户旅程的 prompt/行为检查，不调用真实语雀 API；真实 Hermes 模型分析留作部署后人工只读验证。
+- [x] 使用 mock 工具返回完成七条确定性用户旅程的 prompt/行为检查，不调用真实语雀 API；真实 Hermes 模型分析留作部署后人工只读验证。
 
 **Dependencies:** Task 4
 **Files likely touched:** `skills/yuque-knowledge/SKILL.md`, `docker/hermes/entrypoint-wrapper.sh`, `docker-compose.yml`, `scripts/test-yuque-mcp-integration.sh`
@@ -181,9 +181,9 @@ Task 2 和 Task 3 在契约稳定后理论上可并行，但二者都修改同�
 
 ## Checkpoint B: Hermes 消费路径完成
 
-- [x] Hermes 能以认证方式发现 6 个工具。
+- [x] Hermes 能以认证方式发现 7 个工具。
 - [x] Skill 安装和 MCP 配置重复运行均幂等。
-- [x] 五条必需用户旅程通过 mock/contract 验证；Hermes 真实 MCP loader 已在隔离容器发现 6 工具。
+- [x] 七条必需用户旅程通过 mock/contract 验证；Hermes 真实 MCP loader 已在隔离容器发现 7 工具。
 - [x] 没有真实正文、Token、远程地址或健康检查进入 diff。
 - [x] 用户已批准进入收尾验证。
 
@@ -212,7 +212,7 @@ Task 2 和 Task 3 在契约稳定后理论上可并行，但二者都修改同�
 
 **Acceptance criteria:**
 
-- [x] 缺失凭据、401、正确 initialize/tools/list、容器内网连通和 6 工具发现全部有证据。
+- [x] 缺失凭据、401、正确 initialize/tools/list、容器内网连通和 7 工具发现全部有证据。
 - [x] fixture 快照与备份在容器重建后保留；默认 profile 和现有服务回归通过。
 - [x] diff/镜像层/普通日志不包含 Token、正文、内部地址或备份文件。
 

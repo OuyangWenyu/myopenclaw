@@ -12,10 +12,10 @@
 
 ## Evidence
 
-- 上游 `yuque_mcp_server` 已注册 6 个 MCP 工具：`list_docs`、`get_doc_content`、`get_repo_toc`、`search_docs`、`backup_repo`、`collect_and_get_change_summary`。
+- 上游 `yuque_mcp_server` 已注册 7 个 MCP 工具：`list_docs`、`get_doc_content`、`get_repo_toc`、`search_docs`、`list_repos`、`backup_repo`、`collect_and_get_change_summary`。
 - 上游已提供 Python 3.11 Dockerfile，并能以 FastMCP SSE 模式在 18000 端口运行。
 - myopenclaw 的“研发日报”已经验证“兄弟仓库 → Compose 独立服务 → Docker 内网 → Hermes Skill”的集成模式。
-- 当前上游分支 `codex/docs-yuque-mcp-deployment-status` 固定为 commit `cc68fd0df172d3b8f24ae325998d56bdfd0e36e6`；该版本包含 Docker 上下文隔离、HTTP timeout/异步隔离、同仓库备份 single-flight、专用非 root 用户、`hmac.compare_digest` 认证、UID/GID 映射、root fail-closed 和 Windows bind mount 宿主机权限模式。
+- 当前上游分支 `codex/docs-yuque-mcp-deployment-status` 固定为 commit `362aba1877961e5bbf7ec1c2e24c4505fa15476f`；该版本包含 Docker 上下文隔离、HTTP timeout/异步隔离、知识库发现、同仓库备份 single-flight、专用非 root 用户、`hmac.compare_digest` 认证、UID/GID 映射、root fail-closed 和 Windows bind mount 宿主机权限模式。
 
 ## Users
 
@@ -25,17 +25,17 @@
 
 ## Hypothesis
 
-我们相信，将现有 `yuque_mcp_server` 按“研发日报”的本地托管模式接入 myopenclaw，可以让 Hermes 用户无需理解语雀 API 或手工运行独立服务，就能安全地完成目录浏览、标题搜索、正文读取、全库备份和相邻快照变化查询。
+我们相信，将现有 `yuque_mcp_server` 按“研发日报”的本地托管模式接入 myopenclaw，可以让 Hermes 用户无需理解语雀 API 或手工运行独立服务，就能安全地完成知识库发现、目录浏览、标题搜索、正文读取、全库备份和相邻快照变化查询。
 
 当用户可以从 Hermes 完成这些操作，容器重建后数据仍然存在，并且真实 Token 与正文不进入 Git、镜像层或普通日志时，即认为假设成立。
 
-自动化验收采用与“研发日报”相同的边界：验证 Skill 规则、MCP 认证、Hermes 真实 MCP loader 的 6 工具发现，以及五条确定性 mock 工具旅程。Hermes 的真实模型分析和真实语雀只读调用留作部署后人工验证；未执行前，本产品假设和最终验收不得标记为完全成立。
+自动化验收采用与“研发日报”相同的边界：验证 Skill 规则、MCP 认证、Hermes 真实 MCP loader 的 7 工具发现，以及七条确定性 mock 工具旅程。Hermes 的真实模型分析和真实语雀只读调用留作部署后人工验证；未执行前，本产品假设和最终验收不得标记为完全成立。
 
 ## Success Metrics
 
 | Metric | Target | How measured |
 |---|---|---|
-| 工具可用性 | Hermes 可发现并调用 6 个上游工具 | MCP 工具发现测试和代表性调用 |
+| 工具可用性 | Hermes 可发现并调用 7 个上游工具 | MCP 工具发现测试和代表性调用 |
 | 部署可复现性 | 新环境可取得指定上游 commit 并单独构建服务 | 依赖脚本和 Compose 构建测试 |
 | 数据持久性 | 快照和 Markdown 备份在容器重建后仍存在 | 重建前后 fixture 数据校验 |
 | 凭据隔离 | `YUQUE_TOKEN` 只进入 `yuque-mcp`，不进入 Hermes | Compose 配置检查和容器环境检查 |
@@ -48,7 +48,7 @@
 
 1. **固定上游依赖**
    - 将 `yuque_mcp_server` 克隆到 `../yuque_mcp_server`。
-   - 来源分支为 `codex/docs-yuque-mcp-deployment-status`，固定完整 commit `cc68fd0df172d3b8f24ae325998d56bdfd0e36e6`。
+   - 来源分支为 `codex/docs-yuque-mcp-deployment-status`，固定完整 commit `362aba1877961e5bbf7ec1c2e24c4505fa15476f`。
    - 上游合并到 `main` 后改为固定对应合并 commit；有稳定 tag 后可迁移到 tag。
 
 2. **独立 Docker 服务**
@@ -71,8 +71,8 @@
 5. **Hermes 接入**
    - 为 Hermes 幂等注册本地 `yuque-mcp` SSE 服务，不覆盖已有 MCP 配置。
    - 新增 `yuque-knowledge` Skill，并在 Hermes 重建后自动恢复。
-   - 向 Hermes 开放全部 6 个上游工具，包括 `backup_repo`。
-   - Skill 明确完整 TOC、100 篇列表限制、最小化正文读取、备份确认、相邻快照语义和错误处理规则。
+   - 向 Hermes 开放全部 7 个上游工具，包括 `list_repos` 和 `backup_repo`。
+   - Skill 明确知识库发现、完整 TOC、100 篇列表限制、最小化正文读取、备份确认、相邻快照语义和错误处理规则。
 
 6. **验证与文档**
    - 覆盖依赖 ref、Compose、localhost 端口、凭据隔离、持久化挂载、网络连通性、MCP 工具发现和 Skill 安装。
@@ -93,13 +93,15 @@
 
 ## Required User Journeys
 
-以下五条旅程的工具选择、参数边界和响应语义由确定性 mock 工具契约自动验证；Hermes 使用真实模型生成最终分析的质量，以及真实语雀只读 API 返回，仅在部署后人工验证。
+以下七条旅程的工具选择、参数边界和响应语义由确定性 mock 工具契约自动验证；Hermes 使用真实模型生成最终分析的质量，以及真实语雀只读 API 返回，仅在部署后人工验证。
 
-1. 用户要求“列出团队语雀知识库目录”，Hermes 使用 `get_repo_toc` 返回结构化目录。
-2. 用户要求“搜索标题包含某关键词的文档”，Hermes 使用 `search_docs`，并说明其 100 篇列表边界。
-3. 用户指定文档后要求总结，Hermes 使用 `get_doc_content`，不先批量读取全部正文。
-4. 用户要求查看变化，Hermes 调用 `collect_and_get_change_summary`，首次返回初始化语义，后续只描述相邻完整快照的净变化。
-5. 用户明确要求备份知识库，Hermes 调用 `backup_repo`，结果写入持久化备份目录。
+1. 用户要求“列出我能访问的语雀知识库”，Hermes 使用 `list_repos` 返回知识库元数据，并说明未读取正文或创建快照。
+2. 用户只给出“技术交流”等知识库显示名称并要求目录，Hermes 先使用 `list_repos` 映射 `namespace`，再使用 `get_repo_toc` 返回结构化目录。
+3. 用户要求“列出团队语雀知识库目录”，Hermes 使用 `get_repo_toc` 返回结构化目录。
+4. 用户要求“搜索标题包含某关键词的文档”，Hermes 使用 `search_docs`，并说明其 100 篇列表边界。
+5. 用户指定文档后要求总结，Hermes 使用 `get_doc_content`，不先批量读取全部正文。
+6. 用户要求查看变化，Hermes 调用 `collect_and_get_change_summary`，首次返回初始化语义，后续只描述相邻完整快照的净变化。
+7. 用户明确要求备份知识库，Hermes 调用 `backup_repo`，结果写入持久化备份目录。
 
 ## Acceptance Criteria
 
@@ -107,7 +109,7 @@
 - [x] `yuque-mcp` 可单独构建、启动和停止，默认启动不强制启用它。
 - [x] 宿主机仅通过 `127.0.0.1:${YUQUE_MCP_PORT:-18000}` 访问服务。
 - [x] Hermes 通过 Docker 内网连接服务，不依赖 VPN 或远程地址。
-- [x] Hermes 真实 MCP loader 能发现全部 6 个工具，五条旅程的确定性工具契约通过。
+- [x] Hermes 真实 MCP loader 能发现全部 7 个工具，七条旅程的确定性工具契约通过。
 - [x] `backup_repo` 仅在用户明确要求时调用，备份写入持久化目录。
 - [x] 快照和备份在容器重建后仍存在，且默认不进入云备份。
 - [x] `YUQUE_TOKEN` 不下发给 Hermes；缺少必要凭据时服务安全失败。
@@ -123,7 +125,7 @@
 |---|---|---|---|
 | 1 | 可复现依赖与服务编排 | 固定上游版本，`yuque-mcp` 可选启动 | automation complete |
 | 2 | 安全配置与持久化 | 凭据隔离，快照和备份可持久保存 | automation complete |
-| 3 | Hermes MCP 与 Skill | Hermes 发现 6 个工具并遵守调用规则 | automation complete |
+| 3 | Hermes MCP 与 Skill | Hermes 发现 7 个工具并遵守调用规则 | automation complete |
 | 4 | 集成验证与文档 | 代表性流程、重建恢复和安全检查通过 | automation complete; manual read-only validation pending |
 
 ## Confirmed Decisions

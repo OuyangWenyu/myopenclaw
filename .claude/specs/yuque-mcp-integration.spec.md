@@ -7,7 +7,7 @@
 
 ## Objective
 
-将固定版本的 `yuque_mcp_server` 作为可选、独立 Docker 服务接入 myopenclaw，使 Hermes 能经 `myopenclaw-net` 和 Bearer 认证调用上游已有的 6 个 MCP 工具，同时满足：
+将固定版本的 `yuque_mcp_server` 作为可选、独立 Docker 服务接入 myopenclaw，使 Hermes 能经 `myopenclaw-net` 和 Bearer 认证调用上游已有的 7 个 MCP 工具，同时满足：
 
 - 默认启动只包含 Hermes、backup-cron 和语雀服务；
 - `YUQUE_TOKEN` 只进入 `yuque-mcp`；
@@ -22,7 +22,7 @@
 |---|---|
 | Repository | `https://gitcode.com/dlut-water/yuque_mcp_server.git` |
 | Source branch | `codex/docs-yuque-mcp-deployment-status` |
-| Pinned commit | `cc68fd0df172d3b8f24ae325998d56bdfd0e36e6` |
+| Pinned commit | `362aba1877961e5bbf7ec1c2e24c4505fa15476f` |
 | Runtime | Python 3.11, `mcp[cli]>=1.26.0`, FastMCP |
 | Container port | 18000 |
 | Transport | `RUN_MODE=cloud` → SSE |
@@ -36,10 +36,11 @@
 2. `get_doc_content(repo_namespace, slug)`
 3. `get_repo_toc(repo_namespace)`
 4. `search_docs(repo_namespace, query)`
-5. `backup_repo(repo_namespace, repo_display_name)`
-6. `collect_and_get_change_summary(repo_namespace)`
+5. `list_repos(group_login=None)`
+6. `backup_repo(repo_namespace, repo_display_name)`
+7. `collect_and_get_change_summary(repo_namespace)`
 
-`list_docs` 和 `search_docs` 使用语雀文档列表接口，可能只覆盖前 100 篇；完整枚举必须使用 `get_repo_toc`。变化摘要只表示相邻完整快照之间的净变化。
+`list_repos` 只做知识库发现，返回当前 Token 可读取的知识库元数据，不读取正文、不创建快照、不推进变化基线。`list_docs` 和 `search_docs` 使用语雀文档列表接口，可能只覆盖前 100 篇；完整枚举必须使用 `get_repo_toc`。变化摘要只表示相邻完整快照之间的净变化。
 
 > 该固定 commit 已包含 Required 修复：同步 HTTP 请求增加明确 timeout 并移出 async event loop，`backup_repo` 增加同仓库 single-flight，以及 Docker 构建上下文隔离。
 
@@ -115,7 +116,7 @@ command:
 ```bash
 YUQUE_MCP_REPO_URL="https://gitcode.com/dlut-water/yuque_mcp_server.git"
 YUQUE_MCP_SOURCE_REF="codex/docs-yuque-mcp-deployment-status"
-YUQUE_MCP_PINNED_COMMIT="cc68fd0df172d3b8f24ae325998d56bdfd0e36e6"
+YUQUE_MCP_PINNED_COMMIT="362aba1877961e5bbf7ec1c2e24c4505fa15476f"
 ```
 
 行为：
@@ -190,7 +191,7 @@ mcp_servers:
 3. 使用占位 `YUQUE_TOKEN` 启动服务，只执行 MCP initialize 与 tools/list，不调用语雀 API。
 4. 记录实际生效的最小配置片段，并据此更新本 Spec；未通过时不得继续实现配置写入。
 
-实测中错误 Bearer 凭据连接失败，正确凭据完成 initialize/tools/list 并精确发现 6 个工具；测试未调用语雀 API，日志未包含测试凭据或占位 Token。该检查只能确认连接和工具发现，不能被表述为真实语雀集成通过。
+实测中错误 Bearer 凭据连接失败，正确凭据完成 initialize/tools/list 并精确发现 7 个工具；测试未调用语雀 API，日志未包含测试凭据或占位 Token。该检查只能确认连接和工具发现，不能被表述为真实语雀集成通过。
 
 ## Hermes Provisioning Contract
 
@@ -213,6 +214,8 @@ mcp_servers:
 Skill 必须规定：
 
 - 目录或完整枚举优先使用 `get_repo_toc`。
+- 用户询问可访问的知识库列表，或只提供知识库显示名称时，先调用 `list_repos` 获取 `namespace`。
+- `list_repos` 只做知识库发现，不读取正文、不创建快照、不推进变化基线。
 - `search_docs` 只按标题搜索，且受文档列表 100 篇限制。
 - 调 `get_doc_content` 前先由目录、标题或 slug 缩小范围。
 - `backup_repo` 只在用户明确表达备份意图时调用；不得把“总结”“搜索”解释为备份。
@@ -300,7 +303,7 @@ ensure_directory() {
 - `YUQUE_TOKEN` 只出现在 `yuque-mcp` 环境块；
 - 两个持久化目录挂载正确；
 - service 不含 `healthcheck`，Uptime Kuma 不含 `yuque-mcp`；
-- Skill mount、链接逻辑和六个工具名存在；
+- Skill mount、链接逻辑和七个工具名存在；
 - `.env.example` 有变量名但没有真实 secret-like 值。
 
 ### Container contract tests
@@ -311,7 +314,7 @@ ensure_directory() {
 2. 单独构建并启动 `yuque-mcp`。
 3. 缺少 `YUQUE_TOKEN` 或 `MCP_API_KEY` 时容器退出非零。
 4. 无 Authorization、错误 Authorization 返回 401。
-5. 正确 Authorization 能完成 initialize 和 tools/list，并返回精确的 6 个工具名。
+5. 正确 Authorization 能完成 initialize 和 tools/list，并返回精确的 7 个工具名。
 6. Hermes 容器能通过 `yuque-mcp:18000` 建立 MCP 连接。
 7. 容器重建前后 fixture 快照与备份文件仍存在。
 
@@ -319,7 +322,7 @@ ensure_directory() {
 
 ### Hermes journey validation boundary
 
-自动化验证采用与研发日报相同的边界：验证 Skill 契约、MCP 认证、Hermes 真实 MCP loader 的连接与 6 工具发现，以及使用 mock 工具返回的五条确定性 prompt/行为契约。Hermes 的自然语言分析与最终回答依赖真实推理提供商，不搭建 mock inference server；部署后由用户使用真实只读 Token 人工验证，未执行前不得标记为自动化通过或真实集成通过。
+自动化验证采用与研发日报相同的边界：验证 Skill 契约、MCP 认证、Hermes 真实 MCP loader 的连接与 7 工具发现，以及使用 mock 工具返回的七条确定性 prompt/行为契约。Hermes 的自然语言分析与最终回答依赖真实推理提供商，不搭建 mock inference server；部署后由用户使用真实只读 Token 人工验证，未执行前不得标记为自动化通过或真实集成通过。
 
 ### Regression checks
 
@@ -378,7 +381,7 @@ ensure_directory() {
 - [x] 固定 commit 已更新到包含 Required 修复的真实上游 SHA，偏离仓库不会被自动覆盖。
 - [x] `yuque-mcp` 是可选 profile，默认流程保持不变。
 - [x] localhost 端口、凭据隔离和安全失败行为通过测试。
-- [x] Hermes 精确发现 6 个工具，`yuque-knowledge` Skill 可重建恢复。
+- [x] Hermes 精确发现 7 个工具，`yuque-knowledge` Skill 可重建恢复。
 - [x] 快照和备份持久化通过容器重建测试。
 - [x] 没有添加健康端点、Uptime Kuma monitor 或 Compose healthcheck。
 - [x] 自动化测试不读取真实语雀正文，diff 不包含敏感数据。

@@ -89,7 +89,7 @@ UPTIME="${ROOT}/scripts/setup-uptime-kuma.sh"
 
 check "dependency URL" contains "${CLONE_SCRIPT}" 'https://gitcode.com/dlut-water/yuque_mcp_server.git'
 check "dependency source ref" contains "${CLONE_SCRIPT}" 'codex/docs-yuque-mcp-deployment-status'
-check "dependency pinned commit" contains "${CLONE_SCRIPT}" 'cc68fd0df172d3b8f24ae325998d56bdfd0e36e6'
+check "dependency pinned commit" contains "${CLONE_SCRIPT}" '362aba1877961e5bbf7ec1c2e24c4505fa15476f'
 
 for variable in YUQUE_TOKEN MCP_API_KEY YUQUE_MCP_PORT YUQUE_CHANGE_RETENTION_DAYS YUQUE_MCP_UID YUQUE_MCP_GID; do
   check ".env.example declares ${variable}" contains "${ENV_EXAMPLE}" "${variable}"
@@ -117,14 +117,14 @@ check "Hermes bearer variable" contains "${ROOT}/docker/hermes/configure-yuque-m
 check "Hermes config helper exists" test -f "${ROOT}/docker/hermes/configure-yuque-mcp.py"
 check "yuque skill exists" test -f "${SKILL}"
 
-for tool in list_docs get_doc_content get_repo_toc search_docs backup_repo collect_and_get_change_summary; do
+for tool in list_docs get_doc_content get_repo_toc search_docs list_repos backup_repo collect_and_get_change_summary; do
   check "skill documents ${tool}" contains "${SKILL}" "${tool}"
 done
 
 check "Uptime Kuma has no yuque monitor" not_contains "${UPTIME}" 'yuque-mcp'
 check "Yuque operator documentation exists" test -f "${ROOT}/docs/yuque-mcp.md"
 check "documentation index links Yuque" contains "${ROOT}/docs/index.md" 'yuque-mcp.md'
-check "five mock user journeys" python "${ROOT}/scripts/verify-yuque-skill-journeys.py"
+check "seven mock user journeys" python "${ROOT}/scripts/verify-yuque-skill-journeys.py"
 check "Hermes managed lifecycle fixtures" python "${ROOT}/scripts/test-configure-yuque-mcp.py"
 
 if [[ "${YUQUE_MCP_CONTAINER_TESTS:-0}" == "1" ]]; then
@@ -213,7 +213,7 @@ if [[ "${YUQUE_MCP_CONTAINER_TESTS:-0}" == "1" ]]; then
     uv run python /tmp/verify-yuque-mcp-sse.py --url http://yuque-mcp:18000/sse)
   check "wrong Bearer credential is rejected" \
     "${CLIENT_BASE[@]}" --key definitely-wrong --expect unauthorized
-  check "correct Bearer discovers exactly six tools" \
+  check "correct Bearer discovers exactly seven tools" \
     "${CLIENT_BASE[@]}" --key "${TEST_KEY}" --expect success
 
   REPO_ROOT_MOUNT="$(docker_host_path "${ROOT}")"
@@ -231,7 +231,7 @@ if [[ "${YUQUE_MCP_CONTAINER_TESTS:-0}" == "1" ]]; then
     YUQUE_MANAGE_SKILL_LINK=false \
     python "${ROOT}/docker/hermes/configure-yuque-mcp.py"
   HERMES_CLIENT_SCRIPT="$(docker_host_path "${ROOT}/scripts/verify-hermes-yuque-mcp.py")"
-  check "isolated Hermes consumes helper config and discovers six tools" \
+  check "isolated Hermes consumes helper config and discovers seven tools" \
     env MSYS_NO_PATHCONV=1 docker compose -p "${TEST_PROJECT}" --profile yuque run -T --rm --no-deps \
       --entrypoint /opt/hermes/.venv/bin/python \
       -e HOME=/opt/data \
