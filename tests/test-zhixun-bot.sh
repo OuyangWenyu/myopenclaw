@@ -39,8 +39,8 @@ build = mcp["build"]
 assert build["context"].endswith("/docker/zhixun-bot")
 assert build["dockerfile"] == "Dockerfile.mcp"
 assert build["additional_contexts"]["zhixun_src"].endswith("/zhixun-agent")
-assert build["args"]["PYTHON_BASE_IMAGE"] == "python:3.12-slim"
-assert build["args"]["PIP_INDEX_URL"] == "https://pypi.org/simple"
+assert build["args"]["PYTHON_BASE_IMAGE"] == "docker.m.daocloud.io/library/python:3.12-slim"
+assert build["args"]["PIP_INDEX_URL"] == "https://pypi.tuna.tsinghua.edu.cn/simple"
 assert mcp["working_dir"] == "/app/mcp_servers/water"
 assert mcp["command"][:2] == ["python", "mcp_server_unified.py"]
 
