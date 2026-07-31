@@ -7,6 +7,9 @@ services:
       dockerfile: Dockerfile.mcp
       additional_contexts:
         zhixun_src: ${ZHIXUN_AGENT_PATH:-../zhixun-agent}
+      args:
+        PYTHON_BASE_IMAGE: ${ZHIXUN_BOT_PYTHON_BASE_IMAGE:-python:3.12-slim}
+        PIP_INDEX_URL: ${ZHIXUN_BOT_PIP_INDEX_URL:-https://pypi.org/simple}
     image: myopenclaw/zhixun-water-mcp:latest
     container_name: zhixun-water-mcp
     restart: unless-stopped

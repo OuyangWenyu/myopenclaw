@@ -42,6 +42,15 @@ git switch codex/zhixun-feishu-bot
 - 服务器能够访问飞书、模型 API、Waterism API 和容器镜像/插件仓库
 - 一个独立的飞书自建应用
 
+默认构建会访问 Docker Hub 的 `python:3.12-slim` 和 PyPI。网络受限时，在
+`.env.zhixun-bot` 中替换：
+
+```dotenv
+ZHIXUN_BOT_PYTHON_BASE_IMAGE=registry.example.com/library/python:3.12-slim
+ZHIXUN_BOT_PIP_INDEX_URL=https://pypi.example.com/simple
+ZHIXUN_BOT_OPENCLAW_IMAGE=registry.example.com/openclaw/openclaw:2026.7.1
+```
+
 zhixun-agent 使用纯 MCP 目录结构，必须包含：
 
 ```text
