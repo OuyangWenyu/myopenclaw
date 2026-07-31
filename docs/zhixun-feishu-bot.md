@@ -31,13 +31,9 @@ mkdir -p /srv/agents
 cd /srv/agents
 git clone git@github.com:CylenLC/myopenclaw.git
 git clone git@gitcode.com:dlut-water/zhixun-agent.git
-git -C zhixun-agent switch feat/remove-selfhosted-llm
 cd myopenclaw
 git switch codex/zhixun-feishu-bot
 ```
-
-在纯 MCP 重构合并到 zhixun-agent `main` 后，可直接使用 `main`，无需再执行
-上面的特性分支切换命令。
 
 要求：
 
