@@ -62,9 +62,9 @@ if [[ "${data_dir}" == "${main_openclaw_dir}" ]] \
   exit 1
 fi
 
-build_args=()
+build_requested=false
 if [[ "${1:-}" == "--build" ]]; then
-  build_args+=(--build)
+  build_requested=true
 elif [[ -n "${1:-}" ]]; then
   echo "❌ 未知参数: $1"
   echo "用法: ./scripts/start-zhixun-bot.sh [--build]"
@@ -75,8 +75,13 @@ echo "🔍 校验 zhixun 机器人 Compose 配置..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config --quiet
 
 echo "🚀 启动独立 zhixun 飞书机器人..."
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" \
-  up -d --force-recreate "${build_args[@]}"
+if [[ "${build_requested}" == "true" ]]; then
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" \
+    up -d --force-recreate --build
+else
+  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" \
+    up -d --force-recreate
+fi
 
 echo "✅ 启动命令已提交"
 echo "   状态: docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml ps"
