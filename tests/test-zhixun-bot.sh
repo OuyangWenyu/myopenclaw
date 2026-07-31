@@ -170,6 +170,68 @@ PY
 pass "zhixun-core v2 station-name index compatibility"
 
 python3 - <<'PY'
+import importlib.util
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+
+module_path = Path("docker/zhixun-bot/briefing_compat.py")
+spec = importlib.util.spec_from_file_location("briefing_compat", module_path)
+compat = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(compat)
+
+payload = {
+    "_embedded": {
+        "hydromodels": [
+            {
+                "model_id": "2e4f2084-1d9e-4c25-8a67-80f3c55c42a3",
+                "model_name": "DHF",
+                "model_type": "DHF",
+                "plcd": "DHF方案180",
+                "calibrated": True,
+            }
+        ]
+    }
+}
+assert compat.extract_hydromodels(payload)[0]["model_name"] == "DHF"
+
+async def hydromodel_list(stcd):
+    """legacy briefing model list"""
+    return stcd
+
+briefing_module = SimpleNamespace(
+    get_entry=lambda stcd: None,
+    hydromodel_list=hydromodel_list,
+)
+bridge = SimpleNamespace(get_module=lambda: briefing_module)
+registry = SimpleNamespace(
+    _get_reservoir=lambda stcd: {"stcd": stcd, "stnm": "大伙房水库"},
+    _api_get=lambda path: payload,
+    _get_basin_models=lambda basin_id: [],
+    get_entry=lambda stcd: None,
+)
+previous_registry = sys.modules.get("forecast_registry")
+sys.modules["forecast_registry"] = registry
+try:
+    compat.install(bridge)
+    entry = briefing_module.get_entry("21100150")
+    assert entry["model_names"] == ["DHF"]
+    assert entry["model_names_norm"] == {"DHF"}
+    assert entry["plcd_list"] == ["DHF方案180"]
+    assert entry["model_count"] == 1
+    assert registry._get_basin_models("21100150")[0]["model_name"] == "DHF"
+    assert "get_basin_hydromodel" in briefing_module.hydromodel_list.__doc__
+finally:
+    if previous_registry is None:
+        del sys.modules["forecast_registry"]
+    else:
+        sys.modules["forecast_registry"] = previous_registry
+PY
+grep -q 'briefing_compat.py' docker/zhixun-bot/Dockerfile.mcp
+grep -q 'install_briefing_compat' docker/zhixun-bot/mcp_entrypoint.py
+pass "briefing hydromodel v2 compatibility and routing guidance"
+
+python3 - <<'PY'
 import asyncio
 import importlib.util
 from pathlib import Path
@@ -428,6 +490,7 @@ assert binding["match"] == {"channel": "feishu"}
 server = read_only["mcp"]["servers"]["water_unified"]
 assert server["url"] == "http://zhixun-water-mcp:18201/sse"
 assert "dispatch_task_execute" in server["toolFilter"]["exclude"]
+assert "hydromodel_list" in server["toolFilter"]["exclude"]
 assert "toolFilter" not in write_enabled["mcp"]["servers"]["water_unified"]
 
 serialized = json.dumps(read_only)

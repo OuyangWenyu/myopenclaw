@@ -66,6 +66,7 @@
             "briefing_save_as_template",
             "briefing_create_from_template",
             "briefing_clone",
+            "hydromodel_list",
             "dispatch_task_create",
             "dispatch_task_update_conditions",
             "dispatch_task_execute",

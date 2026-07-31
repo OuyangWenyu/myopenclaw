@@ -167,6 +167,17 @@ ZHIXUN_BOT_ENABLE_WRITE_TOOLS=true
 即使开放写工具，工作区规则仍要求机器人在执行创建、更新、删除或调度操作前
 进行确认。
 
+水文模型有两个容易混淆的入口：
+
+- `get_basin_hydromodel`：只读查询流域已有模型，回答“某流域有哪些模型”；
+- `hydromodel_list`：简报写入流程的辅助工具，为后续 `item_add` 获取
+  `model_param_id`。
+
+只读模式会隐藏 `hydromodel_list`。开启写工具后它才可见，但机器人规则仍要求
+普通模型查询使用 `get_basin_hydromodel`。MCP 兼容层还修复了新版接口
+`_embedded.hydromodels` 的解析，并在水库详情没有单独 `basin_id` 时使用水库站码
+作为流域编码。
+
 ## 启动
 
 首次部署或 zhixun 代码更新后：
