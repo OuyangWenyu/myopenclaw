@@ -44,7 +44,8 @@ assert build["additional_contexts"]["zhixun_src"].endswith("/zhixun-agent")
 assert build["args"]["PYTHON_BASE_IMAGE"] == "docker.m.daocloud.io/library/python:3.12-slim"
 assert build["args"]["PIP_INDEX_URL"] == "https://pypi.tuna.tsinghua.edu.cn/simple"
 assert mcp["working_dir"] == "/app/mcp_servers/water"
-assert mcp["command"][:2] == ["python", "mcp_server_unified.py"]
+assert mcp["command"][:2] == ["python", "mcp_entrypoint.py"]
+assert mcp["environment"]["ZHIXUN_CORE_BASE_URL"] == "https://ws.waterism.tech:8090/api/v2"
 
 for service in services.values():
     assert "ports" not in service
@@ -57,6 +58,48 @@ assert all(not source.endswith("/.openclaw") for source in sources)
 assert all("docker.sock" not in source for source in sources)
 PY
 pass "Compose build source and service isolation"
+
+python3 - <<'PY'
+import importlib.util
+from pathlib import Path
+from types import SimpleNamespace
+
+module_path = Path("docker/zhixun-bot/zhixun_core_v2_compat.py")
+spec = importlib.util.spec_from_file_location("zhixun_core_v2_compat", module_path)
+compat = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(compat)
+
+payload = {
+    "_embedded": {
+        "reservoirs": [
+            {"data": {"stcd": "21100150", "stnm": "大伙房水库"}},
+            {"data": {"stcd": "10310500", "stnm": "红花尔基"}},
+        ]
+    }
+}
+assert compat.extract_collection_items(payload, "/reservoirs") == [
+    {"stcd": "21100150", "stnm": "大伙房水库"},
+    {"stcd": "10310500", "stnm": "红花尔基"},
+]
+
+calls = []
+utils = SimpleNamespace(
+    _CACHED_BY_TYPE={},
+    _CACHED_NAME_TO_ID={},
+    _CACHED_IDS_BY_NAME={},
+    _CACHED_INFO_BY_ID={},
+    _CACHE_INIT_ATTEMPTED=False,
+    _STATION_TYPE_APIS={"水库站": "/reservoirs"},
+    _api_get=lambda endpoint, params: calls.append((endpoint, params)) or payload,
+    logger=SimpleNamespace(info=lambda message: None),
+)
+compat.install(utils)
+utils._init_station_caches()
+assert calls == [("/reservoirs", {"page": 1, "size": 100})]
+assert utils._CACHED_BY_TYPE["水库站"]["大伙房水库"] == "21100150"
+assert utils._search_station_api("大伙房", "/reservoirs")[0]["stcd"] == "21100150"
+PY
+pass "zhixun-core v2 HAL reservoir compatibility"
 
 render() {
   local write_tools="$1"

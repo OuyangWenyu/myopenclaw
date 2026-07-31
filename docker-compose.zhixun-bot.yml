@@ -16,12 +16,14 @@ services:
     working_dir: /app/mcp_servers/water
     command:
       - python
-      - mcp_server_unified.py
+      - mcp_entrypoint.py
       - sse
       - --host
       - 0.0.0.0
       - --port
       - "18201"
+    environment:
+      ZHIXUN_CORE_BASE_URL: ${ZHIXUN_CORE_BASE_URL:-https://ws.waterism.tech:8090/api/v2}
     expose:
       - "18201"
     healthcheck:

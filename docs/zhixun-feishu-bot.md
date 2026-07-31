@@ -61,6 +61,15 @@ MCP 镜像由 myopenclaw 中的 `docker/zhixun-bot/Dockerfile.mcp` 构建，通�
 Compose 的附加构建上下文读取 zhixun-agent 源码，不依赖 zhixun-agent
 仓库中的 `docker/` 目录或 Dockerfile。
 
+镜像启动时会加载 myopenclaw 提供的 v2 兼容层，将
+`/api/v2/reservoirs` 返回的 `_embedded.reservoirs[].data` 转成 MCP
+需要的扁平记录，并按照接口限制使用每页 100 条。这样可以直接按水库名称
+查询，不需要修改 zhixun-core 或 zhixun-agent。API 地址可配置为：
+
+```dotenv
+ZHIXUN_CORE_BASE_URL=https://ws.waterism.tech:8090/api/v2
+```
+
 飞书应用需要启用机器人能力，并通过 WebSocket 订阅
 `im.message.receive_v1`。将应用发布后，可将机器人加入任意目标群。
 
