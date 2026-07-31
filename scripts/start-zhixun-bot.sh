@@ -77,7 +77,7 @@ docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config --quiet
 
 echo "🚀 启动独立 zhixun 飞书机器人..."
 docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" \
-  up -d "${build_args[@]}"
+  up -d --force-recreate "${build_args[@]}"
 
 echo "✅ 启动命令已提交"
 echo "   状态: docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml ps"
