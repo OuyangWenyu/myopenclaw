@@ -90,6 +90,30 @@ ZHIXUN_BOT_FEISHU_APP_SECRET=xxx
 ZHIXUN_BOT_MODEL_API_KEY=xxx
 ```
 
+### 模型：DeepSeek V4 Pro
+
+机器人默认使用 DeepSeek V4 Pro。将 DeepSeek 平台 API Key 填入
+`ZHIXUN_BOT_MODEL_API_KEY`，并保持以下配置；不要使用智谱或其他厂商的 API Key：
+
+```dotenv
+ZHIXUN_BOT_MODEL_ID=deepseek-v4-pro
+ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com
+```
+
+切换模型后无需重建 MCP 镜像，重新生成机器人配置即可：
+
+```bash
+./scripts/start-zhixun-bot.sh
+```
+
+可通过下列命令确认运行时配置已经生效（不会输出 API Key）：
+
+```bash
+docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml \
+  exec openclaw-zhixun \
+  sh -c 'grep -E "primary|baseUrl|deepseek-v4-pro" /home/node/.openclaw/openclaw.json'
+```
+
 默认使用普通文本回复，不展示流式卡片底部的 `Agent`、`Model`、`Provider`
 运行元信息。如需逐字流式卡片，可设置：
 

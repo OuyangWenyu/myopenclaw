@@ -67,7 +67,7 @@ services:
       ZHIXUN_BOT_FEISHU_APP_SECRET: ${ZHIXUN_BOT_FEISHU_APP_SECRET:?请设置飞书 App Secret}
       # false 使用普通文本回复，不显示流式卡片中的 Agent/Model/Provider 元信息。
       ZHIXUN_BOT_FEISHU_STREAMING: ${ZHIXUN_BOT_FEISHU_STREAMING:-false}
-      ZHIXUN_BOT_MODEL_ID: ${ZHIXUN_BOT_MODEL_ID:-deepseek-chat}
+      ZHIXUN_BOT_MODEL_ID: ${ZHIXUN_BOT_MODEL_ID:-deepseek-v4-pro}
       ZHIXUN_BOT_MODEL_BASE_URL: ${ZHIXUN_BOT_MODEL_BASE_URL:-https://api.deepseek.com}
       ZHIXUN_BOT_ENABLE_WRITE_TOOLS: ${ZHIXUN_BOT_ENABLE_WRITE_TOOLS:-false}
     depends_on:
