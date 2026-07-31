@@ -85,6 +85,7 @@
       "appId": "__FEISHU_APP_ID__",
       "appSecret": "__FEISHU_APP_SECRET__",
       "dmPolicy": "open",
+      "allowFrom": ["*"],
       "groupPolicy": "open",
       "requireMention": true,
       "groupSessionScope": "group",

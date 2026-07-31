@@ -90,7 +90,7 @@ assert read_only["tools"]["profile"] == "messaging"
 feishu = read_only["channels"]["feishu"]
 assert feishu["dmPolicy"] == "open"
 assert feishu["groupPolicy"] == "open"
-assert "allowFrom" not in feishu
+assert feishu["allowFrom"] == ["*"]
 assert "groups" not in feishu
 assert feishu["requireMention"] is True
 assert feishu["streaming"] is True
