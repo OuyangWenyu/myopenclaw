@@ -64,10 +64,18 @@ Compose 的附加构建上下文读取 zhixun-agent 源码，不依赖 zhixun-ag
 镜像启动时会加载 myopenclaw 提供的 v2 兼容层，将
 `/api/v2/reservoirs` 返回的 `_embedded.reservoirs[].data` 转成 MCP
 需要的扁平记录，并按照接口限制使用每页 100 条。这样可以直接按水库名称
-查询，不需要修改 zhixun-core 或 zhixun-agent。API 地址可配置为：
+查询，不需要修改 zhixun-core 或 zhixun-agent。
+
+新版 Core 没有河道站和雨量站的全局列表搜索接口。兼容层会在首次按这两类
+站点名称查询时，遍历现有 `/api/v2/basins/{basin_id}/stations` 资源，建立
+并持久化名称索引。名称唯一时自动解析成站码；同名站点不会静默选取，而是
+返回候选站码与所属流域供用户确认。默认缓存 24 小时：
 
 ```dotenv
 ZHIXUN_CORE_BASE_URL=https://ws.waterism.tech:8090/api/v2
+ZHIXUN_BOT_MCP_DATA_DIR=/srv/myopenclaw-data/zhixun-water-mcp
+ZHIXUN_MCP_STATION_INDEX_TTL_SECONDS=86400
+ZHIXUN_MCP_STATION_INDEX_WORKERS=12
 ```
 
 飞书应用需要启用机器人能力，并通过 WebSocket 订阅

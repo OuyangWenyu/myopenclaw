@@ -47,6 +47,10 @@ assert build["args"]["PIP_INDEX_URL"] == "https://pypi.tuna.tsinghua.edu.cn/simp
 assert mcp["working_dir"] == "/app/mcp_servers/water"
 assert mcp["command"][:2] == ["python", "mcp_entrypoint.py"]
 assert mcp["environment"]["ZHIXUN_CORE_BASE_URL"] == "https://ws.waterism.tech:8090/api/v2"
+assert mcp["environment"]["ZHIXUN_MCP_STATION_INDEX_PATH"] == "/var/lib/zhixun-water-mcp/station-index.json"
+assert mcp["environment"]["ZHIXUN_MCP_STATION_INDEX_TTL_SECONDS"] == "86400"
+assert mcp["environment"]["ZHIXUN_MCP_STATION_INDEX_WORKERS"] == "12"
+assert mcp["volumes"][0]["target"] == "/var/lib/zhixun-water-mcp"
 
 for service in services.values():
     assert "ports" not in service
@@ -62,6 +66,8 @@ pass "Compose build source and service isolation"
 
 python3 - <<'PY'
 import importlib.util
+import os
+import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -70,7 +76,7 @@ spec = importlib.util.spec_from_file_location("zhixun_core_v2_compat", module_pa
 compat = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(compat)
 
-payload = {
+reservoir_payload = {
     "_embedded": {
         "reservoirs": [
             {"data": {"stcd": "21100150", "stnm": "大伙房水库"}},
@@ -78,29 +84,89 @@ payload = {
         ]
     }
 }
-assert compat.extract_collection_items(payload, "/reservoirs") == [
+assert compat.extract_collection_items(reservoir_payload, "/reservoirs") == [
     {"stcd": "21100150", "stnm": "大伙房水库"},
     {"stcd": "10310500", "stnm": "红花尔基"},
 ]
 
 calls = []
+basin_payloads = {
+    "/basins/21100150/stations": {
+        "_embedded": {
+            "stations": [
+                {"data": {"stcd": "21103500", "stnm": "占贝", "sttype": "ZQ"}},
+                {"data": {"stcd": "21120032", "stnm": "石庙子", "sttype": "PP"}},
+                {"data": {"stcd": "21103250", "stnm": "四道河子", "sttype": "ZQ"}},
+            ]
+        }
+    },
+    "/basins/10310500/stations": {
+        "_embedded": {
+            "stations": [
+                {"data": {"stcd": "21103257", "stnm": "四道河子", "sttype": "ZQ"}},
+            ]
+        }
+    },
+}
+
+def fake_api_get(endpoint, params=None):
+    calls.append((endpoint, params))
+    if endpoint == "/reservoirs":
+        query = str((params or {}).get("q") or "")
+        if query:
+            matches = [
+                item
+                for item in reservoir_payload["_embedded"]["reservoirs"]
+                if query in item["data"]["stnm"]
+            ]
+            return {"_embedded": {"reservoirs": matches}}
+        return reservoir_payload
+    return basin_payloads[endpoint]
+
 utils = SimpleNamespace(
     _CACHED_BY_TYPE={},
     _CACHED_NAME_TO_ID={},
     _CACHED_IDS_BY_NAME={},
     _CACHED_INFO_BY_ID={},
     _CACHE_INIT_ATTEMPTED=False,
-    _STATION_TYPE_APIS={"水库站": "/reservoirs"},
-    _api_get=lambda endpoint, params: calls.append((endpoint, params)) or payload,
-    logger=SimpleNamespace(info=lambda message: None),
+    _STATION_TYPE_APIS={
+        "水库站": "/reservoirs",
+        "河道站": "/rivers",
+        "雨量站": "/rainstations",
+    },
+    _api_get=fake_api_get,
+    _require_non_empty=lambda name, value: str(value),
+    get_station_id=lambda name, station_type=None: "21100150",
+    logger=SimpleNamespace(
+        info=lambda message: None,
+        warning=lambda message: None,
+    ),
 )
-compat.install(utils)
-utils._init_station_caches()
-assert calls == [("/reservoirs", {"page": 1, "size": 100})]
-assert utils._CACHED_BY_TYPE["水库站"]["大伙房水库"] == "21100150"
-assert utils._search_station_api("大伙房", "/reservoirs")[0]["stcd"] == "21100150"
+with tempfile.TemporaryDirectory() as cache_dir:
+    os.environ["ZHIXUN_MCP_STATION_INDEX_PATH"] = str(Path(cache_dir) / "stations.json")
+    os.environ["ZHIXUN_MCP_STATION_INDEX_WORKERS"] = "2"
+    compat.install(utils)
+    utils._init_station_caches()
+    assert calls == [("/reservoirs", {"page": 1, "size": 100})]
+    assert utils._CACHED_BY_TYPE["水库站"]["大伙房水库"] == "21100150"
+
+    assert utils.get_station_id("占贝", "河道站") == "21103500"
+    assert utils.get_station_id("占贝河道站", "河道站") == "21103500"
+    assert utils.get_station_id("占贝") == "21103500"
+    assert utils.get_station_id("石庙子", "雨量站") == "21120032"
+    assert utils.get_station_id("21103500", "河道站") == "21103500"
+    assert Path(os.environ["ZHIXUN_MCP_STATION_INDEX_PATH"]).is_file()
+
+    try:
+        utils.get_station_id("四道河子", "河道站")
+    except ValueError as exc:
+        assert "匹配到多个站点" in str(exc)
+        assert "21103250" in str(exc)
+        assert "21103257" in str(exc)
+    else:
+        raise AssertionError("duplicate river name must be rejected")
 PY
-pass "zhixun-core v2 HAL reservoir compatibility"
+pass "zhixun-core v2 station-name index compatibility"
 
 grep -q 'get_reservoir_profile_with_related_page' docker/zhixun-bot/mcp_entrypoint.py
 grep -q 'get_reservoir_page_url' docker/zhixun-bot/mcp_entrypoint.py

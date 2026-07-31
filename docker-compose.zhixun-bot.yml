@@ -24,6 +24,11 @@ services:
       - "18201"
     environment:
       ZHIXUN_CORE_BASE_URL: ${ZHIXUN_CORE_BASE_URL:-https://ws.waterism.tech:8090/api/v2}
+      ZHIXUN_MCP_STATION_INDEX_PATH: /var/lib/zhixun-water-mcp/station-index.json
+      ZHIXUN_MCP_STATION_INDEX_TTL_SECONDS: ${ZHIXUN_MCP_STATION_INDEX_TTL_SECONDS:-86400}
+      ZHIXUN_MCP_STATION_INDEX_WORKERS: ${ZHIXUN_MCP_STATION_INDEX_WORKERS:-12}
+    volumes:
+      - ${ZHIXUN_BOT_MCP_DATA_DIR:-${HOME}/.openclaw-zhixun-mcp}:/var/lib/zhixun-water-mcp
     expose:
       - "18201"
     healthcheck:
