@@ -84,17 +84,10 @@
       "connectionMode": "websocket",
       "appId": "__FEISHU_APP_ID__",
       "appSecret": "__FEISHU_APP_SECRET__",
-      "dmPolicy": "allowlist",
-      "allowFrom": [],
-      "groupPolicy": "allowlist",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
       "requireMention": true,
       "groupSessionScope": "group",
-      "groups": {
-        "__FEISHU_GROUP_ID__": {
-          "enabled": true,
-          "requireMention": true
-        }
-      },
       "streaming": {
         "mode": "partial",
         "block": {
@@ -119,11 +112,7 @@
     {
       "agentId": "zhixun-water",
       "match": {
-        "channel": "feishu",
-        "peer": {
-          "kind": "group",
-          "id": "__FEISHU_GROUP_ID__"
-        }
+        "channel": "feishu"
       }
     }
   ],

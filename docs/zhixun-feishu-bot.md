@@ -7,7 +7,7 @@ myopenclaw 的 Hermes、Claude Code、TDAI Memory、aisecretary、repo-scanner
 ## 服务边界
 
 ```text
-飞书指定群
+飞书任意群或私聊
     │ WebSocket
     ▼
 openclaw-zhixun
@@ -41,10 +41,9 @@ git switch codex/zhixun-feishu-bot
 - OpenClaw 镜像版本不低于 `2026.5.29`
 - 服务器能够访问飞书、模型 API、Waterism API 和容器镜像/插件仓库
 - 一个独立的飞书自建应用
-- 飞书目标群的 `chat_id`，格式为 `oc_...`
 
 飞书应用需要启用机器人能力，并通过 WebSocket 订阅
-`im.message.receive_v1`。将应用发布后，把机器人加入目标群。
+`im.message.receive_v1`。将应用发布后，可将机器人加入任意目标群。
 
 ## 配置
 
@@ -60,7 +59,6 @@ vi .env.zhixun-bot
 ZHIXUN_AGENT_PATH=../zhixun-agent
 ZHIXUN_BOT_FEISHU_APP_ID=cli_xxx
 ZHIXUN_BOT_FEISHU_APP_SECRET=xxx
-ZHIXUN_BOT_FEISHU_GROUP_ID=oc_xxx
 ZHIXUN_BOT_MODEL_API_KEY=xxx
 ```
 
@@ -125,13 +123,14 @@ docker compose \
   logs -f openclaw-zhixun zhixun-water-mcp
 ```
 
-在目标群中 `@机器人` 并发送：
+在任意已加入机器人的群中 `@机器人` 并发送：
 
 ```text
 列出当前可查询的流域和站点类型。
 ```
 
-机器人不会响应私聊，也不会响应未配置的群。
+机器人会响应任意私聊，也会响应任意已加入机器人的群；为避免群内每条消息都
+触发，群聊仍必须 `@机器人`。
 
 ## 停止与更新
 
@@ -157,7 +156,8 @@ git pull --ff-only
 - `.env.zhixun-bot` 已被 `.gitignore` 排除，不要提交真实凭据。
 - OpenClaw 容器不挂载 Docker socket、宿主机代码目录或现有 Agent 数据。
 - MCP 端口和 OpenClaw Gateway 端口均不发布到宿主机。
-- 飞书仅允许配置的一个群，并要求 `@机器人`。
+- 飞书机器人可被加入任意群，并接受所有私聊；群内仍要求 `@机器人`。这会让
+  所有可联系或拉入机器人的飞书用户调用 zhixun MCP，请仅向信任的组织成员发布。
 - OpenClaw 工具策略只允许 `bundle-mcp`，飞书文档、云盘、知识库、群管理等
   原生工具全部关闭。
 - 如果服务器需要跨主机访问 MCP，应增加 TLS 和认证；当前配置只支持同一

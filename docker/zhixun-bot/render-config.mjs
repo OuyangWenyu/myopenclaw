@@ -9,7 +9,6 @@ if (!templatePath || !outputPath) {
 const required = [
   "ZHIXUN_BOT_FEISHU_APP_ID",
   "ZHIXUN_BOT_FEISHU_APP_SECRET",
-  "ZHIXUN_BOT_FEISHU_GROUP_ID",
   "ZHIXUN_BOT_MODEL_ID",
   "ZHIXUN_BOT_MODEL_BASE_URL",
 ];
@@ -20,14 +19,9 @@ for (const name of required) {
   }
 }
 
-if (!process.env.ZHIXUN_BOT_FEISHU_GROUP_ID.startsWith("oc_")) {
-  throw new Error("ZHIXUN_BOT_FEISHU_GROUP_ID must be a Feishu chat_id beginning with oc_");
-}
-
 const replacements = new Map([
   ["__FEISHU_APP_ID__", process.env.ZHIXUN_BOT_FEISHU_APP_ID],
   ["__FEISHU_APP_SECRET__", process.env.ZHIXUN_BOT_FEISHU_APP_SECRET],
-  ["__FEISHU_GROUP_ID__", process.env.ZHIXUN_BOT_FEISHU_GROUP_ID],
   ["__MODEL_ID__", process.env.ZHIXUN_BOT_MODEL_ID],
   ["__MODEL_BASE_URL__", process.env.ZHIXUN_BOT_MODEL_BASE_URL],
 ]);

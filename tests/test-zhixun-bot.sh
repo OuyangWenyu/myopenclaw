@@ -52,7 +52,6 @@ render() {
   env \
     ZHIXUN_BOT_FEISHU_APP_ID=cli_test \
     ZHIXUN_BOT_FEISHU_APP_SECRET=test_secret \
-    ZHIXUN_BOT_FEISHU_GROUP_ID=oc_test_group \
     ZHIXUN_BOT_MODEL_ID=deepseek-chat \
     ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com \
     ZHIXUN_BOT_ENABLE_WRITE_TOOLS="${write_tools}" \
@@ -79,16 +78,16 @@ assert agent["tools"]["allow"] == ["bundle-mcp"]
 assert read_only["tools"]["profile"] == "messaging"
 
 feishu = read_only["channels"]["feishu"]
-assert feishu["dmPolicy"] == "allowlist"
-assert feishu["allowFrom"] == []
-assert feishu["groupPolicy"] == "allowlist"
-assert set(feishu["groups"]) == {"oc_test_group"}
+assert feishu["dmPolicy"] == "open"
+assert feishu["groupPolicy"] == "open"
+assert "allowFrom" not in feishu
+assert "groups" not in feishu
 assert feishu["requireMention"] is True
 assert all(enabled is False for enabled in feishu["tools"].values())
 
 binding = read_only["bindings"][0]
 assert binding["agentId"] == "zhixun-water"
-assert binding["match"]["peer"] == {"kind": "group", "id": "oc_test_group"}
+assert binding["match"] == {"channel": "feishu"}
 
 server = read_only["mcp"]["servers"]["water_unified"]
 assert server["url"] == "http://zhixun-water-mcp:18201/sse"
