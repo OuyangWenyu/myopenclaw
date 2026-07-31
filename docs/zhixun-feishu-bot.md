@@ -90,6 +90,13 @@ ZHIXUN_BOT_FEISHU_APP_SECRET=xxx
 ZHIXUN_BOT_MODEL_API_KEY=xxx
 ```
 
+默认使用普通文本回复，不展示流式卡片底部的 `Agent`、`Model`、`Provider`
+运行元信息。如需逐字流式卡片，可设置：
+
+```dotenv
+ZHIXUN_BOT_FEISHU_STREAMING=true
+```
+
 生产服务器建议设置绝对数据路径：
 
 ```dotenv

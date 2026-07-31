@@ -54,6 +54,10 @@ const template = JSON.parse(fs.readFileSync(templatePath, "utf8"));
 const config = replace(template);
 const enableWriteTools =
   (process.env.ZHIXUN_BOT_ENABLE_WRITE_TOOLS ?? "false").toLowerCase() === "true";
+const feishuStreaming =
+  (process.env.ZHIXUN_BOT_FEISHU_STREAMING ?? "false").toLowerCase() === "true";
+
+config.channels.feishu.streaming = feishuStreaming;
 
 if (enableWriteTools) {
   delete config.mcp.servers.water_unified.toolFilter;

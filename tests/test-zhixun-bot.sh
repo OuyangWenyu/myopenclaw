@@ -113,6 +113,7 @@ render() {
   env \
     ZHIXUN_BOT_FEISHU_APP_ID=cli_test \
     ZHIXUN_BOT_FEISHU_APP_SECRET=test_secret \
+    ZHIXUN_BOT_FEISHU_STREAMING=false \
     ZHIXUN_BOT_MODEL_API_KEY=model_secret \
     ZHIXUN_BOT_MODEL_ID=deepseek-chat \
     ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com \
@@ -145,7 +146,7 @@ assert feishu["groupPolicy"] == "open"
 assert feishu["allowFrom"] == ["*"]
 assert "groups" not in feishu
 assert feishu["requireMention"] is True
-assert feishu["streaming"] is True
+assert feishu["streaming"] is False
 assert all(enabled is False for enabled in feishu["tools"].values())
 
 binding = read_only["bindings"][0]
