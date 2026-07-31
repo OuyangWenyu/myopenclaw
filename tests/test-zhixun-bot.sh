@@ -16,6 +16,8 @@ cd "${REPO_ROOT}"
 bash -n scripts/start-zhixun-bot.sh
 sh -n docker/zhixun-bot/entrypoint.sh
 node --check docker/zhixun-bot/render-config.mjs
+grep -q 'get_reservoir_page_url(page="detail")' openclaw-zhixun/workspace/AGENTS.md
+grep -q "never construct or guess a URL" openclaw-zhixun/workspace/AGENTS.md
 pass "shell and Node syntax"
 
 docker compose \
