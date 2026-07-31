@@ -43,7 +43,7 @@ services:
       - zhixun-bot-net
 
   openclaw-zhixun:
-    image: ${ZHIXUN_BOT_OPENCLAW_IMAGE:-ghcr.m.daocloud.io/openclaw/openclaw:2026.7.1}
+    image: ${ZHIXUN_BOT_OPENCLAW_IMAGE:-docker.m.daocloud.io/openclaw/openclaw:2026.7.1}
     container_name: openclaw-zhixun
     restart: unless-stopped
     entrypoint:
