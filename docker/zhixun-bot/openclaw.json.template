@@ -2,7 +2,7 @@
   "models": {
     "mode": "merge",
     "providers": {
-      "zhipu": {
+      "deepseek": {
         "baseUrl": "__MODEL_BASE_URL__",
         "apiKey": "__MODEL_API_KEY__",
         "api": "openai-completions",
@@ -28,7 +28,7 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "zhipu/__MODEL_ID__"
+        "primary": "deepseek/__MODEL_ID__"
       }
     },
     "list": [

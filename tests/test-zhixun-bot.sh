@@ -433,8 +433,8 @@ assert "toolFilter" not in write_enabled["mcp"]["servers"]["water_unified"]
 serialized = json.dumps(read_only)
 assert "__FEISHU_" not in serialized
 assert "__MODEL_" not in serialized
-assert read_only["agents"]["defaults"]["model"]["primary"] == "zhipu/deepseek-chat"
-assert read_only["models"]["providers"]["zhipu"]["apiKey"] == "model_secret"
+assert read_only["agents"]["defaults"]["model"]["primary"] == "deepseek/deepseek-chat"
+assert read_only["models"]["providers"]["deepseek"]["apiKey"] == "model_secret"
 PY
 pass "rendered group binding and MCP tool policy"
 

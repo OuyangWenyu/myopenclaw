@@ -128,6 +128,9 @@ ZHIXUN_BOT_MODEL_ID=deepseek-v4-pro
 ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com
 ```
 
+运行时模型提供商 ID 固定为 `deepseek`，因此飞书流式卡片中的 Provider 会显示
+`deepseek`，不会再显示历史遗留的 `zhipu`。
+
 切换模型后无需重建 MCP 镜像，重新生成机器人配置即可：
 
 ```bash
