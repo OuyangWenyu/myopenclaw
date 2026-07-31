@@ -16,9 +16,10 @@ cd "${REPO_ROOT}"
 bash -n scripts/start-zhixun-bot.sh
 sh -n docker/zhixun-bot/entrypoint.sh
 node --check docker/zhixun-bot/render-config.mjs
-grep -q 'get_reservoir_page_url(page="detail")' openclaw-zhixun/workspace/AGENTS.md
+grep -q 'Every successful reservoir, river-station, or rainfall-station query' openclaw-zhixun/workspace/AGENTS.md
 grep -q 'related_page.url' openclaw-zhixun/workspace/AGENTS.md
 grep -q "never construct or guess a URL" openclaw-zhixun/workspace/AGENTS.md
+grep -q 'cp "${source_file}" "${target_file}"' docker/zhixun-bot/entrypoint.sh
 pass "shell and Node syntax"
 
 docker compose \
@@ -168,10 +169,142 @@ with tempfile.TemporaryDirectory() as cache_dir:
 PY
 pass "zhixun-core v2 station-name index compatibility"
 
-grep -q 'get_reservoir_profile_with_related_page' docker/zhixun-bot/mcp_entrypoint.py
-grep -q 'get_reservoir_page_url' docker/zhixun-bot/mcp_entrypoint.py
-grep -q '@wraps(_get_reservoir_profile)' docker/zhixun-bot/mcp_entrypoint.py
-pass "reservoir profile includes verified detail page"
+python3 - <<'PY'
+import asyncio
+import importlib.util
+from pathlib import Path
+from types import SimpleNamespace
+
+module_path = Path("docker/zhixun-bot/related_page_compat.py")
+spec = importlib.util.spec_from_file_location("related_page_compat", module_path)
+related = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(related)
+
+async def get_reservoir_profile(
+    include, stcd="", reservoir_name="", storage_curve_info_only=False,
+    warning_start_time="", warning_stop_time=""
+):
+    return {"stcd": stcd or "21100150", "stnm": reservoir_name or "大伙房水库"}
+
+async def list_reservoirs(
+    page=1, size=20, keyword="", region="", warning_type="",
+    start_time="", stop_time=""
+):
+    return {
+        "reservoirs": (
+            [{"stcd": "21100150", "stnm": "大伙房水库"}] if keyword else []
+        )
+    }
+
+async def get_river_station_detail(station_name):
+    return {"stcd": "21103500", "stnm": station_name}
+
+async def get_river_warning_status(station_name, start_time, stop_time, mode="both"):
+    return {"stcd": "21103500", "station_name": station_name}
+
+async def get_river_historical_comparison(
+    station_name, year1, year2, start_date, stop_date, metric
+):
+    return {"stcd": "21103500", "station_name": station_name}
+
+async def get_rainstation_detail(station_name):
+    return {"stcd": "21120032", "stnm": station_name}
+
+async def get_rainfall_statistics(
+    scope, name, period_type, year, compare_year=None, include_average=True, months=None
+):
+    return {"scope": scope, "stcd": "21120032", "station_name": name}
+
+async def get_station_timeseries(
+    station_type, station_name, start_time, stop_time, parameters="", mode="full",
+    threshold=None, exceed_parameter="water_level"
+):
+    return {
+        "station_type": station_type,
+        "summary": {"stcd": "21103500", "station_name": station_name},
+    }
+
+async def get_station_latest_data(station_type, station_name):
+    return {
+        "station_type": station_type,
+        "summary": {"stcd": "21120032", "station_name": station_name},
+    }
+
+mcp = SimpleNamespace(
+    list_reservoirs=list_reservoirs,
+    get_reservoir_profile=get_reservoir_profile,
+    get_river_station_detail=get_river_station_detail,
+    get_river_warning_status=get_river_warning_status,
+    get_river_historical_comparison=get_river_historical_comparison,
+    get_rainstation_detail=get_rainstation_detail,
+    get_rainfall_statistics=get_rainfall_statistics,
+    get_station_timeseries=get_station_timeseries,
+    get_station_latest_data=get_station_latest_data,
+)
+url_calls = []
+
+async def reservoir_url(**kwargs):
+    url_calls.append(("reservoir", kwargs))
+    return {"URL": f"https://frontend.test/reservoir/{kwargs['page']}"}
+
+async def river_url(**kwargs):
+    url_calls.append(("river", kwargs))
+    return {"URL": f"https://frontend.test/river/{kwargs['page']}"}
+
+async def rain_url(**kwargs):
+    url_calls.append(("rainfall", kwargs))
+    return {"URL": "https://frontend.test/rainfall"}
+
+urls = SimpleNamespace(
+    get_reservoir_page_url=reservoir_url,
+    get_river_page_url=river_url,
+    get_rainstation_url=rain_url,
+)
+related.install(mcp, urls)
+
+async def main():
+    reservoir_search = await mcp.list_reservoirs(keyword="大伙房")
+    assert reservoir_search["related_page"]["url"].endswith("/reservoir/detail")
+
+    reservoir = await mcp.get_reservoir_profile(
+        include="extra_info", reservoir_name="大伙房水库"
+    )
+    assert reservoir["related_page"]["url"].endswith("/reservoir/detail")
+
+    river = await mcp.get_river_station_detail("占贝")
+    assert river["related_page"]["url"].endswith("/river/monitor")
+
+    comparison = await mcp.get_river_historical_comparison(
+        "占贝", 2024, 2025, "07-01", "07-31", "水位"
+    )
+    assert comparison["related_page"]["url"].endswith("/river/comparison")
+    assert url_calls[-1][1]["metric"] == "water_level"
+
+    rainfall = await mcp.get_rainfall_statistics(
+        "station", "石庙子", "month", 2025
+    )
+    assert rainfall["related_page"]["url"].endswith("/rainfall")
+    assert url_calls[-1][1]["start_time"] == "2025-01-01T00:00:00+08:00"
+
+    timeseries = await mcp.get_station_timeseries(
+        "river", "占贝", "2025-07-01T00:00:00Z", "2025-07-31T00:00:00Z"
+    )
+    assert timeseries["related_page"]["url"].endswith("/river/monitor")
+    assert url_calls[-1][1]["start_time"] == "2025-07-01T08:00:00+08:00"
+
+    latest = await mcp.get_station_latest_data("rainfall", "石庙子")
+    assert latest["related_page"]["url"].endswith("/rainfall")
+
+    for result in (
+        reservoir_search, reservoir, river, comparison, rainfall, timeseries, latest
+    ):
+        assert "最终回复必须在正文末尾" in result["response_requirement"]
+
+asyncio.run(main())
+PY
+grep -q 'related_page_compat.py' docker/zhixun-bot/Dockerfile.mcp
+grep -q 'install_related_pages' docker/zhixun-bot/mcp_entrypoint.py
+pass "station queries include verified related pages"
 
 render() {
   local write_tools="$1"

@@ -18,7 +18,7 @@ WORKDIR /app/mcp_servers/water
 # zhixun_src is supplied by docker-compose.zhixun-bot.yml as an additional
 # BuildKit context. The zhixun-agent repository does not need a Dockerfile.
 COPY --from=zhixun_src /mcp_servers/water/ ./
-COPY zhixun_core_v2_compat.py mcp_entrypoint.py ./
+COPY zhixun_core_v2_compat.py related_page_compat.py mcp_entrypoint.py ./
 
 EXPOSE 18201
 

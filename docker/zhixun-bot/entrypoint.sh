@@ -8,11 +8,11 @@ WORKSPACE_DIR="${STATE_DIR}/workspace"
 
 mkdir -p "${STATE_DIR}" "${WORKSPACE_DIR}"
 
+# This is a dedicated managed workspace. Always refresh bundled policy files so
+# image updates take effect even when the OpenClaw data volume already exists.
 for source_file in /opt/zhixun-workspace/*; do
   target_file="${WORKSPACE_DIR}/$(basename "${source_file}")"
-  if [ ! -e "${target_file}" ]; then
-    cp "${source_file}" "${target_file}"
-  fi
+  cp "${source_file}" "${target_file}"
 done
 
 # 飞书是 OpenClaw 官方外部插件。安装记录保存在独立 state 目录中，

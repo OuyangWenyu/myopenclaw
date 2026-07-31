@@ -32,7 +32,7 @@ cd /srv/agents
 git clone git@github.com:CylenLC/myopenclaw.git
 git clone git@gitcode.com:dlut-water/zhixun-agent.git
 cd myopenclaw
-git switch codex/zhixun-feishu-bot
+git switch feat/zhixun-feishu-bot
 ```
 
 要求：
@@ -77,6 +77,22 @@ ZHIXUN_BOT_MCP_DATA_DIR=/srv/myopenclaw-data/zhixun-water-mcp
 ZHIXUN_MCP_STATION_INDEX_TTL_SECONDS=86400
 ZHIXUN_MCP_STATION_INDEX_WORKERS=12
 ```
+
+兼容层还会把 URL 工具与单站数据查询组合起来。查询水库、河道站或雨量站时，
+相应数据工具会直接返回经过 MCP URL 工具验证的 `related_page.url`，并要求
+模型把它作为回复的最后一行；用户不需要在问题中另外要求“给出链接”。
+
+当前自动覆盖：
+
+- 唯一命中的水库名称搜索、水库档案、库容曲线和 GeoJSON：水库详情页；
+- 水库告警及时序/最新数据：对应告警页或监测页；
+- 河道站详情、告警及时序/最新数据：河道监测页；
+- 河道历史对比：河道历史对比页，并保留年份、日期范围和指标；
+- 雨量站详情、单站旬月统计、时序和最新数据：雨量站分析页，并尽量保留
+  查询时段。
+
+`AGENTS.md` 和 `SOUL.md` 是这个专用机器人的受管策略文件。容器每次启动都会
+用镜像中的版本同步到独立工作区，因此升级后不需要手工复制规则文件。
 
 飞书应用需要启用机器人能力，并通过 WebSocket 订阅
 `im.message.receive_v1`。将应用发布后，可将机器人加入任意目标群。
