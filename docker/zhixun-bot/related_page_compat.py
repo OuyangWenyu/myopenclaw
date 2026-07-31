@@ -1,9 +1,9 @@
-"""Attach verified Zhixun frontend pages to station-query tool results.
+"""Attach verified Zhixun frontend pages to water-query tool results.
 
 The upstream Water MCP exposes data tools and URL tools separately.  A model
 can therefore answer from the first tool result without making the second URL
 call.  This compatibility layer combines those two observations for
-reservoir, river and rainfall-station queries.
+reservoir, river, rainfall-station and basin queries.
 """
 
 from __future__ import annotations
@@ -34,6 +34,11 @@ _PAGE_LABELS = {
     "river-monitor": "河道站监测页面",
     "river-comparison": "河道站历史对比页面",
     "rainfall": "雨量站分析页面",
+    "basin-monitor": "流域雨情监测页面",
+    "basin-warning": "流域风险研判页面",
+    "basin-statistics": "流域雨情统计页面",
+    "basin-forecast": "流域降雨预报页面",
+    "basin-isoline": "流域等雨量线页面",
 }
 
 
@@ -74,6 +79,24 @@ def _station_identity(
     return ""
 
 
+def _basin_identity(arguments: dict[str, Any], result: dict[str, Any]) -> str:
+    """Find the basin name or ID returned by a basin tool."""
+    query = result.get("query") if isinstance(result.get("query"), dict) else {}
+    summary = result.get("summary") if isinstance(result.get("summary"), dict) else {}
+    for candidate in (
+        result.get("basin_name"),
+        result.get("basin_id"),
+        result.get("stcd"),
+        summary.get("basin_name"),
+        summary.get("basin_id"),
+        arguments.get("basin_name"),
+        query.get("basin_name"),
+    ):
+        if candidate is not None and str(candidate).strip():
+            return str(candidate).strip()
+    return ""
+
+
 def _metric_for_url(metric: Any) -> str:
     value = str(metric or "flow").strip().lower()
     return {
@@ -83,24 +106,35 @@ def _metric_for_url(metric: Any) -> str:
     }.get(value, value)
 
 
-def _attach_page(
+def _attach_pages(
     result: Any,
-    page: Any,
-    label_key: str,
+    resolved_pages: Any,
 ) -> Any:
     if not isinstance(result, dict):
         return result
-    url = page.get("URL") if isinstance(page, dict) else None
-    if not url:
+    if isinstance(resolved_pages, tuple):
+        resolved_pages = [resolved_pages]
+    if not isinstance(resolved_pages, list):
         return result
-    label = _PAGE_LABELS[label_key]
-    result["related_page"] = {
-        "label": label,
-        "url": url,
-    }
+    pages = []
+    for page, label_key in resolved_pages:
+        url = page.get("URL") if isinstance(page, dict) else None
+        if url and label_key in _PAGE_LABELS:
+            pages.append({"label": _PAGE_LABELS[label_key], "url": url})
+    if not pages:
+        return result
+    # Keep the singular field for existing clients while allowing a generic
+    # basin query to expose both monitoring and risk-analysis pages.
+    result["related_page"] = pages[0]
+    if len(pages) > 1:
+        result["related_pages"] = pages
+    links = "；".join(
+        f"相关页面：[{item['label']}]({item['url']})" for item in pages
+    )
     result["response_requirement"] = (
-        f"最终回复必须在正文末尾另起一行写“相关页面：[{label}]({url})”；"
-        "链接必须原样复制，不得省略、改写或自行构造。"
+        "最终回复必须在正文末尾另起一行，按顺序原样写“"
+        + links
+        + "”；链接不得省略、改写或自行构造。"
     )
     return result
 
@@ -130,8 +164,7 @@ def install(mcp_server: Any, url_server: Any) -> None:
                 bound.apply_defaults()
                 resolved = await resolver(dict(bound.arguments), result)
                 if resolved:
-                    page, label_key = resolved
-                    return _attach_page(result, page, label_key)
+                    return _attach_pages(result, resolved)
             except Exception as exc:
                 result["related_page_error"] = str(exc)
             return result
@@ -266,6 +299,95 @@ def install(mcp_server: Any, url_server: Any) -> None:
         )
         return page, "rainfall"
 
+    async def basin_overview(
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+    ) -> list[tuple[Any, str]] | None:
+        basin = _basin_identity(arguments, result)
+        if not basin:
+            return None
+        monitor = await url_server.get_basin_rain_page_url(
+            basin_name=basin,
+            page="monitor",
+        )
+        warning = await url_server.get_basin_warning_status_url(basin_name=basin)
+        return [(monitor, "basin-monitor"), (warning, "basin-warning")]
+
+    async def basin_rainfall_summary(
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+    ) -> tuple[Any, str] | None:
+        basin = _basin_identity(arguments, result)
+        if not basin:
+            return None
+        page = await url_server.get_basin_rain_page_url(
+            basin_name=basin,
+            page="monitor",
+            start_time=_as_bj_iso(arguments.get("start_time")),
+            end_time=_as_bj_iso(arguments.get("stop_time")),
+        )
+        return page, "basin-monitor"
+
+    async def basin_forecast(
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+    ) -> tuple[Any, str] | None:
+        basin = _basin_identity(arguments, result)
+        if not basin:
+            return None
+        page = await url_server.get_basin_rain_page_url(
+            basin_name=basin,
+            page="forecast",
+            start_time=_as_bj_iso(arguments.get("start_time")),
+        )
+        return page, "basin-forecast"
+
+    async def basin_warning(
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+    ) -> tuple[Any, str] | None:
+        basin = _basin_identity(arguments, result)
+        if not basin:
+            return None
+        page = await url_server.get_basin_warning_status_url(
+            basin_name=basin,
+            start_time=_as_bj_iso(arguments.get("start_time")),
+            end_time=_as_bj_iso(arguments.get("stop_time")),
+        )
+        return page, "basin-warning"
+
+    async def basin_statistics(
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+    ) -> tuple[Any, str] | None:
+        if str(arguments.get("scope") or "").strip().lower() != "basin":
+            return None
+        basin = _basin_identity(arguments, result)
+        if not basin:
+            return None
+        page = await url_server.get_basin_rain_page_url(
+            basin_name=basin,
+            page="statistics",
+            year=int(arguments.get("year")),
+            compare_year=arguments.get("compare_year"),
+            period_type=str(arguments.get("period_type") or "month"),
+        )
+        return page, "basin-statistics"
+
+    async def basin_isoline(
+        arguments: dict[str, Any],
+        result: dict[str, Any],
+    ) -> tuple[Any, str] | None:
+        basin = _basin_identity(arguments, result)
+        if not basin:
+            return None
+        page = await url_server.get_basin_rain_page_url(
+            basin_name=basin,
+            page="isoline",
+            date=str(arguments.get("analysis_date") or ""),
+        )
+        return page, "basin-isoline"
+
     async def station_timeseries(
         arguments: dict[str, Any],
         result: dict[str, Any],
@@ -333,5 +455,37 @@ def install(mcp_server: Any, url_server: Any) -> None:
     wrap("get_river_historical_comparison", river_comparison)
     wrap("get_rainstation_detail", rainfall_detail)
     wrap("get_rainfall_statistics", rainfall_statistics)
+    wrap("get_basin_stations", basin_overview)
+    wrap("get_basin_rainfall_summary", basin_rainfall_summary)
+    wrap("get_basin_rainfall_forecast", basin_forecast)
+    wrap("get_basin_rainfall_complete", basin_forecast)
+    wrap("get_basin_warning_status", basin_warning)
+    wrap("get_basin_rainfall_isoline", basin_isoline)
+    wrap("get_basin_rainfall_file", basin_forecast)
+    # This second wrapper replaces the station resolver above only for
+    # basin-scoped rainfall statistics.
+    original_rainfall_statistics = getattr(mcp_server, "get_rainfall_statistics", None)
+    if original_rainfall_statistics is not None:
+        # The original function is already wrapped. Compose rather than lose
+        # the station URL behavior.
+        signature = inspect.signature(original_rainfall_statistics)
+
+        @wraps(original_rainfall_statistics)
+        async def rainfall_statistics_with_basin_page(*args: Any, **kwargs: Any) -> Any:
+            result = await original_rainfall_statistics(*args, **kwargs)
+            if not isinstance(result, dict):
+                return result
+            try:
+                bound = signature.bind_partial(*args, **kwargs)
+                bound.apply_defaults()
+                resolved = await basin_statistics(dict(bound.arguments), result)
+                if resolved:
+                    return _attach_pages(result, resolved)
+            except Exception as exc:
+                result["related_page_error"] = str(exc)
+            return result
+
+        rainfall_statistics_with_basin_page._zhixun_related_page_wrapped = True
+        setattr(mcp_server, "get_rainfall_statistics", rainfall_statistics_with_basin_page)
     wrap("get_station_timeseries", station_timeseries)
     wrap("get_station_latest_data", station_latest)

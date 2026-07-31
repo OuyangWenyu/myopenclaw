@@ -16,7 +16,7 @@ cd "${REPO_ROOT}"
 bash -n scripts/start-zhixun-bot.sh
 sh -n docker/zhixun-bot/entrypoint.sh
 node --check docker/zhixun-bot/render-config.mjs
-grep -q 'Every successful reservoir, river-station, or rainfall-station query' openclaw-zhixun/workspace/AGENTS.md
+grep -q 'Every successful reservoir, river-station, rainfall-station, or basin query' openclaw-zhixun/workspace/AGENTS.md
 grep -q 'related_page.url' openclaw-zhixun/workspace/AGENTS.md
 grep -q "never construct or guess a URL" openclaw-zhixun/workspace/AGENTS.md
 grep -q 'cp "${source_file}" "${target_file}"' docker/zhixun-bot/entrypoint.sh
@@ -213,7 +213,37 @@ async def get_rainstation_detail(station_name):
 async def get_rainfall_statistics(
     scope, name, period_type, year, compare_year=None, include_average=True, months=None
 ):
+    if scope == "basin":
+        return {"scope": scope, "basin_id": "21100150", "basin_name": name}
     return {"scope": scope, "stcd": "21120032", "station_name": name}
+
+async def get_basin_stations(basin_name, relation="all"):
+    return {"basin_id": "21100150", "basin_name": basin_name}
+
+async def get_basin_rainfall_summary(basin_name, start_time="", stop_time=""):
+    return {"basin_id": "21100150", "basin_name": basin_name}
+
+async def get_basin_rainfall_forecast(
+    basin_name, start_time="", model="gfs", forecast_hours=120
+):
+    return {"basin_id": "21100150", "basin_name": basin_name}
+
+async def get_basin_rainfall_complete(
+    basin_name, start_time="", warmup_days=30, forecast_days=5,
+    model="gfs", interval="3h"
+):
+    return {"basin_id": "21100150", "basin_name": basin_name}
+
+async def get_basin_warning_status(basin_name, start_time, stop_time):
+    return {"basin_id": "21100150", "basin_name": basin_name}
+
+async def get_basin_rainfall_isoline(basin_name, analysis_date, force=False):
+    return {"basin_id": "21100150", "basin_name": basin_name}
+
+async def get_basin_rainfall_file(
+    basin_name, file_format="nc", start_time="", model="gfs"
+):
+    return {"basin_id": "21100150", "basin_name": basin_name}
 
 async def get_station_timeseries(
     station_type, station_name, start_time, stop_time, parameters="", mode="full",
@@ -238,6 +268,13 @@ mcp = SimpleNamespace(
     get_river_historical_comparison=get_river_historical_comparison,
     get_rainstation_detail=get_rainstation_detail,
     get_rainfall_statistics=get_rainfall_statistics,
+    get_basin_stations=get_basin_stations,
+    get_basin_rainfall_summary=get_basin_rainfall_summary,
+    get_basin_rainfall_forecast=get_basin_rainfall_forecast,
+    get_basin_rainfall_complete=get_basin_rainfall_complete,
+    get_basin_warning_status=get_basin_warning_status,
+    get_basin_rainfall_isoline=get_basin_rainfall_isoline,
+    get_basin_rainfall_file=get_basin_rainfall_file,
     get_station_timeseries=get_station_timeseries,
     get_station_latest_data=get_station_latest_data,
 )
@@ -255,10 +292,20 @@ async def rain_url(**kwargs):
     url_calls.append(("rainfall", kwargs))
     return {"URL": "https://frontend.test/rainfall"}
 
+async def basin_rain_url(**kwargs):
+    url_calls.append(("basin-rain", kwargs))
+    return {"URL": f"https://frontend.test/basin/{kwargs['page']}"}
+
+async def basin_warning_url(**kwargs):
+    url_calls.append(("basin-warning", kwargs))
+    return {"URL": "https://frontend.test/basin/warning"}
+
 urls = SimpleNamespace(
     get_reservoir_page_url=reservoir_url,
     get_river_page_url=river_url,
     get_rainstation_url=rain_url,
+    get_basin_rain_page_url=basin_rain_url,
+    get_basin_warning_status_url=basin_warning_url,
 )
 related.install(mcp, urls)
 
@@ -286,6 +333,31 @@ async def main():
     assert rainfall["related_page"]["url"].endswith("/rainfall")
     assert url_calls[-1][1]["start_time"] == "2025-01-01T00:00:00+08:00"
 
+    basin_overview = await mcp.get_basin_stations("大伙房水库")
+    assert [page["label"] for page in basin_overview["related_pages"]] == [
+        "流域雨情监测页面", "流域风险研判页面"
+    ]
+    assert "流域雨情监测页面" in basin_overview["response_requirement"]
+    assert "流域风险研判页面" in basin_overview["response_requirement"]
+
+    basin_summary = await mcp.get_basin_rainfall_summary(
+        "大伙房水库", "2025-07-01T00:00:00Z", "2025-07-31T00:00:00Z"
+    )
+    assert basin_summary["related_page"]["url"].endswith("/basin/monitor")
+    assert url_calls[-1][1]["start_time"] == "2025-07-01T08:00:00+08:00"
+
+    basin_forecast = await mcp.get_basin_rainfall_forecast("大伙房水库")
+    assert basin_forecast["related_page"]["url"].endswith("/basin/forecast")
+
+    basin_rain_stats = await mcp.get_rainfall_statistics(
+        "basin", "大伙房水库", "month", 2025, compare_year=2024
+    )
+    assert basin_rain_stats["related_page"]["url"].endswith("/basin/statistics")
+    assert url_calls[-1][1]["compare_year"] == 2024
+
+    basin_isoline = await mcp.get_basin_rainfall_isoline("大伙房水库", "2025-07-01")
+    assert basin_isoline["related_page"]["url"].endswith("/basin/isoline")
+
     timeseries = await mcp.get_station_timeseries(
         "river", "占贝", "2025-07-01T00:00:00Z", "2025-07-31T00:00:00Z"
     )
@@ -296,7 +368,8 @@ async def main():
     assert latest["related_page"]["url"].endswith("/rainfall")
 
     for result in (
-        reservoir_search, reservoir, river, comparison, rainfall, timeseries, latest
+        reservoir_search, reservoir, river, comparison, rainfall, basin_overview,
+        basin_summary, basin_forecast, basin_rain_stats, basin_isoline, timeseries, latest
     ):
         assert "最终回复必须在正文末尾" in result["response_requirement"]
 
@@ -304,7 +377,7 @@ asyncio.run(main())
 PY
 grep -q 'related_page_compat.py' docker/zhixun-bot/Dockerfile.mcp
 grep -q 'install_related_pages' docker/zhixun-bot/mcp_entrypoint.py
-pass "station queries include verified related pages"
+pass "station and basin queries include verified related pages"
 
 render() {
   local write_tools="$1"
