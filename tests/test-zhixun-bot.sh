@@ -93,6 +93,7 @@ assert feishu["groupPolicy"] == "open"
 assert "allowFrom" not in feishu
 assert "groups" not in feishu
 assert feishu["requireMention"] is True
+assert feishu["streaming"] is True
 assert all(enabled is False for enabled in feishu["tools"].values())
 
 binding = read_only["bindings"][0]
