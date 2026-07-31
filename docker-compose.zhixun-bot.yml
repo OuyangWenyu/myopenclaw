@@ -56,7 +56,10 @@ services:
     environment:
       HOME: /home/node
       TZ: ${TZ:-Asia/Shanghai}
+      # OpenClaw custom providers may resolve the legacy built-in key name;
+      # keep both aliases while the displayed provider remains zhipu.
       ZHIPU_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
+      DEEPSEEK_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
       ZHIXUN_BOT_FEISHU_APP_ID: ${ZHIXUN_BOT_FEISHU_APP_ID:?请设置飞书 App ID}
       ZHIXUN_BOT_FEISHU_APP_SECRET: ${ZHIXUN_BOT_FEISHU_APP_SECRET:?请设置飞书 App Secret}
       ZHIXUN_BOT_MODEL_ID: ${ZHIXUN_BOT_MODEL_ID:-deepseek-chat}
