@@ -62,6 +62,7 @@ render() {
   env \
     ZHIXUN_BOT_FEISHU_APP_ID=cli_test \
     ZHIXUN_BOT_FEISHU_APP_SECRET=test_secret \
+    ZHIXUN_BOT_MODEL_API_KEY=model_secret \
     ZHIXUN_BOT_MODEL_ID=deepseek-chat \
     ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com \
     ZHIXUN_BOT_ENABLE_WRITE_TOOLS="${write_tools}" \
@@ -109,6 +110,7 @@ serialized = json.dumps(read_only)
 assert "__FEISHU_" not in serialized
 assert "__MODEL_" not in serialized
 assert read_only["agents"]["defaults"]["model"]["primary"] == "zhipu/deepseek-chat"
+assert read_only["models"]["providers"]["zhipu"]["apiKey"] == "model_secret"
 PY
 pass "rendered group binding and MCP tool policy"
 

@@ -9,6 +9,7 @@ if (!templatePath || !outputPath) {
 const required = [
   "ZHIXUN_BOT_FEISHU_APP_ID",
   "ZHIXUN_BOT_FEISHU_APP_SECRET",
+  "ZHIXUN_BOT_MODEL_API_KEY",
   "ZHIXUN_BOT_MODEL_ID",
   "ZHIXUN_BOT_MODEL_BASE_URL",
 ];
@@ -22,6 +23,7 @@ for (const name of required) {
 const replacements = new Map([
   ["__FEISHU_APP_ID__", process.env.ZHIXUN_BOT_FEISHU_APP_ID],
   ["__FEISHU_APP_SECRET__", process.env.ZHIXUN_BOT_FEISHU_APP_SECRET],
+  ["__MODEL_API_KEY__", process.env.ZHIXUN_BOT_MODEL_API_KEY],
   ["__MODEL_ID__", process.env.ZHIXUN_BOT_MODEL_ID],
   ["__MODEL_BASE_URL__", process.env.ZHIXUN_BOT_MODEL_BASE_URL],
 ]);

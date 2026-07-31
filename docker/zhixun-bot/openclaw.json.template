@@ -4,6 +4,7 @@
     "providers": {
       "zhipu": {
         "baseUrl": "__MODEL_BASE_URL__",
+        "apiKey": "__MODEL_API_KEY__",
         "api": "openai-completions",
         "models": [
           {
