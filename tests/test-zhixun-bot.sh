@@ -17,6 +17,7 @@ bash -n scripts/start-zhixun-bot.sh
 sh -n docker/zhixun-bot/entrypoint.sh
 node --check docker/zhixun-bot/render-config.mjs
 grep -q 'get_reservoir_page_url(page="detail")' openclaw-zhixun/workspace/AGENTS.md
+grep -q 'related_page.url' openclaw-zhixun/workspace/AGENTS.md
 grep -q "never construct or guess a URL" openclaw-zhixun/workspace/AGENTS.md
 pass "shell and Node syntax"
 
@@ -100,6 +101,11 @@ assert utils._CACHED_BY_TYPE["水库站"]["大伙房水库"] == "21100150"
 assert utils._search_station_api("大伙房", "/reservoirs")[0]["stcd"] == "21100150"
 PY
 pass "zhixun-core v2 HAL reservoir compatibility"
+
+grep -q 'get_reservoir_profile_with_related_page' docker/zhixun-bot/mcp_entrypoint.py
+grep -q 'get_reservoir_page_url' docker/zhixun-bot/mcp_entrypoint.py
+grep -q '@wraps(_get_reservoir_profile)' docker/zhixun-bot/mcp_entrypoint.py
+pass "reservoir profile includes verified detail page"
 
 render() {
   local write_tools="$1"
