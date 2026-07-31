@@ -34,6 +34,14 @@ services = config["services"]
 assert set(services) == {"openclaw-zhixun", "zhixun-water-mcp"}
 assert set(config["networks"]) == {"zhixun-bot-net"}
 
+mcp = services["zhixun-water-mcp"]
+build = mcp["build"]
+assert build["context"].endswith("/docker/zhixun-bot")
+assert build["dockerfile"] == "Dockerfile.mcp"
+assert build["additional_contexts"]["zhixun_src"].endswith("/zhixun-agent")
+assert mcp["working_dir"] == "/app/mcp_servers/water"
+assert mcp["command"][:2] == ["python", "mcp_server_unified.py"]
+
 for service in services.values():
     assert "ports" not in service
     assert set(service["networks"]) == {"zhixun-bot-net"}
@@ -44,7 +52,7 @@ assert any(source.endswith(".openclaw-zhixun") for source in sources)
 assert all(not source.endswith("/.openclaw") for source in sources)
 assert all("docker.sock" not in source for source in sources)
 PY
-pass "Compose service and network isolation"
+pass "Compose build source and service isolation"
 
 render() {
   local write_tools="$1"

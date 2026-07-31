@@ -37,10 +37,9 @@ if [[ "${zhixun_path}" != /* ]]; then
   zhixun_path="${REPO_ROOT}/${zhixun_path}"
 fi
 
-if [[ ! -f "${zhixun_path}/docker/Dockerfile" ]] \
-  || [[ ! -f "${zhixun_path}/src/mcp/water_mcp_dev/mcp_server_unified.py" ]]; then
+if [[ ! -f "${zhixun_path}/mcp_servers/water/mcp_server_unified.py" ]]; then
   echo "❌ ZHIXUN_AGENT_PATH 无效: ${zhixun_path}"
-  echo "   服务器上必须存在完整的 zhixun-agent 仓库。"
+  echo "   需要新版 zhixun-agent，并包含 mcp_servers/water/mcp_server_unified.py。"
   exit 1
 fi
 

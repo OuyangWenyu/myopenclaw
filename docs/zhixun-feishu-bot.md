@@ -30,17 +30,31 @@ Waterism API
 mkdir -p /srv/agents
 cd /srv/agents
 git clone git@github.com:CylenLC/myopenclaw.git
-git clone <zhixun-agent-repository-url> zhixun-agent
+git clone git@gitcode.com:dlut-water/zhixun-agent.git
+git -C zhixun-agent switch feat/remove-selfhosted-llm
 cd myopenclaw
 git switch codex/zhixun-feishu-bot
 ```
 
+在纯 MCP 重构合并到 zhixun-agent `main` 后，可直接使用 `main`，无需再执行
+上面的特性分支切换命令。
+
 要求：
 
-- Docker Engine 和 Docker Compose plugin
+- Docker Engine（启用 BuildKit）和 Docker Compose plugin 2.17+
 - OpenClaw 镜像版本不低于 `2026.5.29`
 - 服务器能够访问飞书、模型 API、Waterism API 和容器镜像/插件仓库
 - 一个独立的飞书自建应用
+
+zhixun-agent 使用纯 MCP 目录结构，必须包含：
+
+```text
+mcp_servers/water/mcp_server_unified.py
+```
+
+MCP 镜像由 myopenclaw 中的 `docker/zhixun-bot/Dockerfile.mcp` 构建，通过
+Compose 的附加构建上下文读取 zhixun-agent 源码，不依赖 zhixun-agent
+仓库中的 `docker/` 目录或 Dockerfile。
 
 飞书应用需要启用机器人能力，并通过 WebSocket 订阅
 `im.message.receive_v1`。将应用发布后，可将机器人加入任意目标群。

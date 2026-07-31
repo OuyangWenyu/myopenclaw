@@ -3,12 +3,14 @@ name: myopenclaw-zhixun-bot
 services:
   zhixun-water-mcp:
     build:
-      context: ${ZHIXUN_AGENT_PATH:-../zhixun-agent}
-      dockerfile: docker/Dockerfile
+      context: ./docker/zhixun-bot
+      dockerfile: Dockerfile.mcp
+      additional_contexts:
+        zhixun_src: ${ZHIXUN_AGENT_PATH:-../zhixun-agent}
     image: myopenclaw/zhixun-water-mcp:latest
     container_name: zhixun-water-mcp
     restart: unless-stopped
-    working_dir: /app/src/mcp/water_mcp_dev
+    working_dir: /app/mcp_servers/water
     command:
       - python
       - mcp_server_unified.py
