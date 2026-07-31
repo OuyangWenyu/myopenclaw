@@ -1,0 +1,84 @@
+name: myopenclaw-zhixun-bot
+
+services:
+  zhixun-water-mcp:
+    build:
+      context: ${ZHIXUN_AGENT_PATH:-../zhixun-agent}
+      dockerfile: docker/Dockerfile
+    image: myopenclaw/zhixun-water-mcp:latest
+    container_name: zhixun-water-mcp
+    restart: unless-stopped
+    working_dir: /app/src/mcp/water_mcp_dev
+    command:
+      - python
+      - mcp_server_unified.py
+      - sse
+      - --host
+      - 0.0.0.0
+      - --port
+      - "18201"
+    expose:
+      - "18201"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s=socket.create_connection(('127.0.0.1', 18201), 2); s.close()"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+    networks:
+      - zhixun-bot-net
+
+  openclaw-zhixun:
+    image: ${ZHIXUN_BOT_OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:2026.7.1}
+    container_name: openclaw-zhixun
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - /opt/zhixun-bot/entrypoint.sh
+    volumes:
+      - ${ZHIXUN_BOT_DATA_DIR:-${HOME}/.openclaw-zhixun}:/home/node/.openclaw
+      - ./docker/zhixun-bot:/opt/zhixun-bot:ro
+      - ./openclaw-zhixun/workspace:/opt/zhixun-workspace:ro
+    environment:
+      HOME: /home/node
+      TZ: ${TZ:-Asia/Shanghai}
+      DEEPSEEK_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
+      ZHIXUN_BOT_FEISHU_APP_ID: ${ZHIXUN_BOT_FEISHU_APP_ID:?请设置飞书 App ID}
+      ZHIXUN_BOT_FEISHU_APP_SECRET: ${ZHIXUN_BOT_FEISHU_APP_SECRET:?请设置飞书 App Secret}
+      ZHIXUN_BOT_FEISHU_GROUP_ID: ${ZHIXUN_BOT_FEISHU_GROUP_ID:?请设置目标群 chat_id}
+      ZHIXUN_BOT_MODEL_ID: ${ZHIXUN_BOT_MODEL_ID:-deepseek-chat}
+      ZHIXUN_BOT_MODEL_BASE_URL: ${ZHIXUN_BOT_MODEL_BASE_URL:-https://api.deepseek.com}
+      ZHIXUN_BOT_ENABLE_WRITE_TOOLS: ${ZHIXUN_BOT_ENABLE_WRITE_TOOLS:-false}
+    depends_on:
+      zhixun-water-mcp:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:18791/healthz
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+    networks:
+      - zhixun-bot-net
+
+networks:
+  zhixun-bot-net:
+    driver: bridge

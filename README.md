@@ -109,6 +109,7 @@ myopenclaw/
 - [架构](https://ouyangwenyu.github.io/myopenclaw/architecture/) — 服务拓扑、数据目录、安全边界
 - [可移植性](https://ouyangwenyu.github.io/myopenclaw/portability/) — 换电脑需要准备什么
 - [备份系统](https://ouyangwenyu.github.io/myopenclaw/backup/) — 备份内容、恢复流程
+- [zhixun 独立飞书机器人](docs/zhixun-feishu-bot.md) — 只运行 OpenClaw + zhixun 水文 MCP
 
 本地预览文档：
 
