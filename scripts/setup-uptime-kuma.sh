@@ -99,6 +99,7 @@ declare -a MONITORS=(
     "Docker: hermes|docker||hermes|"
     "Docker: hermes-coder|docker||hermes-coder|"
     "Docker: hermes-finance|docker||hermes-finance|"
+    "Docker: hermes-daoyuan|docker||hermes-daoyuan|"
     "Docker: hermes-dashboard|docker||hermes-dashboard|"
     "Docker: claude-code|docker||claude-code|"
     "Docker: openclaw-gateway|docker||openclaw-gateway|"
@@ -107,6 +108,7 @@ declare -a MONITORS=(
     "Docker: aisecretary|docker||aisecretary|"
     "Docker: tdai-memory|docker||tdai-memory|"
     "Docker: repo-scanner-mcp|docker||repo-scanner-mcp|"
+    "Docker: zotero-mcp|docker||zotero-mcp|"
     "Docker: dailyinfo_freshrss|docker||dailyinfo_freshrss|"
 )
 

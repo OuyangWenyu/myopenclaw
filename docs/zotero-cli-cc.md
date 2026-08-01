@@ -1,4 +1,6 @@
-# Zotero CLI（zotero-cli-cc）
+# Zotero CLI（zotero-cli-cc）→ 已迁移至 zotero-mcp
+
+> **2026-08**: Zotero 核心代码已迁移至 [mylibrary](https://github.com/OuyangWenyu/mylibrary)（hydrolitagent 包），Zotero 查询通过共享的 `zotero-mcp` Docker 服务（6 个 MCP tools，端口 8002）。本文档保留作为遗留参考。
 
 [zotero-cli-cc](https://github.com/Agents365-ai/zotero-cli-cc) 是一个面向 AI Agent（Claude Code / Hermes）的 Zotero 命令行工具。本地 SQLite 直读（毫秒响应、离线可用），Web API 安全写入。
 

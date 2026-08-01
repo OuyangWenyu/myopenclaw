@@ -81,7 +81,19 @@ curl -s -X POST http://localhost:8420/search/memories -H 'Content-Type: applicat
 docker compose exec claude-code tail -f /home/node/.myagentdata/tdai-memory/capture-hook.log
 ./scripts/setup-openclaw-memory.sh                             # 虾酱 OpenClaw memory plugin（独立体系 local 模式）
 
-# Paper pipeline → migrated to ~/code/mylibrary/scripts/run_paper_pipeline.sh
+# Paper pipeline — mylibrary (hydrolitagent) build-time install, local-first + git fallback
+# run_paper_pipeline.sh installed from mylibrary source at build time.
+# Uses python3 -m hydrolitagent.zotero.paper_to_zotero internally.
+docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh '<DOI>'       # One-shot pipeline
+docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh --dry-run '<DOI>'  # Preview only
+docker compose exec hermes-coder python3 -m hydrolitagent.zotero.paper_to_zotero --help  # Direct invocation
+
+# 道元 (hermes-daoyuan) — 文献学者 Agent，飞书 bot，Zotero 只读
+docker compose exec hermes-daoyuan /opt/hermes/.venv/bin/hermes mcp test zotero   # MCP 连接测试
+docker compose exec -it hermes-daoyuan /opt/hermes/.venv/bin/hermes               # 交互式终端
+docker compose logs -f hermes-daoyuan                                              # 道元日志
+# 道元飞书配置: DAOYUAN_FEISHU_APP_ID/SECRET + 群内开放 (FEISHU_GROUP_POLICY=open)
+# 道元 Zotero 只读: DAOYUAN_ZOTERO_API_KEY (仅 Allow library access)
 
 # dailyinfo launchd scheduling
 ./scripts/launchd/install-dailyinfo.sh
@@ -160,7 +172,7 @@ docker compose pull openclaw-gateway
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
-1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Four profiles: default (爱玛士, port 8642), coder (爱码士, 8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644), daoyuan (道元·文献学者, 8645, zotero-mcp). Dashboard on port 9119.
+1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and mylibrary (hydrolitagent, build-time install). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Profiles: default (爱玛士, port 8642, Feishu), coder (爱码士, 8643, Discord, paper injection), finance (8644, Feishu).
 
 2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-pro` as the default model. Port 9090 (cc-connect web admin).
 
@@ -175,6 +187,8 @@ docker compose pull openclaw-gateway
 7. **repo-scanner-mcp** — Custom image from `../git-contribution-stats` (`docker/mcp-server/Dockerfile`) using `python:3.12-slim` + `mcp==1.28.1`. Port 8001. Streamable HTTP MCP server exposing 3 tools: `get_daily_report` (person-centric daily R&D report), `query_commits` (raw commit query), `query_authors` (active authors). Data source: `~/.myagentdata/repo-scanner/repos.sqlite` (read-only mount). Used by Hermes via MCP client (`~/.hermes/config.yaml` → `mcp_servers.repo-scanner`). Resource limits: 256M/0.5 CPU.
 
 8. **zotero-mcp** — Custom image (`docker/zotero-mcp/Dockerfile`) using `python:3.12-slim` + `mcp` + `httpx` + `pyzotero`. Port 8002. SSE MCP server exposing 6 tools: `zotero_search` / `zotero_get_item` / `zotero_get_recent` / `zotero_get_collection_items` (Web API via api.zotero.org) + `zotero_get_fulltext` / `zotero_get_file_info` (Local API via host.docker.internal:23119). Requires Zotero Desktop running on host with local API enabled. Accessible by any agent on `myopenclaw-net` via `http://zotero-mcp:8002/mcp`. Resource limits: 256M/0.5 CPU.
+
+9. **hermes-daoyuan** (道元·文献学者) — Separate container using the hermes image with `--profile daoyuan`. Port 8645. Connected to Feishu via independent bot (`DAOYUAN_FEISHU_APP_ID/SECRET`), group-open access (`FEISHU_GROUP_POLICY=open` + `GATEWAY_ALLOW_ALL_USERS=true`). Zotero access is **read-only** via a dedicated API key (`DAOYUAN_ZOTERO_API_KEY`) — can query the library but cannot create/modify items. Uses `zotero-query` skill for MCP-based literature queries. Paper injection capability (paper-to-zotero) is intentionally restricted to 爱码士 (coder profile). Resource limits: 4G/2 CPU.
 
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
@@ -200,7 +214,11 @@ docker compose pull openclaw-gateway
 
 - **Google Drive (rclone)**: rclone v1.69.2 is installed in the hermes image for direct Google Drive API uploads. OAuth token stored in `~/.hermes/rclone/rclone.conf` (chmod 600, not in git). Remote `gdrive:` is scoped to a target folder via `root_folder_id`. Hermes uses `rclone copy <pdf> gdrive:` to upload papers. Full setup guide: `docs/google-drive-rclone.md`.
 
-- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. Zotero literature access is via the shared zotero-mcp service (port 8002) — all Zotero core code has been migrated to `~/code/mylibrary`. See `docs/zotero-cli-cc.md` for legacy docs.
+- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. Has full Zotero write access — paper-to-zotero pipeline downloads PDFs, uploads to Google Drive, and creates Zotero entries with linked_file attachments. Zotero query is via the shared zotero-mcp service (port 8002).
+
+- **Zotero access model — write vs read-only**: 爱码士 (coder) has full write access via `ZOTERO_API_KEY` for paper injection. 道元 (daoyuan) has **read-only** access via `DAOYUAN_ZOTERO_API_KEY` — can query the library but cannot create/modify items. This separation is enforced at the Zotero API key level (read-only key only has "Allow library access", no write permission).
+
+- **mylibrary (hydrolitagent) — build-time install, local-first**: Paper pipeline code (paper_to_zotero, zot_link_gdrive, run_paper_pipeline.sh) lives in `~/code/mylibrary` and is installed into the hermes image at build time. `start.sh` rsyncs the local source into the Docker build context before `docker compose build`; the Dockerfile installs via `uv pip install` (with `--no-deps` to avoid mcp 2.0 conflicts with the Hermes agent). When local source is unavailable (CI / remote), falls back to `git clone --depth 1`. Skills from the same source are copied to `/opt/mylibrary-skills/` and registered via `external_dirs` in Hermes config. See `docs/zotero-cli-cc.md` for legacy zotero-cli-cc docs.
 
 - **Agent Memory (TDAI) — bidirectional cross-agent sharing**: 4 personal agents share long-term memory (L0→L3) via the tdai-memory Gateway. **Two physically-isolated systems** (separate SQLite files, not permission-based): personal (`~/.myagentdata/tdai-memory/`, 4 agents) and 虾酱 (`~/.openclaw/memory-tdai/`, multi-user OpenClaw plugin, local mode). Three integration paths, each with a critical gotcha learned during integration:
   - **Hermes adapter** (default/爱玛士/finance): The npm package ships a Python `MemoryProvider` at `hermes-plugin/memory/memory_tencentdb/`. `entrypoint-wrapper.sh` installs it at **runtime** (not Dockerfile — avoids cardamum cache invalidation), deploys via `cp -r` (NOT symlink — Hermes's plugin scanner doesn't follow symlinks), and injects `provider: memory_tencentdb` (NOT `_v2`) into the `memory:` section only (section-scoped, so `delegation.provider` isn't clobbered). The provider reads the Gateway address from env `MEMORY_TENCENTDB_GATEWAY_HOST`/`_PORT` (NOT config.yaml `gateway_url`). Writes happen automatically via provider lifecycle hooks (`sync_turn`/`on_session_end`).

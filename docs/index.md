@@ -8,7 +8,7 @@ myopenclaw 用 Docker 运行三个 AI Agent 框架 — [Hermes Agent](https://gi
 
 ## 核心能力
 
-- **多 Agent 协作**：Hermes ×3（默认/爱码士/finance）+ Claude Code + OpenClaw，各自负责不同领域
+- **多 Agent 协作**：Hermes ×4（默认/爱码士/finance/道元）+ Claude Code + OpenClaw，各自负责不同领域
 - **跨 Agent 长期记忆**：TDAI Memory L0→L3 分层管线，飞书说的 Discord 能召回
 - **飞书 + Discord 双通道**：cc-connect（飞书长连接）+ OpenClaw（Discord bot）
 - **自动化工作流**：晨间三签、AI 情报聚合、研发日报、论文管线
@@ -26,3 +26,11 @@ myopenclaw 用 Docker 运行三个 AI Agent 框架 — [Hermes Agent](https://gi
 - [备份系统](backup.md) — 快照备份与恢复
 - [服务监控](monitoring.md) — Uptime Kuma + Healthchecks.io
 - [AgentOps 健康采集](agentops.md) — 系统健康信号自动采集
+- [Zotero 文献系统](zotero-cli-cc.md) — Zotero MCP 共享服务 + paper pipeline + 道元文献 Agent
+- [AI 秘书](aisecretary.md) — 事务数据库 MCP 服务
+- [研发日报](daily-dev-report.md) — 27 仓库每日采集 + 飞书推送
+- [Google Drive](google-drive-rclone.md) — rclone 论文上传配置
+- [通讯录](contacts.md) — cardamum CLI 联系人管理
+- [邮件](email.md) — himalaya CLI 邮件客户端
+- [DNS 配置](dns-setup.md) — 中国域名解析
+- [Linux 服务器部署](linux-server-setup.md) — Linux 环境配置指南
