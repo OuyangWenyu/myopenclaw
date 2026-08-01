@@ -1,0 +1,74 @@
+site_name: myopenclaw
+site_description: 个人多 Agent 协作平台 — Docker Compose 一键部署文档
+site_url: https://ouyangwenyu.github.io/myopenclaw
+repo_url: https://github.com/OuyangWenyu/myopenclaw
+repo_name: OuyangWenyu/myopenclaw
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: 切换暗色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: 切换亮色模式
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.details
+  - tables
+  - toc:
+      permalink: true
+
+plugins:
+  - search:
+      lang: zh
+
+nav:
+  - 首页: index.md
+  - 快速开始: setup.md
+  - 架构: architecture.md
+  - 服务:
+      - Hermes 渠道: hermes-channels.md
+      - OpenClaw 渠道: openclaw-channels.md
+      - 邮件 (himalaya): email.md
+      - 联系人 (cardamum): contacts.md
+      - 飞书 CLI (lark-cli): lark-cli.md
+      - TDAI 长期记忆: tdai-memory.md
+      - Google Drive 论文: google-drive-rclone.md
+      - Zotero 文献: zotero-cli-cc.md
+  - 集成:
+      - dailyinfo 调度: dailyinfo.md
+      - 研发日报: daily-dev-report.md
+      - 事务追踪 (aisecretary): aisecretary.md
+  - 运维:
+      - 调度系统: scheduling.md
+      - 备份系统: backup.md
+      - 服务监控: monitoring.md
+      - AgentOps 健康采集: agentops.md
+      - DNS 配置: dns-setup.md
+      - 可移植性: portability.md

@@ -63,11 +63,15 @@ RUN git clone --depth 1 https://github.com/affaan-m/everything-claude-code.git /
     && chown -R node:node /opt/ecc-seed
 
 # ── Weekly AI News generate script ────────────────────────────────
-COPY weekly-ai-news-generate.sh /opt/claude-code/weekly-ai-news-generate.sh
+COPY docker/claude-code/weekly-ai-news-generate.sh /opt/claude-code/weekly-ai-news-generate.sh
 RUN chmod +x /opt/claude-code/weekly-ai-news-generate.sh
 
+# ── TDAI Memory Gateway integration ───────────────────────────────
+COPY docker/claude-code/capture-to-gateway.py /opt/capture-to-gateway.py
+COPY docker/tdai-memory/mcp-server/server.py /opt/tdai-mcp-server.py
+
 # ── Entrypoint wrapper ────────────────────────────────────────────
-COPY entrypoint.sh /opt/claude-code/entrypoint.sh
+COPY docker/claude-code/entrypoint.sh /opt/claude-code/entrypoint.sh
 RUN chmod +x /opt/claude-code/entrypoint.sh
 
 ENTRYPOINT ["/opt/claude-code/entrypoint.sh"]

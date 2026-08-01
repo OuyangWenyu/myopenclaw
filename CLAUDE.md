@@ -87,10 +87,9 @@ docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_
 ./scripts/launchd/install-dailyinfo.sh
 ./scripts/launchd/uninstall-dailyinfo.sh
 
-# Morning triage — MyLoop Daily Command Center
-./scripts/launchd/install-morning-triage.sh     # Install daily 7:50 AM schedule
-launchctl start ai.myloop.morning-triage         # Manual trigger (one-shot)
-docker compose exec claude-code python3 /home/node/code/myloop/scripts/morning-triage-send.py  # Run directly in container
+# Morning triage — Hermes cron skill (morning-triage-v2)
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep "Daily Command"  # 查看 cron 状态
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>                 # 手动触发
 
 # Gateway error loop detection（检测 OpenClaw 配置兼容性导致的日志刷屏）
 ./scripts/check-gateway-errors.sh            # 人类可读
@@ -98,7 +97,8 @@ docker compose exec claude-code python3 /home/node/code/myloop/scripts/morning-t
 
 # Monitoring（Uptime Kuma + Healthchecks.io）
 open http://localhost:3001                                    # Uptime Kuma 监控面板
-./scripts/launchd/install-healthchecks-ping.sh                # 安装 Healthchecks.io 心跳任务
+./scripts/launchd/install-all-schedulers.sh                   # 一键安装所有宿主机定时任务
+./scripts/launchd/install-healthchecks-ping.sh                # 单独安装 Healthchecks.io 心跳任务
 launchctl start ai.myopenclaw.healthchecks-ping               # 手动触发心跳
 tail -f logs/healthchecks-ping.log                            # 查看心跳日志
 
@@ -108,6 +108,20 @@ python3 scripts/collect_agentops.py --dry-run                 # 预览模式（�
 ./scripts/launchd/install-collect-agentops.sh                 # 安装每天 7:45 定时采集
 launchctl start ai.myopenclaw.collect-agentops                # 手动触发采集
 tail -f logs/collect-agentops.log                             # 查看采集日志
+
+# Repo scanner — git-contribution-stats（27 仓库每日采集 + 研发日报推送）
+cd ~/code/git-contribution-stats && python3 scripts/collect.py           # 手动全量采集（写入 SQLite）
+cd ~/code/git-contribution-stats && python3 scripts/collect.py --dry-run # 预览模式
+python3 ~/code/git-contribution-stats/core/report.py                     # 查看日报数据
+bash ~/code/git-contribution-stats/scripts/launchd/install-collect.sh    # 安装每天 07:45 采集
+launchctl start ai.git-contribution-stats.collect                        # 手动触发采集
+tail -f ~/code/git-contribution-stats/logs/collect.log                   # 查看采集日志
+
+# Daily dev report — Hermes skill（研发日报 MCP + LLM + 飞书推送）
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep daily-dev  # 查看 cron 状态
+docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp list | grep repo-scanner  # 查看 MCP 连接
+docker compose exec repo-scanner-mcp python3 -c "from core.report import daily_report_as_dict; print(daily_report_as_dict())"  # 查看日报数据
+cat /tmp/report.txt | docker compose exec -T hermes python3 /opt/hermes-skills/daily-dev-report/tools/send_card.py  # 手动推送测试
 ```
 
 ## ⚠️ OpenClaw 配置安全规则
@@ -142,13 +156,13 @@ docker compose pull openclaw-gateway
 
 ## Architecture
 
-**Seven Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+**Eight Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
 1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Three profiles: default (port 8642), coder (8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644). Dashboard on port 9119.
 
-2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), auto-symlinks myloop skills from `/home/node/code/myloop/skills/` into CC飞总's skill directory, maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-pro` as the default model. Port 9090 (cc-connect web admin).
+2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-pro` as the default model. Port 9090 (cc-connect web admin).
 
 3. **openclaw-gateway** — Stock `ghcr.io/openclaw/openclaw:latest` image. Port 18789. Has healthcheck via `/healthz`.
 
@@ -158,48 +172,13 @@ docker compose pull openclaw-gateway
 
 6. **tdai-memory** — Custom image (`docker/tdai-memory/Dockerfile`) based on `ubuntu:24.04` with Node.js 22 and `@tencentdb-agent-memory/memory-tencentdb@0.3.6`. Port 8420. Provides shared L0→L3 memory pipeline (Gateway HTTP API) for personal agents. LLM backend: DeepSeek (`TDAI_LLM_API_KEY` env). Data stored at `~/.myagentdata/tdai-memory/`. Resource limit 1G (OOM at 512M during large-JSON init). 4 agents share this Gateway bidirectionally — see **Agent Memory (TDAI)** design decision below.
 
+7. **repo-scanner-mcp** — Custom image from `../git-contribution-stats` (`docker/mcp-server/Dockerfile`) using `python:3.12-slim` + `mcp==1.28.1`. Port 8001. Streamable HTTP MCP server exposing 3 tools: `get_daily_report` (person-centric daily R&D report), `query_commits` (raw commit query), `query_authors` (active authors). Data source: `~/.myagentdata/repo-scanner/repos.sqlite` (read-only mount). Used by Hermes via MCP client (`~/.hermes/config.yaml` → `mcp_servers.repo-scanner`). Resource limits: 256M/0.5 CPU.
+
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
 **dailyinfo scheduling**: Managed via host launchd (not Docker). `scripts/launchd/` contains plist templates and install/uninstall scripts. dailyinfo is a sibling repo (`../dailyinfo`) with its own Docker services (FreshRSS).
 
-## MyLoop Integration（赛博永生）
-
-myopenclaw 是 MyLoop 的**执行层**。MyLoop 定义 loop 设计（skill 合同、分类规则、输出格式），myopenclaw 负责执行（CC飞总、脚本、调度）。
-
-### Skill 加载机制
-
-myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
-
-```
-~/code/myloop/skills/*/  ──symlink──→  ~/.claude/skills/*/
-       (设计源)                              (CC飞总可读)
-```
-
-容器启动时 `entrypoint.sh` 自动检测 `/home/node/code/myloop/skills/`，存在则 symlink 全部 skill 目录。新机器只需 `git clone myloop ~/code/myloop` 即可自动加载。
-
-```
-📎 myloop skills: knowledge-sync morning-triage paper-ingest session-memory verify-and-ship weekly-digest
-```
-
-### 当前已实现的 Loop
-
-| Loop | 状态 | 触发方式 |
-|------|------|----------|
-| morning-triage | ✅ MVP | launchd 每天 07:50，调用 `scripts/morning-triage-send.py` |
-| session-memory | 设计完成 | 待实现 |
-| knowledge-sync | 设计完成 | 待实现 |
-| paper-ingest | 设计完成 | 待实现 |
-| verify-and-ship | 设计完成 | 待实现 |
-| weekly-digest | 设计完成 | 待实现 |
-
-### 架构规则
-
-- **设计归 myloop，执行归 myopenclaw**。Skill 文件永远不复制、不分叉。
-- myloop skill 修改后，CC飞总 下次启动自动加载新版本（symlink 跟随）。
-- 执行脚本（如 `morning-triage-send.py`）放在 myopenclaw，因为它依赖容器环境、飞书 API 凭证等执行层细节。
-- cc-connect cron 不可用于 myloop skills（session→platform 解析限制），改用宿主机 launchd。
-
-**Monitoring**: Dual-layer via Uptime Kuma (service-level, Docker container) + Healthchecks.io (host-level, cloud dead man's switch). See `docs/monitoring.md` for full architecture and setup instructions. Healthchecks.io heartbeat via host launchd every 60s.
+**Monitoring**: Dual-layer via Uptime Kuma (service-level, Docker container) + Healthchecks.io (host-level, cloud dead man's switch). AgentOps auto-collects health signals (container restart, backup freshness, disk usage, gateway errors) daily at 07:45 for morning-triage. See `docs/monitoring.md` and `docs/agentops.md` for full architecture and setup instructions. Healthchecks.io heartbeat via host launchd every 60s.
 
 ## Key Design Decisions
 
@@ -215,7 +194,7 @@ myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
 
 - **Hermes email**: Email is intentionally NOT used as a Hermes messaging platform (risk of auto-replying to anyone who sends an email). Instead, [himalaya](https://github.com/pimalaya/himalaya) v1.2.0 is installed as a CLI email tool — Hermes can list/read/search/send emails only when explicitly instructed. himalaya config at `~/.hermes/.config/himalaya/config.toml` is auto-generated by entrypoint wrapper on first run (parses `EMAIL_*` vars from `~/.hermes/.env`, works whether commented out or not). Config persists on `/opt/data` volume; symlinked to `/root/.config/himalaya` for root access. QQ mail: IMAP port 993 (TLS), SMTP port 587 (STARTTLS — not 465). Server IP `58.254.165.67` must be in Astrill whitelist. The `~/.hermes/.env` EMAIL_* vars are kept commented out to prevent Hermes from using email as a messaging platform. **Multi-account**: Supports multiple email accounts via `[accounts.xxx]` TOML sections. Entrypoint auto-generates second account from `EMAIL2_*` vars. Switch with `-a <account>` flag on himalaya commands; default (no `-a`) uses the `[accounts.default]` entry.
 
-- **Contacts (cardamum)**: [cardamum](https://github.com/pimalaya/cardamum) v0.2.0 is built from source (Rust multi-stage Docker build, rev `1090cad2`) as the only binary release (v0.1.0) uses the old `$EDITOR`-based `cards create` flow. Uses **vdir** backend — contacts stored as `.vcf` files in `~/.hermes/.contacts/` (persists on `/opt/data` volume, backed up by backup-cron). Config at `~/.hermes/home/.config/cardamum/config.toml` auto-generated by entrypoint wrapper; symlinked to `/root/.config/cardamum/` for root access. Addressbook is auto-created on first run; its UUID is persisted as `addressbook.default` so `cardamum card list` works without `-k`. Key commands: `cardamum card list` (list contacts, uses default addressbook), `cardamum card read <id>` (read details), `echo '...' | cardamum card create -` (add via stdin — v0.2.0 accepts vCard content directly, no `$EDITOR` needed). QQ mail and DLUT (Coremail) do not support CardDAV, so the vdir local backend is used instead. Contacts are included in cloud backups via `hermes/scripts/backup.sh`.
+- **Contacts (cardamum)**: [cardamum](https://github.com/pimalaya/cardamum) v0.2.0 is built from source (Rust multi-stage Docker build, latest rev `771879c`) as the only binary release (v0.1.0) uses the old `$EDITOR`-based `cards create` flow. Uses **vdir** backend — contacts stored as `.vcf` files in `~/.hermes/.contacts/` (persists on `/opt/data` volume, backed up by backup-cron). Config at `~/.hermes/home/.config/cardamum/config.toml` auto-generated by entrypoint wrapper; symlinked to `/root/.config/cardamum/` for root access. Addressbook is auto-created on first run; its UUID is persisted as `addressbook.default` so `cardamum card list` works without `-k`. Key commands: `cardamum card list` (list contacts, uses default addressbook), `cardamum card read <id>` (read details), `echo '...' | cardamum card create -` (add via stdin — v0.2.0 accepts vCard content directly, no `$EDITOR` needed). QQ mail and DLUT (Coremail) do not support CardDAV, so the vdir local backend is used instead. Contacts are included in cloud backups via `hermes/scripts/backup.sh`.
 
 - **Google Drive (rclone)**: rclone v1.69.2 is installed in the hermes image for direct Google Drive API uploads. OAuth token stored in `~/.hermes/rclone/rclone.conf` (chmod 600, not in git). Remote `gdrive:` is scoped to a target folder via `root_folder_id`. Hermes uses `rclone copy <pdf> gdrive:` to upload papers. Full setup guide: `docs/google-drive-rclone.md`.
 
@@ -227,7 +206,9 @@ myloop skills 通过 **symlink、不复制** 的方式注入 CC飞总：
   - **CC飞总 write** (claude-code): `docker/claude-code/capture-to-gateway.py` Stop hook, registered in `settings.json` hooks.Stop. Every turn end, it reads the transcript's last user+assistant turn (merges contiguous assistant records, extracts only `text` blocks, skips slash-commands/caveats/tool output), POSTs to Gateway `/capture` with `session_id=personal_ccfeizong`. **Never blocks CC飞总** (exit 0 on any error) but writes a heartbeat/failure log to `~/.myagentdata/tdai-memory/capture-hook.log` (RotatingFileHandler, 1MB×2 — bounded, unlike the 762MB incident) so a broken pipeline is diagnosable. TDAI pipeline handles L1 value-filtering/dedup/layering, so raw verbosity in gets distilled to key facts.
   - **Restart auto-recovery**: `docker compose up -d` / `./scripts/start.sh` recovers all memory wiring with zero manual steps — hermes entrypoint re-installs the plugin + re-injects config; claude-code entrypoint re-registers the Stop hook. Verified by force-recreate. LLM key reuses `DEEPSEEK_API_KEY` (4th independent key domain per isolation philosophy). Bearer auth off (Docker internal network). Full design in `.claude/prds/agent-memory.prd.md`.
 
-- **⚠️ Hermes image cannot be rebuilt with `docker compose build`**: The current `myopenclaw/hermes:latest` was patched (based on an existing image, COPYing the updated `entrypoint-wrapper.sh`) rather than built clean, because the cardamum Rust build stage fails against an upstream `io-addressbook` incompatible change (unrelated to this project). **Daily `docker compose up` / restart / host reboot all work fine** (uses the existing image + entrypoint automation). Only `docker compose build hermes` or `up --build` hits the cardamum error. Do NOT touch the cardamum stage — contacts work as-is. If the hermes image ever needs a clean rebuild, the cardamum upstream issue must be fixed first (or pin to a compilable rev / use the v0.1.0 binary).
+- **Daily R&D Report (repo-scanner MCP + Hermes skill)**: git-contribution-stats collects 27 repos daily (GitHub + GitCode) into SQLite (`~/.myagentdata/repo-scanner/repos.sqlite`). A streamable HTTP MCP server (`repo-scanner-mcp`, port 8001) exposes `get_daily_report` / `query_commits` / `query_authors`. Hermes `daily-dev-report` skill calls MCP → DeepSeek LLM polish → Feishu private chat push. Cron: 07:45 launchd collection → 07:55 Hermes cron push. MCP config: `~/.hermes/config.yaml` (`mcp_servers.repo-scanner` + `platform_toolsets.cli`). Skill at `skills/daily-dev-report/SKILL.md`. Full design in `.claude/prds/daily-dev-report.prd.md`.
+
+- **Hermes image rebuild**: ✅ Fixed 2026-07-20 — cardamum pin updated to `771879c` (2026-07-18). OSError patch removed (fixed upstream in v0.18.2). Entrypoint now hands off to s6-overlay `/init` instead of deprecated `entrypoint.sh`. Image rebuilds clean with `docker compose build hermes`.
 
 ## Network & DNS
 
@@ -248,8 +229,7 @@ When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains,
 - `docker/<service>/Dockerfile` — custom images (hermes, claude-code, backup-cron)
 - `hermes/scripts/`, `openclaw/scripts/`, `claude/scripts/` — per-service backup scripts, mounted read-only into backup-cron
 - `scripts/` — top-level orchestration scripts (start, stop, restore, cloud setup, launchd)
-- `scripts/morning-triage-send.py` — MyLoop morning-triage 执行脚本（读 ledger → 分类 → 飞书推送）
-- `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, morning-triage）
-- `skills/` — 执行层 skill（仅 myopenclaw 特有的 skill；myloop skills 通过 symlink 加载，不放在这里）
+- `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, agentops, healthchecks）
+- `skills/` — 执行层 skill（morning-triage-v2 等 Hermes cron skill）
 - `.secrets/` — encrypted via git-crypt (hermes.env.example, openclaw.env.example)
 - All scripts use `set -euo pipefail` and Chinese-language output/emojis

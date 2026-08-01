@@ -53,12 +53,12 @@ Layer 2: Healthchecks.io (云端)
 **自动方式（推荐）**：运行自动发现脚本，从 `docker-compose.yml` 读取所有服务并批量创建：
 
 ```bash
-python3 scripts/setup-uptime-kuma-monitors.py
+bash scripts/setup-uptime-kuma.sh
 ```
 
 脚本会提示输入 Uptime Kuma 用户名和密码，或通过环境变量传入：
 ```bash
-UPK_USER=owen UPK_PASS=yourpass python3 scripts/setup-uptime-kuma-monitors.py
+UPK_USER=owen UPK_PASS=yourpass bash scripts/setup-uptime-kuma.sh
 ```
 
 幂等运行——已存在的监控会自动跳过。新增服务后重新运行即可。
@@ -157,6 +157,8 @@ cp -r ~/.uptime-kuma ~/.uptime-kuma.bak
 ## Healthchecks.io
 
 Healthchecks.io 是 Uptime Kuma 的**独立保险**。当整台 Mac mini 死机或 Docker 全部崩掉时，Uptime Kuma 自身也挂了，无法告警。Healthchecks.io 运行在云端，检测宿主机的心跳 silence。
+
+> Healthchecks.io 心跳是全部 14 个定时任务之一，详见 [调度系统](scheduling.md)。
 
 ### 首次设置
 
@@ -275,3 +277,17 @@ docker compose ps uptime-kuma
 2. 查看对应容器日志：`docker compose logs <service>`
 3. 尝试重启：`docker compose restart <service>`
 4. 如果重启无效 → 检查 `.env` 配置、磁盘空间、内存
+
+## Gateway 错误循环检测
+
+OpenClaw 配置兼容性问题可能导致日志刷屏（历史事故：3 个月 762MB）。提供检测脚本：
+
+```bash
+# 人类可读
+./scripts/check-gateway-errors.sh
+
+# JSON 输出（适合 cron/AgentOps）
+./scripts/check-gateway-errors.sh --json
+```
+
+此检测已纳入 [AgentOps 健康采集](agentops.md)，每天自动运行。如果检测到错误循环，晨间三签报告会包含告警。

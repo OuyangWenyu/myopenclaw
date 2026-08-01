@@ -24,3 +24,7 @@ logs/
 # Python
 __pycache__/
 .pytest_cache/
+.claude/worktrees/
+
+# ── mkdocs build output ──────────────────────────────────────────
+site/
