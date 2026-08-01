@@ -52,11 +52,7 @@ FN:Name
 EMAIL:email@example.com
 END:VCARD' | docker compose exec -T hermes cardamum card create -   # Add contact via stdin
 
-# Zotero CLI (zotero-cli-cc — Zotero literature management)
-docker compose exec hermes-coder zot stats                      # Zotero library statistics
-docker compose exec hermes-coder zot search "keyword" --limit 5 # Search papers
-docker compose exec hermes-daoyuan /opt/hermes/.venv/bin/hermes mcp list | grep zotero  # 道元——Zotero MCP 连接验证
-
+# Zotero CLI + paper pipeline → migrated to ~/code/mylibrary
 # Zotero MCP — 共享文献查询与分析服务（端口 8002，SSE transport）
 # 独立 Docker 服务，CC飞总 / Hermes / 未来文献 agent 均可通过 http://zotero-mcp:8002/mcp 连接。
 # 双通道：Web API (api.zotero.org) 搜索/元数据 + Local API (host.docker.internal:23119) 全文/PDF。
@@ -85,13 +81,7 @@ curl -s -X POST http://localhost:8420/search/memories -H 'Content-Type: applicat
 docker compose exec claude-code tail -f /home/node/.myagentdata/tdai-memory/capture-hook.log
 ./scripts/setup-openclaw-memory.sh                             # 虾酱 OpenClaw memory plugin（独立体系 local 模式）
 
-# Paper pipeline (paper-fetch → Google Drive → Zotero linked_file)
-# One-shot: download PDF + upload to Drive + create Zotero entry with metadata + cleanup
-docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh '<DOI>'
-docker compose exec hermes-coder /opt/hermes/scripts/run-paper-pipeline.sh --dry-run '<DOI>'  # Preview only
-
-# Already in Zotero? Link an uploaded PDF to an existing entry
-docker compose exec hermes-coder /opt/hermes/scripts/zot-link-gdrive.py <ZOTERO_KEY> '<filename>'
+# Paper pipeline → migrated to ~/code/mylibrary/scripts/run_paper_pipeline.sh
 
 # dailyinfo launchd scheduling
 ./scripts/launchd/install-dailyinfo.sh
@@ -170,7 +160,7 @@ docker compose pull openclaw-gateway
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
-1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Four profiles: default (爱玛士, port 8642), coder (爱码士, 8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644), daoyuan (道元·文献学者, 8645, zotero-mcp). Dashboard on port 9119.
+1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Four profiles: default (爱玛士, port 8642), coder (爱码士, 8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644), daoyuan (道元·文献学者, 8645, zotero-mcp). Dashboard on port 9119.
 
 2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-pro` as the default model. Port 9090 (cc-connect web admin).
 
@@ -210,7 +200,7 @@ docker compose pull openclaw-gateway
 
 - **Google Drive (rclone)**: rclone v1.69.2 is installed in the hermes image for direct Google Drive API uploads. OAuth token stored in `~/.hermes/rclone/rclone.conf` (chmod 600, not in git). Remote `gdrive:` is scoped to a target folder via `root_folder_id`. Hermes uses `rclone copy <pdf> gdrive:` to upload papers. Full setup guide: `docs/google-drive-rclone.md`.
 
-- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. The coder profile config at `~/.hermes/profiles/coder/config.yaml` is auto-created by `start.sh` on first run with deepseek-v4-pro as the default model. Has paper-fetch skill and rclone for paper download + Google Drive upload, plus zotero-cli-cc for Zotero library management (SQLite reads + Web API writes). Zotero data dir (`~/Zotero`) is mounted read-only; writes go through the Zotero Web API. PDFs are stored in Google Drive (not Zotero cloud) and linked to Zotero entries via `linked_file` attachments created by `paper-to-zotero.py`. Full workflow: paper-fetch download → rclone upload → paper-to-zotero (metadata + linked_file). Full docs: `docs/zotero-cli-cc.md`.
+- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-v4-pro) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. Zotero literature access is via the shared zotero-mcp service (port 8002) — all Zotero core code has been migrated to `~/code/mylibrary`. See `docs/zotero-cli-cc.md` for legacy docs.
 
 - **Agent Memory (TDAI) — bidirectional cross-agent sharing**: 4 personal agents share long-term memory (L0→L3) via the tdai-memory Gateway. **Two physically-isolated systems** (separate SQLite files, not permission-based): personal (`~/.myagentdata/tdai-memory/`, 4 agents) and 虾酱 (`~/.openclaw/memory-tdai/`, multi-user OpenClaw plugin, local mode). Three integration paths, each with a critical gotcha learned during integration:
   - **Hermes adapter** (default/爱玛士/finance): The npm package ships a Python `MemoryProvider` at `hermes-plugin/memory/memory_tencentdb/`. `entrypoint-wrapper.sh` installs it at **runtime** (not Dockerfile — avoids cardamum cache invalidation), deploys via `cp -r` (NOT symlink — Hermes's plugin scanner doesn't follow symlinks), and injects `provider: memory_tencentdb` (NOT `_v2`) into the `memory:` section only (section-scoped, so `delegation.provider` isn't clobbered). The provider reads the Gateway address from env `MEMORY_TENCENTDB_GATEWAY_HOST`/`_PORT` (NOT config.yaml `gateway_url`). Writes happen automatically via provider lifecycle hooks (`sync_turn`/`on_session_end`).

@@ -73,13 +73,6 @@ ln -sf /opt/data/.config/himalaya /root/.config/himalaya
 mkdir -p /opt/lark-config
 ln -sf /opt/lark-config /root/.lark-cli
 
-# ── zotero-cli-cc config ──────────────────────────────────
-# zot reads config from ~/.config/zot/config.toml
-# Store on /opt/data volume so config survives rebuilds.
-# Symlink for both hermes user (/opt/data) and root.
-mkdir -p /opt/data/.config/zot
-ln -sf /opt/data/.config/zot /root/.config/zot
-
 # ── gitcode-cli config ──────────────────────────────────────
 # gc reads config from $HOME/.gitcode/config.json
 # Symlink to host-mounted config dir (shared with claude-code container)
@@ -380,48 +373,6 @@ TOML
       echo "   📇 cardamum addressbook.default = ${AB_ID}"
     fi
   fi
-fi
-
-# ── Auto-configure zotero-cli-cc from env vars ─────────
-# Generates ~/.config/zot/config.toml if ZOTERO_API_KEY is set.
-# ZOT_DATA_DIR env var (docker-compose) takes highest priority for data dir.
-# api_key/library_id in config.toml enable Web API writes.
-ZOT_CONFIG="/opt/data/.config/zot/config.toml"
-if [[ ! -f "${ZOT_CONFIG}" ]]; then
-  mkdir -p "$(dirname "${ZOT_CONFIG}")"
-  if [[ -n "${ZOTERO_API_KEY:-}" && -n "${ZOTERO_LIBRARY_ID:-}" ]]; then
-    cat > "${ZOT_CONFIG}" << TOML
-[zotero]
-data_dir = ''
-library_id = '${ZOTERO_LIBRARY_ID}'
-api_key = '${ZOTERO_API_KEY}'
-semantic_scholar_api_key = ''
-
-[output]
-default_format = 'table'
-limit = 50
-
-[export]
-default_style = 'bibtex'
-TOML
-    echo "   📚 zotero-cli-cc 已配置 — library ${ZOTERO_LIBRARY_ID}"
-  else
-    cat > "${ZOT_CONFIG}" << TOML
-[zotero]
-data_dir = ''
-library_id = ''
-api_key = ''
-
-[output]
-default_format = 'table'
-limit = 50
-
-[export]
-default_style = 'bibtex'
-TOML
-    echo "   📚 zotero-cli-cc 已配置（只读模式 — 未设置 ZOTERO_API_KEY）"
-  fi
-  chown -R hermes:hermes /opt/data/.config/zot
 fi
 
 # ── TDAI Memory plugin install + inject provider ───────────────

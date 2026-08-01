@@ -173,6 +173,47 @@ YAML
   echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-v4-pro + zotero-mcp）"
 fi
 
+# ── 确保 zotero-mcp 在默认配置的 mcp_servers 中 ─────────────────
+# Hermes profile 不支持覆盖 mcp_servers，必须在默认配置中注入。
+HERMES_DEFAULT_CONFIG="${HOME}/.hermes/config.yaml"
+if [[ -f "${HERMES_DEFAULT_CONFIG}" ]]; then
+  if ! grep -q 'zotero-mcp:8002' "${HERMES_DEFAULT_CONFIG}"; then
+    python3 -c "
+import pathlib
+p = pathlib.Path('${HERMES_DEFAULT_CONFIG}')
+c = p.read_text()
+entry = '  zotero:\n    connect_timeout: 60\n    enabled: true\n    timeout: 120\n    url: http://zotero-mcp:8002/mcp\n'
+c = c.replace('platform_toolsets:', entry + '\nplatform_toolsets:')
+p.write_text(c)
+print('done')
+"
+    echo "   🔗 zotero-mcp 已注入到 Hermes 默认配置"
+  else
+    echo "   ✅ zotero-mcp 已在 Hermes 默认配置中"
+  fi
+else
+  echo "   ⚠️  ${HERMES_DEFAULT_CONFIG} 不存在，跳过 zotero-mcp 注入"
+fi
+
+# ── 确保 mylibrary skills 在 external_dirs 中 ────────────────────
+# aisecretary 模式：宿主机源码 → 只读挂载 → external_dirs 发现。
+if [[ -f "${HERMES_DEFAULT_CONFIG}" ]]; then
+  if ! grep -q 'mylibrary-skills' "${HERMES_DEFAULT_CONFIG}"; then
+    python3 -c "
+import pathlib
+p = pathlib.Path('${HERMES_DEFAULT_CONFIG}')
+c = p.read_text()
+entry = '    - /opt/mylibrary-skills\n'
+c = c.replace('  external_dirs:\n    - /opt/data/code/aisecretary/skills\n', '  external_dirs:\n    - /opt/data/code/aisecretary/skills\n' + entry)
+p.write_text(c)
+print('done')
+"
+    echo "   📂 mylibrary skills 已加入 Hermes external_dirs"
+  else
+    echo "   ✅ mylibrary skills 已在 Hermes external_dirs 中"
+  fi
+fi
+
 # ── 确保 skills 目录存在并安装 paper-fetch ───────────────────────
 install_paper_fetch() {
   local skills_dir="$1"
@@ -198,62 +239,6 @@ install_paper_fetch() {
 install_paper_fetch "${HOME}/.openclaw/skills" "~/.openclaw/skills"
 install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
 
-# ── 安装 zotero-cli-cc skill ────────────────────────────────────
-install_zotero_skill() {
-  local skills_dir="$1"
-  local label="$2"
-  mkdir -p "${skills_dir}"
-  # Check idempotently: .git exists AND SKILL.md at root (not monorepo subdir)
-  if [[ -d "${skills_dir}/zotero-cli-cc/.git" && -f "${skills_dir}/zotero-cli-cc/SKILL.md" ]]; then
-    echo "   ✅ zotero-cli-cc skill 已存在于 ${label}，跳过安装"
-    return
-  fi
-  echo "   📥 安装 zotero-cli-cc skill 到 ${label}（Zotero 文献管理）..."
-  if [[ -d "${skills_dir}/zotero-cli-cc" ]]; then
-    rm -rf "${skills_dir}/zotero-cli-cc"
-  fi
-  git clone --depth 1 https://github.com/Agents365-ai/zotero-cli-cc.git \
-    "${skills_dir}/zotero-cli-cc"
-  cd "${skills_dir}/zotero-cli-cc"
-  # Repo contains the skill at skill/zotero-cli-cc/; move to root
-  if [[ -d "skill/zotero-cli-cc" ]]; then
-    cp -r skill/zotero-cli-cc/* .
-    rm -rf skill
-  fi
-  cd - > /dev/null
-  echo "   ✅ zotero-cli-cc 已安装到 ${skills_dir}/zotero-cli-cc"
-}
-install_zotero_skill "${HOME}/.hermes/skills" "~/.hermes/skills"
-
-# ── 安装 paper-to-zotero skill（项目自有 skill）────────────────────
-install_paper_to_zotero_skill() {
-  local skills_dir="$1"
-  local label="$2"
-  local src="${REPO_ROOT}/skills/paper-to-zotero"
-  mkdir -p "${skills_dir}/paper-to-zotero"
-  # Check idempotently: if SKILL.md hasn't changed, skip
-  if [[ -f "${skills_dir}/paper-to-zotero/SKILL.md" ]]; then
-    if cmp -s "${src}/SKILL.md" "${skills_dir}/paper-to-zotero/SKILL.md"; then
-      echo "   ✅ paper-to-zotero skill 已存在于 ${label}，跳过安装"
-      return
-    fi
-  fi
-  echo "   📥 安装 paper-to-zotero skill 到 ${label}（paper-fetch → Drive → Zotero 完整工作流）..."
-  cp "${src}/SKILL.md" "${skills_dir}/paper-to-zotero/SKILL.md"
-  # Initialize git repo if missing — Hermes only discovers skills with .git
-  if [[ ! -d "${skills_dir}/paper-to-zotero/.git" ]]; then
-    git -C "${skills_dir}/paper-to-zotero" init -q
-    git -C "${skills_dir}/paper-to-zotero" add SKILL.md
-    git -C "${skills_dir}/paper-to-zotero" -c user.email="skill@myopenclaw" -c user.name="myopenclaw" commit -qm "paper-to-zotero skill" --no-gpg-sign
-  elif ! git -C "${skills_dir}/paper-to-zotero" diff --quiet; then
-    git -C "${skills_dir}/paper-to-zotero" add SKILL.md
-    git -C "${skills_dir}/paper-to-zotero" -c user.email="skill@myopenclaw" -c user.name="myopenclaw" commit -qm "update paper-to-zotero skill" --no-gpg-sign
-  fi
-  echo "   ✅ paper-to-zotero 已安装到 ${skills_dir}/paper-to-zotero"
-}
-install_paper_to_zotero_skill "${HOME}/.hermes/skills" "~/.hermes/skills"
-# Also install to coder profile's research skills（爱码士 Discord bot 使用的 skill 路径）
-install_paper_to_zotero_skill "${HOME}/.hermes/profiles/coder/skills/research" "coder profile"
 
 # ── 注入 OpenClaw GitHub token ──────────────────────────────────
 # 从 .env 读取 OPENCLAW_GH_TOKEN，替换 openclaw.json 中的占位符

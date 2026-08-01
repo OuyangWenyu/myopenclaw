@@ -83,15 +83,6 @@ RUN npm install -g @tencentdb-agent-memory/memory-tencentdb@0.3.6
 # https://docs.astral.sh/uv/guides/integration/docker/
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# ── Install zotero-cli-cc (Zotero CLI) via uv ────────────────
-# uv tool install creates an isolated venv and exposes the `zot` binary.
-# UV_TOOL_DIR + UV_TOOL_BIN_DIR place the venv under /opt so both
-# root and hermes users can access it (defaults are under ~/.local).
-RUN UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/opt/uv-tools/bin \
-      uv tool install --python-preference only-system zotero-cli-cc && \
-    ln -sf /opt/uv-tools/bin/zot /usr/local/bin/zot && \
-    chmod -R a+rX /opt/uv-tools
-
 # ── Config directories for host-side persistence ────────────
 # Mounted from host via docker-compose volumes:
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)
@@ -102,31 +93,6 @@ RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config /opt/gitcode-c
 
 # opencode respects OPENCODE_CONFIG_DIR to find its config
 ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
-
-# ── Copy zot-link-gdrive bridge script ─────────────────────
-# Creates linked_file attachments in Zotero pointing to Google Drive PDFs.
-# Path auto-constructed from $GDRIVE_PAPERS_LOCAL_PATH + filename.
-# Uses pyzotero from the zotero-cli-cc venv; reads credentials from config.toml.
-COPY scripts/zot-link-gdrive.py /opt/hermes/scripts/zot-link-gdrive.py
-RUN chmod +x /opt/hermes/scripts/zot-link-gdrive.py
-
-# ── Copy paper-to-zotero script ─────────────────────────────
-# Creates complete Zotero item (metadata + linked_file attachment).
-# Enriches metadata from Crossref/arXiv; writes linked_file path to Zotero.
-COPY scripts/paper-to-zotero.py /opt/hermes/scripts/paper-to-zotero.py
-RUN chmod +x /opt/hermes/scripts/paper-to-zotero.py
-
-# ── Copy paper pipeline one-shot script ─────────────────────
-# Atomic pipeline: paper-fetch → rclone → paper-to-zotero → cleanup.
-# Single command replaces the 4-step manual orchestration.
-COPY scripts/run-paper-pipeline.sh /opt/hermes/scripts/run-paper-pipeline.sh
-RUN chmod +x /opt/hermes/scripts/run-paper-pipeline.sh
-
-# ── Tests for paper pipeline scripts ──────────────────────────
-COPY scripts/test-paper-to-zotero.sh /opt/hermes/scripts/test-paper-to-zotero.sh
-COPY scripts/test-run-paper-pipeline.sh /opt/hermes/scripts/test-run-paper-pipeline.sh
-RUN chmod +x /opt/hermes/scripts/test-paper-to-zotero.sh \
-    /opt/hermes/scripts/test-run-paper-pipeline.sh
 
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
