@@ -9,7 +9,7 @@ Detects:
   - Gateway error loops
   - Unhealthy containers
 
-Output: myloop/memory/agentops-ledger/inbox.md (auto items merged with manual)
+Output: ~/.myagentdata/agentops/inbox.md (auto items merged with manual)
 
 Usage:
   python3 scripts/collect_agentops.py
@@ -25,8 +25,11 @@ from datetime import datetime, timedelta
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-MYLOOP_ROOT = os.environ.get("MYLOOP_ROOT", str(REPO_ROOT.parent / "myloop"))
-AGENTOPS_LEDGER = Path(MYLOOP_ROOT) / "memory" / "agentops-ledger" / "inbox.md"
+AGENTOPS_DATA_DIR = os.environ.get(
+    "AGENTOPS_DATA_DIR",
+    os.path.expanduser("~/.myagentdata/agentops"),
+)
+AGENTOPS_LEDGER = Path(AGENTOPS_DATA_DIR) / "inbox.md"
 
 # Thresholds (configurable via env vars)
 RESTART_THRESHOLD_HOURS = int(os.environ.get("AGENTOPS_RESTART_THRESHOLD", "2"))
