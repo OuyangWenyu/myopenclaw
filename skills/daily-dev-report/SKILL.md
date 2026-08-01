@@ -67,9 +67,14 @@ arguments: {}
 ## 静默规则
 
 以下情况直接回复 `[SILENT]`，不发送推送：
-- MCP 返回 `{"error": "no_data"}` — 昨日无数据
-- `has_activity` 为 `false`
-- 所有 `persons` 为空或所有 `total_commits` 为 0
+- MCP 返回 `{"error": "no_data"}` **且** `data_freshness_hours` 不存在或 < 48 — 昨日无数据，且数据源最近 48h 内有更新（说明是真的没活动）
+- `has_activity` 为 `false` **且** freshness 正常
+- 所有 `persons` 为空或所有 `total_commits` 为 0 **且** freshness 正常
+
+**⚠️ freshness 例外规则**：以下情况**必须推送警告**，不能静默：
+- `data_freshness_hours` > 48 — 数据源可能已过期。即使 `has_activity` 为 false 也要推送，报告顶部注明：
+  > ⚠️ 数据库最后更新于 {N} 小时前，期间可能无新活动。请确认数据采集正常。
+- MCP 返回 `{"error": "no_data"}` **且** `data_freshness_warning` 存在 → **仍然推送**，内容为 freshness_warning 的文本
 
 ## 分析规则
 
