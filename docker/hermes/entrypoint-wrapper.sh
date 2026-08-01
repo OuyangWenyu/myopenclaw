@@ -293,6 +293,51 @@ TOML
   done
 fi
 
+# ── Auto-configure zotero (paper pipeline config) ──────────
+# paper_to_zotero.py reads Zotero API credentials from this config file.
+# Generated from env vars set in docker-compose.yml.
+ZOT_CONFIG_DIR="/opt/data/.config/zot"
+ZOT_CONFIG="${ZOT_CONFIG_DIR}/config.toml"
+mkdir -p "${ZOT_CONFIG_DIR}"
+if [[ ! -f "${ZOT_CONFIG}" ]]; then
+  if [[ -n "${ZOTERO_API_KEY:-}" && -n "${ZOTERO_LIBRARY_ID:-}" ]]; then
+    cat > "${ZOT_CONFIG}" << TOML
+[zotero]
+data_dir = '${ZOT_DATA_DIR:-}'
+library_id = '${ZOTERO_LIBRARY_ID}'
+api_key = '${ZOTERO_API_KEY}'
+semantic_scholar_api_key = ''
+
+[output]
+default_format = 'table'
+limit = 50
+
+[export]
+default_style = 'bibtex'
+TOML
+    ln -sf "${ZOT_CONFIG_DIR}" /root/.config/zot
+    chown -R hermes:hermes "${ZOT_CONFIG_DIR}"
+    echo "   📚 zotero 配置已生成 — library ${ZOTERO_LIBRARY_ID}"
+  else
+    cat > "${ZOT_CONFIG}" << TOML
+[zotero]
+data_dir = ''
+library_id = ''
+api_key = ''
+
+[output]
+default_format = 'table'
+limit = 50
+
+[export]
+default_style = 'bibtex'
+TOML
+    ln -sf "${ZOT_CONFIG_DIR}" /root/.config/zot
+    chown -R hermes:hermes "${ZOT_CONFIG_DIR}"
+    echo "   📚 zotero 配置已生成（只读模式 — 未设置 ZOTERO_API_KEY）"
+  fi
+fi
+
 # ── Auto-configure cardamum (CLI contact manager) ─────────
 # cardamum uses ~/.config/cardamum/config.toml (pimalaya_config default).
 # Hermes terminal HOME = /opt/data/home (not /opt/data), so config goes there.

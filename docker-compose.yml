@@ -13,15 +13,12 @@ services:
     volumes:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.config/gh:/opt/gh-config
-      - ${HOME}/.config/gc:/root/.config/gc
       - ${HOME}/.config/opencode:/opt/opencode-config
-      - ${HOME}/.openclaw/bin/gc:/usr/local/bin/gc:ro
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
-      - ${HOME}/code/mylibrary/skills:/opt/mylibrary-skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
@@ -85,7 +82,6 @@ services:
       - ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
-      - ${HOME}/code/mylibrary/skills:/opt/mylibrary-skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
 
@@ -111,12 +107,15 @@ services:
       - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
       - DISCORD_ALLOWED_USERS=${DISCORD_ALLOWED_USERS:-}
       - DISCORD_REQUIRE_MENTION=true
+      # Paper pipeline
+      - PAPER_FETCH_DIR=/opt/data/skills/paper-fetch
+      - ZOTERO_CONFIG_PATH=/opt/data/.config/zot/config.toml
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       # Zotero CLI (zotero-cli-cc)
       - ZOT_DATA_DIR=/opt/zotero-data
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
-      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
@@ -219,12 +218,15 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=daoyuan
+      # Paper pipeline
+      - PAPER_FETCH_DIR=/opt/data/skills/paper-fetch
+      - ZOTERO_CONFIG_PATH=/opt/data/.config/zot/config.toml
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       # Zotero CLI (zotero-cli-cc)
       - ZOT_DATA_DIR=/opt/zotero-data
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
-      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
     shm_size: "1g"
@@ -338,8 +340,6 @@ services:
       - "${OPENCLAW_PORT:-18789}:18789"
     volumes:
       - ${HOME}/.openclaw:/home/node/.openclaw
-      - ${HOME}/.config/gc:/home/node/.config/gc
-      - ${HOME}/.openclaw/bin/gc:/usr/local/bin/gc:ro
       - ./openclaw/scripts/fix-host-paths.sh:/fix-host-paths.sh:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
@@ -368,8 +368,6 @@ services:
       - cli
     volumes:
       - ${HOME}/.openclaw:/home/node/.openclaw
-      - ${HOME}/.config/gc:/home/node/.config/gc
-      - ${HOME}/.openclaw/bin/gc:/usr/local/bin/gc:ro
     network_mode: "service:openclaw-gateway"
     depends_on:
       - openclaw-gateway

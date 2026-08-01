@@ -83,6 +83,35 @@ RUN npm install -g @tencentdb-agent-memory/memory-tencentdb@0.3.6
 # https://docs.astral.sh/uv/guides/integration/docker/
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
+# ── Install mylibrary (hydrolitagent) — local source preferred, git fallback ──
+# start.sh rsyncs ~/code/mylibrary into .mylibrary-src/ before build when available.
+# When missing (e.g. CI / remote build), falls back to git clone.
+# Skills are copied from the same source so package and skills stay in sync.
+#
+# IMPORTANT: mylibrary declares mcp>=2.0.0 as a dependency (for its zotero-mcp server),
+# but the Hermes container only needs the paper-pipeline client code (paper_to_zotero,
+# zot_link_gdrive).  mcp 2.0 breaks the Hermes agent's built-in MCP tool
+# (streamable_http_client returns 2 values instead of 3).  Install with --no-deps
+# and only pull in the dependencies the container actually uses.
+COPY .mylibrary-src/ /tmp/mylibrary-src/
+RUN if [ -f /tmp/mylibrary-src/pyproject.toml ]; then \
+      echo "   📚 mylibrary: installing from local source" && \
+      uv pip install --python /opt/hermes/.venv/bin/python3 --no-deps /tmp/mylibrary-src/ && \
+      uv pip install --python /opt/hermes/.venv/bin/python3 graphifyy openai httpx pyzotero && \
+      cp -r /tmp/mylibrary-src/skills /opt/mylibrary-skills && cp /tmp/mylibrary-src/scripts/run_paper_pipeline.sh /opt/hermes/scripts/run-paper-pipeline.sh && chmod +x /opt/hermes/scripts/run-paper-pipeline.sh; \
+    else \
+      echo "   📚 mylibrary: local source not found, cloning from GitHub" && \
+      apt-get update && apt-get install -y --no-install-recommends git && \
+      git clone --depth 1 https://github.com/OuyangWenyu/mylibrary.git /tmp/mylibrary-git && \
+      uv pip install --python /opt/hermes/.venv/bin/python3 --no-deps /tmp/mylibrary-git/ && \
+      uv pip install --python /opt/hermes/.venv/bin/python3 graphifyy openai httpx pyzotero && \
+      cp -r /tmp/mylibrary-git/skills /opt/mylibrary-skills && cp /tmp/mylibrary-git/scripts/run_paper_pipeline.sh /opt/hermes/scripts/run-paper-pipeline.sh && chmod +x /opt/hermes/scripts/run-paper-pipeline.sh && \
+      apt-get purge -y git && \
+      rm -rf /var/lib/apt/lists/*; \
+    fi && \
+    rm -rf /tmp/mylibrary-src /tmp/mylibrary-git && \
+    chown -R hermes:hermes /opt/mylibrary-skills
+
 # ── Config directories for host-side persistence ────────────
 # Mounted from host via docker-compose volumes:
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)

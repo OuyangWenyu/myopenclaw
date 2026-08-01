@@ -337,6 +337,30 @@ if [[ "${1:-}" == "--build" ]]; then
   BUILD_FLAG="--build"
 fi
 
+# ── 复制 mylibrary 源码到 build context（本地优先）──────────────
+# 容器 build 时 Dockerfile 会优先使用本地源码进行 pip install。
+# 如果本地没有 mylibrary，Dockerfile 会从 GitHub clone。
+MYLIBRARY_SRC="${HOME}/code/mylibrary"
+MYLIBRARY_CTX="${REPO_ROOT}/docker/hermes/.mylibrary-src"
+if [[ -d "${MYLIBRARY_SRC}" ]]; then
+    echo "   📚 mylibrary 本地源码已检测到，复制到 build context..."
+    rsync -a --delete \
+        --exclude '.git' \
+        --exclude '__pycache__' \
+        --exclude '*.pyc' \
+        --exclude '.venv' \
+        --exclude 'venv' \
+        --exclude 'node_modules' \
+        --exclude '.mypy_cache' \
+        --exclude '.pytest_cache' \
+        --exclude '*.egg-info' \
+        "${MYLIBRARY_SRC}/" "${MYLIBRARY_CTX}/"
+else
+    # 确保 build context 干净（没有上次残留的源码）
+    rm -rf "${MYLIBRARY_CTX}"
+    echo "   📚 mylibrary 本地未找到，build 时将使用 GitHub clone"
+fi
+
 echo "🚀 启动服务..."
 if [[ -n "${BACKUP_ROOT:-}" ]]; then
   echo "   备份目录: ${BACKUP_ROOT}"
