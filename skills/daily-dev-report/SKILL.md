@@ -13,12 +13,19 @@ metadata:
 
 ## 数据采集
 
-调用 MCP `get_daily_report` 工具获取昨日数据：
+调用 MCP `get_daily_report` 工具获取昨日数据。**必须不带任何参数调用**：
 
 ```
 tool: get_daily_report
-arguments: {date: "YYYY-MM-DD"}  // 昨日日期，北京时间 (UTC+8)
+arguments: {}
 ```
+
+**⚠️ 绝对不要自己计算日期传参！** `get_daily_report` 工具**没有 `date` 参数**。你不传任何参数时，服务端自动使用北京时间（UTC+8）往前 24 小时的滑动窗口，这才是正确的「昨天」。你自己算的日期一定是错的，因为：
+1. 容器运行在 UTC 时区，系统时钟比北京时间慢 8 小时
+2. 按 UTC 日历日查询会切掉北京时间 00:00-08:00 的所有提交
+3. 用 UTC 日期算「昨天」会比北京时间早一天
+
+报告标题中的日期从 MCP 返回的 `date` 字段获取，不要自己编。
 
 返回格式示例：
 
@@ -60,9 +67,14 @@ arguments: {date: "YYYY-MM-DD"}  // 昨日日期，北京时间 (UTC+8)
 ## 静默规则
 
 以下情况直接回复 `[SILENT]`，不发送推送：
-- MCP 返回 `{"error": "no_data"}` — 昨日无数据
-- `has_activity` 为 `false`
-- 所有 `persons` 为空或所有 `total_commits` 为 0
+- MCP 返回 `{"error": "no_data"}` **且** `data_freshness_hours` 不存在或 < 48 — 昨日无数据，且数据源最近 48h 内有更新（说明是真的没活动）
+- `has_activity` 为 `false` **且** freshness 正常
+- 所有 `persons` 为空或所有 `total_commits` 为 0 **且** freshness 正常
+
+**⚠️ freshness 例外规则**：以下情况**必须推送警告**，不能静默：
+- `data_freshness_hours` > 48 — 数据源可能已过期。即使 `has_activity` 为 false 也要推送，报告顶部注明：
+  > ⚠️ 数据库最后更新于 {N} 小时前，期间可能无新活动。请确认数据采集正常。
+- MCP 返回 `{"error": "no_data"}` **且** `data_freshness_warning` 存在 → **仍然推送**，内容为 freshness_warning 的文本
 
 ## 分析规则
 
