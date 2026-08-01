@@ -168,7 +168,7 @@ docker compose pull openclaw-gateway
 
 ## Architecture
 
-**Nine Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+**Ten Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network (13 total including profile-gated containers):
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
@@ -186,9 +186,12 @@ docker compose pull openclaw-gateway
 
 7. **repo-scanner-mcp** — Custom image from `../git-contribution-stats` (`docker/mcp-server/Dockerfile`) using `python:3.12-slim` + `mcp==1.28.1`. Port 8001. Streamable HTTP MCP server exposing 3 tools: `get_daily_report` (person-centric daily R&D report), `query_commits` (raw commit query), `query_authors` (active authors). Data source: `~/.myagentdata/repo-scanner/repos.sqlite` (read-only mount). Used by Hermes via MCP client (`~/.hermes/config.yaml` → `mcp_servers.repo-scanner`). Resource limits: 256M/0.5 CPU.
 
-8. **zotero-mcp** — Custom image (`docker/zotero-mcp/Dockerfile`) using `python:3.12-slim` + `mcp` + `httpx` + `pyzotero`. Port 8002. SSE MCP server exposing 6 tools: `zotero_search` / `zotero_get_item` / `zotero_get_recent` / `zotero_get_collection_items` (Web API via api.zotero.org) + `zotero_get_fulltext` / `zotero_get_file_info` (Local API via host.docker.internal:23119). Requires Zotero Desktop running on host with local API enabled. Accessible by any agent on `myopenclaw-net` via `http://zotero-mcp:8002/mcp`. Resource limits: 256M/0.5 CPU.
+8. **zotero-mcp** — Custom image (`docker/zotero-mcp/Dockerfile`) using `python:3.12-slim` + `mcp` + `httpx` + `pyzotero`. Port 8002. SSE MCP server exposing 12 tools:
+   - Web API (api.zotero.org): `zotero_search` / `zotero_fulltext_search` / `zotero_search_by_tag` / `zotero_get_item` / `zotero_get_attachments` / `zotero_get_annotations` / `zotero_get_recent` / `zotero_get_collection_items` / `zotero_get_collections` / `zotero_get_tags`
+   - Local API (host.docker.internal:23119): `zotero_get_fulltext` / `zotero_get_file_info`
+   Requires Zotero Desktop running on host with local API enabled. Accessible by any agent on `myopenclaw-net` via `http://zotero-mcp:8002/mcp`. Source code owned by mylibrary, consumed at build time. Resource limits: 256M/0.5 CPU.
 
-9. **hermes-daoyuan** (道元·文献学者) — Separate container using the hermes image with `--profile daoyuan`. Port 8645. Connected to Feishu via independent bot (`DAOYUAN_FEISHU_APP_ID/SECRET`), group-open access (`FEISHU_GROUP_POLICY=open` + `GATEWAY_ALLOW_ALL_USERS=true`). Zotero access is **read-only** via a dedicated API key (`DAOYUAN_ZOTERO_API_KEY`) — can query the library but cannot create/modify items. Uses `zotero-query` skill for MCP-based literature queries. Paper injection capability (paper-to-zotero) is intentionally restricted to 爱码士 (coder profile). Resource limits: 4G/2 CPU.
+9. **hermes-daoyuan** (道元·文献学者) — Separate container using the hermes image with `--profile daoyuan`. Port 8645. Connected to Feishu via independent bot (`DAOYUAN_FEISHU_APP_ID/SECRET`), group-open access (`FEISHU_GROUP_POLICY=open` + `GATEWAY_ALLOW_ALL_USERS=true`). Zotero access is **read-only** via Zotero MCP — can query the library but cannot create/modify items. Uses `zotero-query` skill for MCP-based literature queries. Memory is **isolated** — uses Hermes built-in memory (`memory_enabled: true`, no TDAI provider), not shared with other agents. Paper injection capability (paper-to-zotero) is intentionally restricted to 爱码士 (coder profile). Resource limits: 4G/2 CPU.
 
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 

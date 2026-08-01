@@ -6,8 +6,9 @@
 
 | 能力 | 实现方式 | 依赖仓库 |
 |------|----------|----------|
-| 多 Agent 协作 | Hermes ×3（默认/爱码士/finance）+ Claude Code + OpenClaw | — |
-| 跨 Agent 长期记忆 | TDAI Memory L0→L3 分层管线，4 agent 双向共享 | — |
+| 多 Agent 协作 | Hermes ×4（默认/爱码士/道元/finance）+ Claude Code + OpenClaw | — |
+| 跨 Agent 长期记忆 | TDAI Memory L0→L3 分层管线，3 agent + CC飞总 共享（道元独立） | — |
+| Zotero 文献系统 | zotero-mcp 12 tools（mylibrary 提供）+ paper pipeline（爱码士） | [mylibrary](https://github.com/OuyangWenyu/mylibrary) |
 | 飞书直连 | cc-connect（Claude Code）+ lark-cli（Hermes） | — |
 | Discord 桥接 | Hermes coder（爱码士）+ OpenClaw（虾酱） | — |
 | 晨间三签 | Hermes cron skill → TDAI + AgentOps 信号 → 飞书推送 | — |

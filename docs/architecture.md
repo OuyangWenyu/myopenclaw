@@ -1,6 +1,6 @@
 # 架构
 
-myopenclaw 由 12 个 Docker 服务组成（不含 profile-gated 的 openclaw-cli），运行在共享的 `myopenclaw-net` 桥接网络上。
+myopenclaw 由 14 个 Docker 服务组成（不含 profile-gated 的 openclaw-cli），运行在共享的 `myopenclaw-net` 桥接网络上。
 
 ## 服务拓扑
 
@@ -8,8 +8,9 @@ myopenclaw 由 12 个 Docker 服务组成（不含 profile-gated 的 openclaw-cl
 
 | 服务 | 镜像 | 端口 | 说明 |
 |------|------|------|------|
-| hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile |
-| hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，Discord 接入 |
+| hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile（爱玛士） |
+| hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道 |
+| hermes-daoyuan | 同 hermes 镜像 | 8645 | 道元·文献学者，daoyuan profile，飞书群开放访问 |
 | hermes-finance | 同 hermes 镜像 | 8644 | 财经助手，finance profile |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板（只读） |
 | claude-code | 自建（基于 `ubuntu:24.04`） | 9090 | Claude Code + cc-connect 飞书直连 |
@@ -19,6 +20,7 @@ myopenclaw 由 12 个 Docker 服务组成（不含 profile-gated 的 openclaw-cl
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
+| zotero-mcp | 8002 | Zotero 文献 MCP 服务，12 个 tools（mylibrary 提供） |
 | tdai-memory | 8420 | Agent 长期记忆 Gateway，L0→L3 分层管线 |
 | aisecretary | 8000 | 事务数据库 MCP 服务，7 个 tools，SQLite 持久化 |
 | repo-scanner-mcp | 8001 | 研发日报 MCP 数据服务，来自 git-contribution-stats |
@@ -32,7 +34,7 @@ myopenclaw 由 12 个 Docker 服务组成（不含 profile-gated 的 openclaw-cl
 
 | 宿主机路径 | 容器内路径 | 容器 | 说明 |
 |------------|-----------|------|------|
-| `~/.hermes` | `/opt/data` | hermes 三兄弟 | Hermes 全部数据 |
+| `~/.hermes` | `/opt/data` | hermes 四兄弟 | Hermes 全部数据 |
 | `~/.claude` | `/opt/claude-config` | claude-code | Claude Code 配置和凭证 |
 | `~/.cc-connect` | `/opt/cc-config` | claude-code | cc-connect 配置 |
 | `~/.openclaw` | `/home/node/.openclaw` | openclaw | OpenClaw 配置和 memory |

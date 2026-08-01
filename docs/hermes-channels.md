@@ -1,13 +1,19 @@
 # Hermes 消息平台配置
 
-Hermes 的三个 profile（default、coder、finance）各自可以接入不同的消息平台。平台凭据通过环境变量传入容器，Hermes 启动时自动连接。
+Hermes 的四个 profile（default、coder、daoyuan、finance）各自可以接入不同的消息平台。平台凭据通过环境变量传入容器，Hermes 启动时自动连接。
 
 ## 平台总览
 
 | 平台 | 使用的 profile | 配置方式 | 说明 |
 |------|--------------|---------|------|
-| 飞书 | 全部（default / coder / finance） | `~/.hermes/.env` | 主消息平台，走 WebSocket 长连接 |
+| 飞书 | 全部（default / coder / daoyuan / finance） | 各自飞书应用凭据 | 主消息平台，走 WebSocket 长连接 |
 | Discord | coder（爱码士） | 项目 `.env` + `docker-compose.yml` | 独立 Discord Bot，仅限个人使用 |
+
+**飞书应用隔离**：四个 profile 使用四个独立的飞书应用，互不影响：
+- 爱玛士（default）：`FEISHU_APP_ID` — 主飞书 bot
+- 爱码士（coder）：同 `FEISHU_APP_ID` — 与爱玛士共享飞书应用
+- 道元（daoyuan）：`DAOYUAN_FEISHU_APP_ID` — 文献学者专用飞书 bot，群内开放访问
+- finance：`FINANCE_FEISHU_APP_ID` — 财经助手专用飞书 bot
 
 各平台凭据独立管理，互不影响。
 

@@ -1,6 +1,8 @@
 # TDAI 长期记忆
 
-基于 [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory) v0.3.6，让 4 个个人 agent 跨会话、跨 agent 共享长期记忆。**飞书对 CC飞总 说的，Discord 侧爱玛士能召回**，反之亦然。
+基于 [TencentDB Agent Memory](https://github.com/TencentCloud/TencentDB-Agent-Memory) v0.3.6，让 3 个个人 agent 跨会话、跨 agent 共享长期记忆。**飞书对 CC飞总 说的，Discord 侧爱玛士能召回**，反之亦然。
+
+注：**道元（daoyuan）不接入 TDAI**，使用 Hermes 内置记忆（`memory_enabled: true`，无 `provider: memory_tencentdb`），对话记忆独立隔离。
 
 ## 记忆分层 L0→L3
 
@@ -20,17 +22,18 @@ L3 Persona       用户画像          → persona.md
 
 | 体系 | 归属 | 后端 | 接入方式 |
 |------|------|------|----------|
-| **个人体系** | owen 一人，4 agent 共享 | `~/.myagentdata/tdai-memory/` | 独立 Gateway 容器 `:8420` |
+| **个人体系** | owen 一人，3 agent + CC飞总 共享 | `~/.myagentdata/tdai-memory/` | 独立 Gateway 容器 `:8420` |
 | **虾酱** | OpenClaw Discord，多用户 | `~/.openclaw/memory-tdai/` | OpenClaw 内嵌插件（local 模式） |
 
 两套用不同 SQLite 库文件物理隔离 — 虾酱（多人、零密钥）不掌握个人信息。
 
-## 4 个 agent 的接入方式
+## 3 agent + CC飞总 的接入方式
 
 | Agent | 容器 | 接入方式 | 写入路径 |
 |-------|------|----------|----------|
 | Hermes default / 爱玛士 / finance | hermes 三兄弟 | `memory_tencentdb` adapter | plugin 生命周期钩子（自动） |
 | CC飞总 | claude-code | MCP server（4 读工具）+ Stop hook | Stop hook 每轮捕获对话 |
+| **道元** | hermes-daoyuan | ❌ 不接入 TDAI | Hermes 内置记忆，独立隔离 |
 
 - **Hermes adapter**：entrypoint 启动时自动部署 plugin + 注入 `memory.provider`，读 env `MEMORY_TENCENTDB_GATEWAY_HOST/PORT` 连 Gateway。
 - **CC飞总 双向**：读走 MCP server（`memory_search` / `conversation_search` / `read_scenario` / `read_core`），写走 `capture-to-gateway.py` Stop hook。hook 异常静默 exit 0，绝不阻塞对话；心跳/失败写 `~/.myagentdata/tdai-memory/capture-hook.log`（RotatingFileHandler 有界）。

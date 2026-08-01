@@ -34,6 +34,8 @@ cp .env.example .env
 | `LARK_CLI_APP_ID` / `SECRET` | 可选 | lark-cli 主应用 |
 | `LARK_CLI_IDM_APP_ID` / `SECRET` | 可选 | lark-cli 第二 profile |
 | `DISCORD_BOT_TOKEN` | 可选 | Hermes coder Discord Bot Token |
+| `DAOYUAN_FEISHU_APP_ID` / `SECRET` | 可选 | 道元·文献学者 飞书应用凭证 |
+| `FINANCE_FEISHU_APP_ID` / `SECRET` | 可选 | Finance 飞书应用凭证 |
 | `UPK_USER` / `UPK_PASS` | 可选 | Uptime Kuma 管理员账号 |
 
 ### 配置云盘路径
