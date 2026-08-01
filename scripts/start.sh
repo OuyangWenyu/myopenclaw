@@ -169,8 +169,10 @@ mcp_servers:
   zotero:
     url: http://zotero-mcp:8002/mcp
     timeout: 120
+memory:
+  memory_enabled: true
 YAML
-  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-v4-pro + zotero-mcp）"
+  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-v4-pro + zotero-mcp + memory 隔离）"
 fi
 
 # ── 确保 zotero-mcp 在默认配置的 mcp_servers 中 ─────────────────

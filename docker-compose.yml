@@ -217,7 +217,6 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=daoyuan
-      - GATEWAY_MULTIPLEX_PROFILES=true  # 阻止 reconcile 拉起其他 profile（finance/coder），避免飞书连接抢占
       # 道元不共享 TDAI memory — memory_enabled: false，独立记忆体系
       # Feishu (道元·文献学者 — 开放给群内所有人)
       - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}
