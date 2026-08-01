@@ -151,6 +151,28 @@ YAML
   echo "   📝 已创建 Hermes coder profile 配置（模型: deepseek-v4-pro）"
 fi
 
+# ── 确保 Hermes daoyuan profile（道元·文献学者）──────────────
+DAOYUAN_CONFIG="${HOME}/.hermes/profiles/daoyuan/config.yaml"
+mkdir -p "$(dirname "${DAOYUAN_CONFIG}")"
+if [[ ! -f "${DAOYUAN_CONFIG}" ]]; then
+  cat > "${DAOYUAN_CONFIG}" << 'YAML'
+model:
+  default: deepseek-v4-pro
+  provider: deepseek
+  base_url: https://api.deepseek.com
+fallback_providers:
+- zai
+fallback_model:
+  provider: zai
+  model: glm-5.1
+mcp_servers:
+  zotero:
+    url: http://zotero-mcp:8002/mcp
+    timeout: 120
+YAML
+  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-v4-pro + zotero-mcp）"
+fi
+
 # ── 确保 skills 目录存在并安装 paper-fetch ───────────────────────
 install_paper_fetch() {
   local skills_dir="$1"

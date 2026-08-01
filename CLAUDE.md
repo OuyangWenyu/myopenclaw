@@ -55,12 +55,16 @@ END:VCARD' | docker compose exec -T hermes cardamum card create -   # Add contac
 # Zotero CLI (zotero-cli-cc — Zotero literature management)
 docker compose exec hermes-coder zot stats                      # Zotero library statistics
 docker compose exec hermes-coder zot search "keyword" --limit 5 # Search papers
+docker compose exec hermes-daoyuan /opt/hermes/.venv/bin/hermes mcp list | grep zotero  # 道元——Zotero MCP 连接验证
 
-# Zotero MCP (Python Web API server — CC飞总 文献查询与分析)
-# CC飞总通过 MCP 工具直接查询 Zotero 文献库（api.zotero.org），在飞书对话中直接使用。
-# 环境变量: ZOTERO_API_KEY + ZOTERO_LIBRARY_ID + ZOTERO_LIBRARY_TYPE（均在 .env 中配置）
-# Zotero 数据以只读方式挂载到 /opt/zotero-data
-# MCP server: docker/claude-code/zotero-mcp-server.py（Python 3 stdlib，4 tools）
+# Zotero MCP — 共享文献查询与分析服务（端口 8002，SSE transport）
+# 独立 Docker 服务，CC飞总 / Hermes / 未来文献 agent 均可通过 http://zotero-mcp:8002/mcp 连接。
+# 双通道：Web API (api.zotero.org) 搜索/元数据 + Local API (host.docker.internal:23119) 全文/PDF。
+# 需要宿主机 Zotero Desktop 运行并开启 "Allow other applications to communicate with Zotero"。
+# 环境变量: ZOTERO_API_KEY + ZOTERO_LIBRARY_ID + ZOTERO_LIBRARY_TYPE + ZOTERO_LOCAL_API_URL
+# MCP server: docker/zotero-mcp/server.py（FastMCP + pyzotero + httpx，6 tools）
+docker compose exec zotero-mcp python3 -c "print('healthy')"  # Zotero MCP 健康检查
+docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp test zotero  # MCP 连接测试（Hermes → zotero-mcp）
 
 # aisecretary — 事务数据库 MCP 服务
 curl -s http://localhost:8000/health                           # Health check
@@ -162,11 +166,11 @@ docker compose pull openclaw-gateway
 
 ## Architecture
 
-**Eight Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
+**Nine Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network:
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
-1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Three profiles: default (port 8642), coder (8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644). Dashboard on port 9119.
+1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and zotero-cli-cc (Zotero CLI, via uv). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/cardamum/lark-cli/zot config dirs, auto-initializes lark-cli/himalaya/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Four profiles: default (爱玛士, port 8642), coder (爱码士, 8643, Discord via DISCORD_BOT_TOKEN, model deepseek-v4-pro), finance (8644), daoyuan (道元·文献学者, 8645, zotero-mcp). Dashboard on port 9119.
 
 2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-pro` as the default model. Port 9090 (cc-connect web admin).
 
@@ -179,6 +183,8 @@ docker compose pull openclaw-gateway
 6. **tdai-memory** — Custom image (`docker/tdai-memory/Dockerfile`) based on `ubuntu:24.04` with Node.js 22 and `@tencentdb-agent-memory/memory-tencentdb@0.3.6`. Port 8420. Provides shared L0→L3 memory pipeline (Gateway HTTP API) for personal agents. LLM backend: DeepSeek (`TDAI_LLM_API_KEY` env). Data stored at `~/.myagentdata/tdai-memory/`. Resource limit 1G (OOM at 512M during large-JSON init). 4 agents share this Gateway bidirectionally — see **Agent Memory (TDAI)** design decision below.
 
 7. **repo-scanner-mcp** — Custom image from `../git-contribution-stats` (`docker/mcp-server/Dockerfile`) using `python:3.12-slim` + `mcp==1.28.1`. Port 8001. Streamable HTTP MCP server exposing 3 tools: `get_daily_report` (person-centric daily R&D report), `query_commits` (raw commit query), `query_authors` (active authors). Data source: `~/.myagentdata/repo-scanner/repos.sqlite` (read-only mount). Used by Hermes via MCP client (`~/.hermes/config.yaml` → `mcp_servers.repo-scanner`). Resource limits: 256M/0.5 CPU.
+
+8. **zotero-mcp** — Custom image (`docker/zotero-mcp/Dockerfile`) using `python:3.12-slim` + `mcp` + `httpx` + `pyzotero`. Port 8002. SSE MCP server exposing 6 tools: `zotero_search` / `zotero_get_item` / `zotero_get_recent` / `zotero_get_collection_items` (Web API via api.zotero.org) + `zotero_get_fulltext` / `zotero_get_file_info` (Local API via host.docker.internal:23119). Requires Zotero Desktop running on host with local API enabled. Accessible by any agent on `myopenclaw-net` via `http://zotero-mcp:8002/mcp`. Resource limits: 256M/0.5 CPU.
 
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 

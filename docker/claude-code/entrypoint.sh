@@ -217,13 +217,12 @@ if (!settings.permissions.allow) {
         "mcp__codegraph__codegraph_impact",
         "mcp__codegraph__codegraph_node",
         "mcp__codegraph__codegraph_status",
-        "mcp__playwright__*",
-        "mcp__zotero__*"
+        "mcp__playwright__*"
     ];
     changed = true;
 }
-if (!settings.permissions.allow.includes("mcp__zotero__*")) {
-    settings.permissions.allow.push("mcp__zotero__*");
+if (!settings.permissions.allow.includes("mcp__playwright__*")) {
+    settings.permissions.allow.push("mcp__playwright__*");
     changed = true;
 }
 
@@ -288,8 +287,8 @@ if (!settings.mcpServers.codegraph) {
 	}
 		if (!settings.mcpServers["zotero"]) {
 		    settings.mcpServers["zotero"] = {
-		        command: "python3",
-		        args: ["/opt/zotero-mcp-server.py"]
+		        type: "http",
+		        url: "http://zotero-mcp:8002/mcp"
 		    };
 		    changed = true;
 		}

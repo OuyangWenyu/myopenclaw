@@ -185,6 +185,55 @@ services:
     networks:
       - myopenclaw-net
 
+  # ── Hermes daoyuan gateway（道元·文献学者）─────────────────────
+  hermes-daoyuan:
+    image: myopenclaw/hermes:latest
+    container_name: hermes-daoyuan
+    restart: unless-stopped
+    command: gateway run --profile daoyuan
+    ports:
+      - "${HERMES_DAOYUAN_PORT:-8645}:8642"
+    volumes:
+      - ${HOME}/.hermes:/opt/data
+      - ${HOME}/.config/gh:/opt/gh-config
+      - ${HOME}/.config/opencode:/opt/opencode-config
+      - ${HOME}/.lark-cli:/opt/lark-config
+      - ${HOME}/Zotero:/opt/zotero-data:ro
+
+    environment:
+      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
+      - GITHUB_TOKEN=${GH_TOKEN:-}
+      - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
+      - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
+      - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
+      - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
+      - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
+      - LARK_CHAT_ID=${LARK_CHAT_ID:-}
+      - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
+      - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
+      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      - HERMES_PROFILE=daoyuan
+      # Zotero CLI (zotero-cli-cc)
+      - ZOT_DATA_DIR=/opt/zotero-data
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
+    shm_size: "1g"
+    deploy:
+      resources:
+        limits:
+          memory: 4G
+          cpus: "2.0"
+    networks:
+      - myopenclaw-net
+
   # ── Hermes dashboard（可选，只读，与 gateway 同网络）─────────
   hermes-dashboard:
     image: nousresearch/hermes-agent:latest
@@ -223,7 +272,6 @@ services:
       - ${HOME}/code:/home/node/code
       - ${HOME}/Code:/home/node/Code
       - ${HOME}/.myagentdata:/home/node/.myagentdata
-      - ${HOME}/Zotero:/opt/zotero-data:ro
       - ${HOME}/code/dailyinfo/skills:/opt/dailyinfo-skills:ro
       - ./docker/tdai-memory/mcp-server/server.py:/opt/tdai-mcp-server.py:ro
       - ./docker/claude-code/capture-to-gateway.py:/opt/capture-to-gateway.py:ro
@@ -239,10 +287,6 @@ services:
       - DAILYINFO_DATA_ROOT=/home/node/.myagentdata/dailyinfo
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      # Zotero MCP — literature search & analysis
-      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
-      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
-      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - TZ=${TZ:-Asia/Shanghai}
     ports:
       - "${CC_CONNECT_PORT:-9090}:9090"
@@ -256,6 +300,31 @@ services:
           cpus: "2.0"
     networks:
       - myopenclaw-net
+
+  # ── Zotero MCP — 共享文献查询与分析服务 ─────────────────────────
+  zotero-mcp:
+    build:
+      context: ./docker/zotero-mcp
+      dockerfile: Dockerfile
+    image: myopenclaw/zotero-mcp:latest
+    container_name: zotero-mcp
+    restart: unless-stopped
+    ports:
+      - "8002:8002"
+    environment:
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      - ZOTERO_LOCAL_API_URL=http://host.docker.internal:23119
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - myopenclaw-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
 
   # ── OpenClaw gateway ─────────────────────────────────────────
   openclaw-gateway:
