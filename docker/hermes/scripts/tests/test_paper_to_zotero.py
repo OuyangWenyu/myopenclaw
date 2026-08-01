@@ -246,8 +246,8 @@ class TestConferencePaperRouting:
         assert item.get("ISBN") == "978-1-4503-9999-9"
         assert "ISBN" not in extra
 
-    def test_conference_isbn_falls_back_to_issn(self):
-        """When ISBN is missing, fall back to ISSN for conference papers."""
+    def test_conference_issn_to_item_field(self):
+        """When ISBN is missing, ISSN goes to item.ISSN — NOT item.ISBN."""
         mock_cr = {
             "type": "proceedings-article",
             "title": ["Conference Paper"],
@@ -261,7 +261,8 @@ class TestConferencePaperRouting:
         with patch.object(_mod, "fetch_crossref", return_value=mock_cr):
             item, extra = _mod.build_item("10.1234/conf-issn-only", {})
 
-        assert item.get("ISBN") == "1234-5678"
+        assert item.get("ISSN") == "1234-5678"
+        assert "ISBN" not in item
 
 
 class TestBookSectionRouting:

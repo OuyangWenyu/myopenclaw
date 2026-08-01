@@ -193,9 +193,6 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
             isbn_val = isbn_vals  # handle bare string edge case
         publisher = cr.get("publisher")
 
-        # Resolve identifier for book-ish types: prefer ISBN, fall back to ISSN
-        _book_id = isbn_val or issn_val
-
         if itype == "journalArticle":
             if container:
                 item["publicationTitle"] = container[0]
@@ -218,8 +215,10 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
                 extra["issue"] = str(issue)
             if page:
                 extra["pages"] = str(page)
-            if _book_id:
-                item["ISBN"] = _book_id
+            if isbn_val:
+                item["ISBN"] = isbn_val
+            if issn_val:
+                item["ISSN"] = issn_val
             if publisher:
                 item["publisher"] = publisher
         elif itype == "bookSection":
@@ -231,13 +230,17 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
                 extra["issue"] = str(issue)
             if page:
                 extra["pages"] = str(page)
-            if _book_id:
-                item["ISBN"] = _book_id
+            if isbn_val:
+                item["ISBN"] = isbn_val
+            if issn_val:
+                extra["ISSN"] = issn_val
             if publisher:
                 item["publisher"] = publisher
         elif itype == "book":
-            if _book_id:
-                item["ISBN"] = _book_id
+            if isbn_val:
+                item["ISBN"] = isbn_val
+            if issn_val:
+                extra["ISSN"] = issn_val
             if publisher:
                 item["publisher"] = publisher
         else:
