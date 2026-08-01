@@ -28,6 +28,7 @@ __pycache__/
 
 # ── Build context temporary files ──────────────────────────────────
 docker/hermes/.mylibrary-src/
+docker/zotero-mcp/.mylibrary-src/
 
 # ── mkdocs build output ──────────────────────────────────────────
 site/

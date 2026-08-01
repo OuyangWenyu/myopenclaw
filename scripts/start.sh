@@ -361,6 +361,26 @@ else
     echo "   📚 mylibrary 本地未找到，build 时将使用 GitHub clone"
 fi
 
+# ── 复制 mylibrary 源码到 zotero-mcp build context（本地优先）────
+ZOTERO_MCP_CTX="${REPO_ROOT}/docker/zotero-mcp/.mylibrary-src"
+if [[ -d "${MYLIBRARY_SRC}" ]]; then
+    echo "   📚 zotero-mcp: mylibrary 本地源码已检测到，复制到 build context..."
+    rsync -a --delete \
+        --exclude '.git' \
+        --exclude '__pycache__' \
+        --exclude '*.pyc' \
+        --exclude '.venv' \
+        --exclude 'venv' \
+        --exclude 'node_modules' \
+        --exclude '.mypy_cache' \
+        --exclude '.pytest_cache' \
+        --exclude '*.egg-info' \
+        "${MYLIBRARY_SRC}/" "${ZOTERO_MCP_CTX}/"
+else
+    rm -rf "${ZOTERO_MCP_CTX}"
+    echo "   📚 zotero-mcp: mylibrary 本地未找到，build 时将使用 GitHub clone"
+fi
+
 echo "🚀 启动服务..."
 if [[ -n "${BACKUP_ROOT:-}" ]]; then
   echo "   备份目录: ${BACKUP_ROOT}"
