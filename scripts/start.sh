@@ -50,34 +50,39 @@ fi
 echo ""
 
 # ── 从 .cloud.conf 解析 BACKUP_ROOT ─────────────────────────
+# Linux 兼容：.cloud.conf 和云盘目录缺失时降级为 warning，不阻
+# 止后续 Docker 服务启动。备份 cron 容器自身会在缺失时优雅失败。
 CONF_FILE="${REPO_ROOT}/.cloud.conf"
+HAS_CLOUD_CONF=false
 if [[ ! -f "${CONF_FILE}" ]]; then
-  echo "❌ 未找到 .cloud.conf，请先运行 ./scripts/setup-cloud.sh"
-  exit 1
-fi
+  echo "   ⚠️  未找到 .cloud.conf，跳过云盘备份配置"
+  echo "   .cloud.conf 用于配置云端备份路径（Google Drive / OneDrive）"
+  echo "   如需备份功能，请从 .cloud.conf.example 创建模板并配置"
+else
+  # shellcheck source=/dev/null
+  source "${CONF_FILE}"
 
-# shellcheck source=/dev/null
-source "${CONF_FILE}"
+  case "${CLOUD_PROVIDER:-google_drive}" in
+    google_drive) CLOUD_ROOT="${GOOGLE_DRIVE_PATH}" ;;
+    onedrive)     CLOUD_ROOT="${ONEDRIVE_PATH}" ;;
+    custom)       CLOUD_ROOT="${CUSTOM_CLOUD_PATH}" ;;
+  esac
+  CLOUD_ROOT="${CLOUD_ROOT/#\~/$HOME}"
 
-case "${CLOUD_PROVIDER:-google_drive}" in
-  google_drive) CLOUD_ROOT="${GOOGLE_DRIVE_PATH}" ;;
-  onedrive)     CLOUD_ROOT="${ONEDRIVE_PATH}" ;;
-  custom)       CLOUD_ROOT="${CUSTOM_CLOUD_PATH}" ;;
-esac
-CLOUD_ROOT="${CLOUD_ROOT/#\~/$HOME}"
-export BACKUP_ROOT="${CLOUD_ROOT}/${BACKUP_SUBDIR:-myopenclaw-backups}"
+  if [[ ! -d "${CLOUD_ROOT}" ]]; then
+    echo "   ⚠️  云盘目录不存在: ${CLOUD_ROOT}，跳过备份配置"
+    echo "   请确认云盘客户端已登录，或创建 .cloud.conf 指向有效路径"
+  else
+    export BACKUP_ROOT="${CLOUD_ROOT}/${BACKUP_SUBDIR:-myopenclaw-backups}"
+    mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude"
+    HAS_CLOUD_CONF=true
 
-if [[ ! -d "${CLOUD_ROOT}" ]]; then
-  echo "❌ 云盘目录不存在: ${CLOUD_ROOT}，请确认云盘客户端已登录"
-  exit 1
-fi
-
-mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude"
-
-# ── 自动推导 GDRIVE_PAPERS_LOCAL_PATH（若 .env 未设置）────────────
-if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
-  export GDRIVE_PAPERS_LOCAL_PATH="${CLOUD_ROOT}/Papers/Zotero_Papers"
-  echo "   📁 GDRIVE_PAPERS_LOCAL_PATH 自动推导: ${GDRIVE_PAPERS_LOCAL_PATH}"
+    # ── 自动推导 GDRIVE_PAPERS_LOCAL_PATH（若 .env 未设置）────
+    if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
+      export GDRIVE_PAPERS_LOCAL_PATH="${CLOUD_ROOT}/Papers/Zotero_Papers"
+      echo "   📁 GDRIVE_PAPERS_LOCAL_PATH 自动推导: ${GDRIVE_PAPERS_LOCAL_PATH}"
+    fi
+  fi
 fi
 
 # ── 确保工具配置目录存在（volume mount 需要）──────────────────
@@ -256,8 +261,17 @@ done
 # ── OpenClaw：版本可见性 + 配置兼容性检查 ─────────────────────
 OPENCLAW_NPM_VERSION=""
 OPENCLAW_DOCKER_VERSION=""
-if [[ -x /opt/homebrew/lib/node_modules/openclaw/dist/index.js ]]; then
-  OPENCLAW_NPM_VERSION=$(/opt/homebrew/lib/node_modules/openclaw/dist/index.js --version 2>/dev/null | head -1 || echo "unknown")
+# 跨平台定位 openclaw binary：优先 which，其次常见 npm global 路径
+OPENCLAW_BIN=""
+if command -v openclaw 2>/dev/null; then
+  OPENCLAW_BIN="$(command -v openclaw)"
+elif [[ -x /opt/homebrew/lib/node_modules/openclaw/dist/index.js ]]; then
+  OPENCLAW_BIN="/opt/homebrew/lib/node_modules/openclaw/dist/index.js"
+elif [[ -x /usr/local/lib/node_modules/openclaw/dist/index.js ]]; then
+  OPENCLAW_BIN="/usr/local/lib/node_modules/openclaw/dist/index.js"
+fi
+if [[ -n "${OPENCLAW_BIN}" ]]; then
+  OPENCLAW_NPM_VERSION=$("${OPENCLAW_BIN}" --version 2>/dev/null | head -1 || echo "unknown")
 fi
 if docker compose config 2>/dev/null | grep -q "openclaw-gateway"; then
   OPENCLAW_DOCKER_VERSION=$(docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs --version 2>/dev/null | tail -1 || echo "unknown")
@@ -304,7 +318,9 @@ if [[ "${1:-}" == "--build" ]]; then
 fi
 
 echo "🚀 启动服务..."
-echo "   备份目录: ${BACKUP_ROOT}"
+if [[ -n "${BACKUP_ROOT:-}" ]]; then
+  echo "   备份目录: ${BACKUP_ROOT}"
+fi
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
 

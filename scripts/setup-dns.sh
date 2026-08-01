@@ -129,7 +129,8 @@ for domain in "${HOSTS_DOMAINS[@]}"; do
     echo "   ✅ ${domain} → ${ip} — 已是最新，跳过"
   elif [[ -n "${existing_ip}" ]]; then
     echo "   🔄 ${domain} → ${ip}（旧: ${existing_ip}）"
-    sudo sed -i '' "s/${existing_ip}[[:space:]]\\+${domain}/${ip}	${domain}/" /etc/hosts
+    sudo sed -i.bak "s/${existing_ip}[[:space:]]\\+${domain}/${ip}	${domain}/" /etc/hosts
+    sudo rm -f /etc/hosts.bak
   else
     echo "   🆕 ${domain} → ${ip}"
     echo "${ip}	${domain}" | sudo tee -a /etc/hosts > /dev/null
