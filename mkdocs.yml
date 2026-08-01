@@ -60,7 +60,7 @@ nav:
       - 飞书 CLI (lark-cli): lark-cli.md
       - TDAI 长期记忆: tdai-memory.md
       - Google Drive 论文: google-drive-rclone.md
-      - Zotero 文献: zotero-cli-cc.md
+      - Zotero 文献 (mylibrary): zotero-cli-cc.md
   - 集成:
       - dailyinfo 调度: dailyinfo.md
       - 研发日报: daily-dev-report.md

@@ -41,7 +41,6 @@ services:
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
-      # Zotero CLI (zotero-cli-cc)
       - ZOT_DATA_DIR=/opt/zotero-data
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
@@ -111,7 +110,6 @@ services:
       - PAPER_FETCH_DIR=/opt/data/skills/paper-fetch
       - ZOTERO_CONFIG_PATH=/opt/data/.config/zot/config.toml
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
-      # Zotero CLI (zotero-cli-cc)
       - ZOT_DATA_DIR=/opt/zotero-data
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
@@ -163,7 +161,6 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=finance
-      # Zotero CLI (zotero-cli-cc)
       - ZOT_DATA_DIR=/opt/zotero-data
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
@@ -218,15 +215,6 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=daoyuan
-      # Paper pipeline
-      - PAPER_FETCH_DIR=/opt/data/skills/paper-fetch
-      - ZOTERO_CONFIG_PATH=/opt/data/.config/zot/config.toml
-      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
-      # Zotero CLI (道元·只读)
-      - ZOT_DATA_DIR=/opt/zotero-data
-      - ZOTERO_API_KEY=${DAOYUAN_ZOTERO_API_KEY:-}
-      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
-      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       # Feishu (道元·文献学者 — 开放给群内所有人)
