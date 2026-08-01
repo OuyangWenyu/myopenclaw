@@ -356,8 +356,8 @@ if [[ -d "${MYLIBRARY_SRC}" ]]; then
         --exclude '*.egg-info' \
         "${MYLIBRARY_SRC}/" "${MYLIBRARY_CTX}/"
 else
-    # 确保 build context 干净（没有上次残留的源码）
-    rm -rf "${MYLIBRARY_CTX}"
+    # Keep empty dir so Docker COPY doesn't fail — git fallback in Dockerfile handles it
+    mkdir -p "${MYLIBRARY_CTX}"
     echo "   📚 mylibrary 本地未找到，build 时将使用 GitHub clone"
 fi
 
@@ -377,7 +377,8 @@ if [[ -d "${MYLIBRARY_SRC}" ]]; then
         --exclude '*.egg-info' \
         "${MYLIBRARY_SRC}/" "${ZOTERO_MCP_CTX}/"
 else
-    rm -rf "${ZOTERO_MCP_CTX}"
+    # Keep empty dir so Docker COPY doesn't fail — git fallback in Dockerfile handles it
+    mkdir -p "${ZOTERO_MCP_CTX}"
     echo "   📚 zotero-mcp: mylibrary 本地未找到，build 时将使用 GitHub clone"
 fi
 

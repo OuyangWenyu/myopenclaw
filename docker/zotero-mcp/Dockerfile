@@ -5,6 +5,8 @@
 
 FROM python:3.12-slim
 
+ARG GITHUB_TOKEN=""
+
 WORKDIR /app
 
 # Copy mylibrary source (rsync'd by start.sh, or empty dir for git fallback)
@@ -16,7 +18,11 @@ RUN if [ -f /tmp/mylibrary-src/hydrolitagent/zotero/server.py ]; then \
     else \
       echo "   📚 zotero-mcp: local source not found, cloning from GitHub" && \
       apt-get update && apt-get install -y --no-install-recommends git ca-certificates && \
-      git clone --depth 1 https://github.com/OuyangWenyu/mylibrary.git /tmp/mylibrary-git && \
+      if [ -n "${GITHUB_TOKEN}" ]; then \
+        git clone --depth 1 "https://oauth2:${GITHUB_TOKEN}@github.com/OuyangWenyu/mylibrary.git" /tmp/mylibrary-git; \
+      else \
+        git clone --depth 1 https://github.com/OuyangWenyu/mylibrary.git /tmp/mylibrary-git; \
+      fi && \
       cp /tmp/mylibrary-git/hydrolitagent/zotero/server.py /app/server.py && \
       apt-get purge -y git && rm -rf /var/lib/apt/lists/*; \
     fi && \

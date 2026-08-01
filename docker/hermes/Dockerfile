@@ -85,8 +85,9 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
 # ── Install mylibrary (hydrolitagent) — local source preferred, git fallback ──
 # start.sh rsyncs ~/code/mylibrary into .mylibrary-src/ before build when available.
-# When missing (e.g. CI / remote build), falls back to git clone.
+# When missing (e.g. CI / remote build), falls back to git clone with GITHUB_TOKEN.
 # Skills are copied from the same source so package and skills stay in sync.
+ARG GITHUB_TOKEN=""
 #
 # IMPORTANT: mylibrary declares mcp>=2.0.0 as a dependency (for its zotero-mcp server),
 # but the Hermes container only needs the paper-pipeline client code (paper_to_zotero,
@@ -101,8 +102,12 @@ RUN if [ -f /tmp/mylibrary-src/pyproject.toml ]; then \
       cp -r /tmp/mylibrary-src/skills /opt/mylibrary-skills && cp /tmp/mylibrary-src/scripts/run_paper_pipeline.sh /opt/hermes/scripts/run-paper-pipeline.sh && chmod +x /opt/hermes/scripts/run-paper-pipeline.sh; \
     else \
       echo "   📚 mylibrary: local source not found, cloning from GitHub" && \
-      apt-get update && apt-get install -y --no-install-recommends git && \
-      git clone --depth 1 https://github.com/OuyangWenyu/mylibrary.git /tmp/mylibrary-git && \
+      apt-get update && apt-get install -y --no-install-recommends git ca-certificates && \
+      if [ -n "${GITHUB_TOKEN}" ]; then \
+        git clone --depth 1 "https://oauth2:${GITHUB_TOKEN}@github.com/OuyangWenyu/mylibrary.git" /tmp/mylibrary-git; \
+      else \
+        git clone --depth 1 https://github.com/OuyangWenyu/mylibrary.git /tmp/mylibrary-git; \
+      fi && \
       uv pip install --python /opt/hermes/.venv/bin/python3 --no-deps /tmp/mylibrary-git/ && \
       uv pip install --python /opt/hermes/.venv/bin/python3 graphifyy openai httpx pyzotero && \
       cp -r /tmp/mylibrary-git/skills /opt/mylibrary-skills && cp /tmp/mylibrary-git/scripts/run_paper_pipeline.sh /opt/hermes/scripts/run-paper-pipeline.sh && chmod +x /opt/hermes/scripts/run-paper-pipeline.sh && \
