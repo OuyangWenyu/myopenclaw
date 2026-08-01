@@ -409,3 +409,237 @@ class TestCitationKeyFromStandardFields:
 
         # citationKey should be built from item["bookTitle"]
         assert extra.get("citationKey") == "Doe2026_AiS"
+
+
+class TestArxivUpgrade:
+    """arXiv DOI → published DOI metadata upgrade (Issue #15)."""
+
+    # ── Shared test data ──────────────────────────────────────────
+
+    ARXIV_DOI = "10.48550/arXiv.2304.12345"
+    PUBLISHED_DOI = "10.1000/neurips2023"
+    ARXIV_ID = "2304.12345"
+
+    @staticmethod
+    def _posted_content_cr():
+        return {
+            "type": "posted-content",
+            "title": ["A Preprint Title"],
+            "container-title": ["arXiv preprint"],
+            "author": [{"given": "Alice", "family": "Wang"}],
+            "published-print": {"date-parts": [[2023, 4, 15]]},
+        }
+
+    @staticmethod
+    def _published_journal_cr():
+        return {
+            "type": "journal-article",
+            "title": ["Published Title in Journal"],
+            "container-title": ["Nature Machine Intelligence"],
+            "volume": "5",
+            "issue": "6",
+            "page": "500-510",
+            "ISSN": ["2522-5839"],
+            "publisher": "Nature Publishing",
+            "author": [{"given": "Alice", "family": "Wang"}],
+            "abstract": "Published version abstract.",
+            "published-print": {"date-parts": [[2023, 12, 1]]},
+        }
+
+    @staticmethod
+    def _published_conf_cr():
+        return {
+            "type": "proceedings-article",
+            "title": ["Published Title at Conference"],
+            "container-title": ["Advances in Neural Information Processing Systems"],
+            "publisher": "Curran Associates",
+            "volume": "36",
+            "page": "1234-1245",
+            "ISBN": ["978-1-7138-7108-8"],
+            "author": [{"given": "Alice", "family": "Wang"}],
+            "abstract": "Conference version.",
+            "published-print": {"date-parts": [[2023, 12, 10]]},
+        }
+
+    @staticmethod
+    def _arxiv_data_with_published_doi():
+        return {
+            "title": "A Preprint Title",
+            "summary": "Abstract from arXiv.",
+            "authors": ["Alice Wang"],
+            "published": "2023-04-15",
+            "primary_category": "cs.LG",
+            "published_doi": "10.1000/neurips2023",
+            "journal_ref": "Nature Machine Intelligence 5, 500-510 (2023)",
+        }
+
+    @staticmethod
+    def _arxiv_data_no_published_doi():
+        return {
+            "title": "A Preprint Title",
+            "summary": "Abstract from arXiv.",
+            "authors": ["Alice Wang"],
+            "published": "2023-04-15",
+            "primary_category": "cs.LG",
+            "published_doi": None,
+            "journal_ref": None,
+        }
+
+    # ── Tests ─────────────────────────────────────────────────────
+
+    def test_arxiv_api_upgrade_to_published_journal(self):
+        """arXiv <arxiv:doi> present → upgrade to published journalArticle."""
+        posted = self._posted_content_cr()
+        published = self._published_journal_cr()
+        arxiv_data = self._arxiv_data_with_published_doi()
+
+        def mock_crossref(doi):
+            if doi == self.ARXIV_DOI:
+                return posted
+            if doi == self.PUBLISHED_DOI:
+                return published
+            return None
+
+        with (
+            patch.object(_mod, "fetch_crossref", side_effect=mock_crossref),
+            patch.object(_mod, "fetch_arxiv", return_value=arxiv_data) as mock_arxiv,
+            patch.object(_mod, "fetch_published_doi_s2") as mock_s2,
+        ):
+            item, extra = _mod.build_item(self.ARXIV_DOI, {})
+
+        # Upgraded to published metadata
+        assert item["itemType"] == "journalArticle"
+        assert item["title"] == "Published Title in Journal"
+        assert item["publicationTitle"] == "Nature Machine Intelligence"
+        assert item["volume"] == "5"
+        assert item["issue"] == "6"
+        assert item["pages"] == "500-510"
+        assert item["ISSN"] == "2522-5839"
+        assert item["publisher"] == "Nature Publishing"
+        assert item["abstractNote"] == "Published version abstract."
+        assert item["date"] == "2023-12-01"
+
+        # arXiv source preserved in extra
+        assert extra["repository"] == "arXiv"
+        assert extra["archiveID"] == "arXiv:2304.12345"
+        assert extra["libraryCatalog"] == "arXiv.org"
+
+        # arXiv API was called, S2 was NOT
+        mock_arxiv.assert_called_once_with(self.ARXIV_ID)
+        mock_s2.assert_not_called()
+
+    def test_s2_fallback_when_arxiv_doi_missing(self):
+        """arXiv <arxiv:doi> absent → S2 fallback → upgrade to conferencePaper."""
+        posted = self._posted_content_cr()
+        published = self._published_conf_cr()
+        arxiv_data = self._arxiv_data_no_published_doi()
+
+        def mock_crossref(doi):
+            if doi == self.ARXIV_DOI:
+                return posted
+            if doi == self.PUBLISHED_DOI:
+                return published
+            return None
+
+        with (
+            patch.object(_mod, "fetch_crossref", side_effect=mock_crossref),
+            patch.object(_mod, "fetch_arxiv", return_value=arxiv_data) as mock_arxiv,
+            patch.object(
+                _mod, "fetch_published_doi_s2", return_value=self.PUBLISHED_DOI
+            ) as mock_s2,
+        ):
+            item, extra = _mod.build_item(self.ARXIV_DOI, {})
+
+        # Upgraded via S2 to conference paper
+        assert item["itemType"] == "conferencePaper"
+        assert item["title"] == "Published Title at Conference"
+        assert item["proceedingsTitle"] == "Advances in Neural Information Processing Systems"
+        assert item["publisher"] == "Curran Associates"
+        assert item["ISBN"] == "978-1-7138-7108-8"
+
+        # arXiv source preserved
+        assert extra["repository"] == "arXiv"
+        assert extra["archiveID"] == "arXiv:2304.12345"
+
+        # Both arXiv and S2 were called
+        mock_arxiv.assert_called_once_with(self.ARXIV_ID)
+        mock_s2.assert_called_once_with(self.ARXIV_ID)
+
+    def test_stays_preprint_when_both_sources_fail(self):
+        """arXiv <arxiv:doi> absent AND S2 returns None → preprint metadata."""
+        posted = self._posted_content_cr()
+        arxiv_data = self._arxiv_data_no_published_doi()
+
+        def mock_crossref(doi):
+            if doi == self.ARXIV_DOI:
+                return posted
+            return None
+
+        with (
+            patch.object(_mod, "fetch_crossref", side_effect=mock_crossref),
+            patch.object(_mod, "fetch_arxiv", return_value=arxiv_data),
+            patch.object(_mod, "fetch_published_doi_s2", return_value=None) as mock_s2,
+        ):
+            item, extra = _mod.build_item(self.ARXIV_DOI, {})
+
+        # Falls through to preprint (posted-content not in type_map → preprint)
+        assert item["itemType"] == "preprint"
+        assert item["title"] == "A Preprint Title"
+
+        # Container info goes to extra (preprint routing)
+        assert extra["publicationTitle"] == "arXiv preprint"
+
+        # arXiv source marked
+        assert extra["repository"] == "arXiv"
+        assert extra["archiveID"] == "arXiv:2304.12345"
+
+        # S2 was attempted
+        mock_s2.assert_called_once_with(self.ARXIV_ID)
+
+    def test_arxiv_source_preserved_after_upgrade(self):
+        """After metadata upgrade, arXiv source fields are present in extra."""
+        posted = self._posted_content_cr()
+        published = self._published_journal_cr()
+        arxiv_data = self._arxiv_data_with_published_doi()
+
+        def mock_crossref(doi):
+            if doi == self.ARXIV_DOI:
+                return posted
+            if doi == self.PUBLISHED_DOI:
+                return published
+            return None
+
+        with (
+            patch.object(_mod, "fetch_crossref", side_effect=mock_crossref),
+            patch.object(_mod, "fetch_arxiv", return_value=arxiv_data),
+            patch.object(_mod, "fetch_published_doi_s2"),
+        ):
+            item, extra = _mod.build_item(self.ARXIV_DOI, {})
+
+        # Source fields are present (added after upgrade)
+        assert extra["repository"] == "arXiv"
+        assert extra["archiveID"] == "arXiv:2304.12345"
+        assert extra["libraryCatalog"] == "arXiv.org"
+
+    def test_non_arxiv_doi_skips_upgrade_path(self):
+        """Regular DOI (not arXiv) — no arXiv/S2 calls, normal routing."""
+        journal_cr = self._published_journal_cr()
+
+        with (
+            patch.object(_mod, "fetch_crossref", return_value=journal_cr) as mock_cr,
+            patch.object(_mod, "fetch_arxiv") as mock_arxiv,
+            patch.object(_mod, "fetch_published_doi_s2") as mock_s2,
+        ):
+            item, extra = _mod.build_item(self.PUBLISHED_DOI, {})
+
+        # Normal journalArticle routing
+        assert item["itemType"] == "journalArticle"
+        assert item["title"] == "Published Title in Journal"
+        assert item["publicationTitle"] == "Nature Machine Intelligence"
+
+        # arXiv and S2 were NEVER called
+        mock_arxiv.assert_not_called()
+        mock_s2.assert_not_called()
+
+        # Crossref called exactly once with the published DOI
+        mock_cr.assert_called_once_with(self.PUBLISHED_DOI)

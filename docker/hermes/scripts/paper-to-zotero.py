@@ -133,6 +133,13 @@ def build_item(doi: str, pf_meta: dict) -> tuple[dict, dict]:
             published_cr = fetch_crossref(published_doi)
             if published_cr:
                 cr = published_cr
+        elif arxiv_id:
+            # arXiv API has no <arxiv:doi> — try Semantic Scholar as fallback
+            published_doi = fetch_published_doi_s2(arxiv_id)
+            if published_doi:
+                published_cr = fetch_crossref(published_doi)
+                if published_cr:
+                    cr = published_cr
 
     if cr:
         # Title
