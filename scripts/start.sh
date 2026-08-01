@@ -85,6 +85,19 @@ else
   fi
 fi
 
+# ── 确保 gc (GitCode CLI) 二进制存在（volume mount 需要）─────
+# gc 是 Linux 专用二进制（从 GitCode 源码编译），Mac 上不存在。
+# Docker volume mount 要求源路径存在，否则容器启动失败。
+# 如果 gc 不存在（目录或缺失），创建占位文件让挂载不报错。
+GC_BIN="${HOME}/.openclaw/bin/gc"
+if [[ ! -f "${GC_BIN}" ]]; then
+  mkdir -p "$(dirname "${GC_BIN}")"
+  rm -rf "${GC_BIN}"  # 可能是空目录
+  touch "${GC_BIN}"
+  echo "   ⚠️  gc (GitCode CLI) 二进制不存在，已创建占位文件"
+  echo "   Linux 部署请从源码编译: https://gitcode.com/gitcode-cli"
+fi
+
 # ── 确保工具配置目录存在（volume mount 需要）──────────────────
 mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode" "${HOME}/.lark-cli"
 mkdir -p "${HOME}/.myagentdata/aisecretary"
