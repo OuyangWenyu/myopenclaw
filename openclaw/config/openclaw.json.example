@@ -99,6 +99,42 @@
       ]
     }
   },
+  "channels": {
+    "discord": {
+      "enabled": false,
+      "token": "__OPENCLAW_DISCORD_BOT_TOKEN__",
+      "dmPolicy": "allowlist",
+      "groupPolicy": "open",
+      "allowFrom": []
+    },
+    "feishu": {
+      "enabled": false,
+      "appId": "__OPENCLAW_FEISHU_APP_ID__",
+      "appSecret": "__OPENCLAW_FEISHU_APP_SECRET__",
+      "domain": "feishu",
+      "connectionMode": "websocket",
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "allowFrom": ["*"],
+      "webhookPath": "/feishu/events",
+      "reactionNotifications": "own",
+      "typingIndicator": true,
+      "resolveSenderNames": true
+    },
+    "dingtalk-connector": {
+      "enabled": false,
+      "dmPolicy": "open",
+      "groupPolicy": "open",
+      "requireMention": true,
+      "accounts": {
+        "__default__": {
+          "name": "默认钉钉应用",
+          "clientId": "__OPENCLAW_DINGTALK_CLIENT_ID__",
+          "clientSecret": "__OPENCLAW_DINGTALK_CLIENT_SECRET__"
+        }
+      }
+    }
+  },
   "plugins": {
     "entries": {
       "moonshot": { "enabled": true },

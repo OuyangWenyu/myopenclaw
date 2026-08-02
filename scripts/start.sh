@@ -242,6 +242,82 @@ install_paper_fetch "${HOME}/.openclaw/skills" "~/.openclaw/skills"
 install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
 
 
+# ── 注入 OpenClaw Discord Bot Token ─────────────────────────────
+# 从 .env 读取 OPENCLAW_DISCORD_BOT_TOKEN，注入到 openclaw.json 的 channels.discord.token
+OPENCLAW_DISCORD_BOT_TOKEN="${OPENCLAW_DISCORD_BOT_TOKEN:-$(grep '^OPENCLAW_DISCORD_BOT_TOKEN=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+if [[ -f "${OPENCLAW_CONFIG}" && -n "${OPENCLAW_DISCORD_BOT_TOKEN:-}" ]]; then
+  python3 -c "
+import json, sys
+with open('${OPENCLAW_CONFIG}') as f:
+    d = json.load(f)
+channels = d.setdefault('channels', {})
+discord = channels.setdefault('discord', {})
+old_token = discord.get('token', '')
+discord['token'] = sys.argv[1]
+if old_token != sys.argv[1]:
+    with open('${OPENCLAW_CONFIG}', 'w') as f:
+        json.dump(d, f, indent=2, ensure_ascii=False)
+    print('updated')
+else:
+    print('unchanged')
+" "${OPENCLAW_DISCORD_BOT_TOKEN}"
+  echo "   🔑 已注入 OpenClaw Discord Bot Token"
+fi
+
+# ── 注入 OpenClaw 飞书凭据 ──────────────────────────────────────
+# 从 .env 读取 OPENCLAW_FEISHU_APP_ID / OPENCLAW_FEISHU_APP_SECRET，
+# 注入到 openclaw.json 的 channels.feishu 段。仅当两个值都非空时注入。
+OPENCLAW_FEISHU_APP_ID="${OPENCLAW_FEISHU_APP_ID:-$(grep '^OPENCLAW_FEISHU_APP_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+OPENCLAW_FEISHU_APP_SECRET="${OPENCLAW_FEISHU_APP_SECRET:-$(grep '^OPENCLAW_FEISHU_APP_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+if [[ -f "${OPENCLAW_CONFIG}" && -n "${OPENCLAW_FEISHU_APP_ID:-}" && -n "${OPENCLAW_FEISHU_APP_SECRET:-}" ]]; then
+  python3 -c "
+import json, sys
+with open('${OPENCLAW_CONFIG}') as f:
+    d = json.load(f)
+channels = d.setdefault('channels', {})
+feishu = channels.setdefault('feishu', {})
+old_id = feishu.get('appId', '')
+old_secret = feishu.get('appSecret', '')
+feishu['appId'] = sys.argv[1]
+feishu['appSecret'] = sys.argv[2]
+if old_id != sys.argv[1] or old_secret != sys.argv[2]:
+    with open('${OPENCLAW_CONFIG}', 'w') as f:
+        json.dump(d, f, indent=2, ensure_ascii=False)
+    print('updated')
+else:
+    print('unchanged')
+" "${OPENCLAW_FEISHU_APP_ID}" "${OPENCLAW_FEISHU_APP_SECRET}"
+  echo "   🔑 已注入 OpenClaw 飞书凭据"
+fi
+
+# ── 注入 OpenClaw 钉钉凭据 ──────────────────────────────────────
+# 从 .env 读取 OPENCLAW_DINGTALK_CLIENT_ID / OPENCLAW_DINGTALK_CLIENT_SECRET，
+# 注入到 openclaw.json 的 channels.dingtalk-connector 段。仅当两个值都非空时注入。
+OPENCLAW_DINGTALK_CLIENT_ID="${OPENCLAW_DINGTALK_CLIENT_ID:-$(grep '^OPENCLAW_DINGTALK_CLIENT_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+OPENCLAW_DINGTALK_CLIENT_SECRET="${OPENCLAW_DINGTALK_CLIENT_SECRET:-$(grep '^OPENCLAW_DINGTALK_CLIENT_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+if [[ -f "${OPENCLAW_CONFIG}" && -n "${OPENCLAW_DINGTALK_CLIENT_ID:-}" && -n "${OPENCLAW_DINGTALK_CLIENT_SECRET:-}" ]]; then
+  python3 -c "
+import json, sys
+with open('${OPENCLAW_CONFIG}') as f:
+    d = json.load(f)
+channels = d.setdefault('channels', {})
+dt = channels.setdefault('dingtalk-connector', {})
+accounts = dt.setdefault('accounts', {})
+acct = accounts.setdefault('__default__', {})
+old_id = acct.get('clientId', '')
+old_secret = acct.get('clientSecret', '')
+acct['clientId'] = sys.argv[1]
+acct['clientSecret'] = sys.argv[2]
+if old_id != sys.argv[1] or old_secret != sys.argv[2]:
+    with open('${OPENCLAW_CONFIG}', 'w') as f:
+        json.dump(d, f, indent=2, ensure_ascii=False)
+    print('updated')
+else:
+    print('unchanged')
+" "${OPENCLAW_DINGTALK_CLIENT_ID}" "${OPENCLAW_DINGTALK_CLIENT_SECRET}"
+  echo "   🔑 已注入 OpenClaw 钉钉凭据"
+fi
+
 # ── 注入 OpenClaw GitHub token ──────────────────────────────────
 # 从 .env 读取 OPENCLAW_GH_TOKEN，替换 openclaw.json 中的占位符
 # MCP server 不继承容器环境变量，必须在 JSON 的 env 块中显式声明
