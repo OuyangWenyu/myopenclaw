@@ -543,6 +543,46 @@ if [ "${PROFILE}" != "default" ]; then
     rm -f "${HERMES_HOME}/gateway_state.json"
 fi
 
+# ── Profile-scoped gateway isolation ──────────────────────────
+# Hermes dynamically creates s6-supervised gateway services for ALL
+# profiles after startup. They all share the same container env vars and
+# config.yaml, so they compete for single-connection platform tokens
+# (e.g. Discord). Launch a background task that waits for the gateway
+# services to appear, then kills every one whose profile doesn't match
+# HERMES_PROFILE, and finally restarts the correct gateway so it gets a
+# clean connection.
+HERMES_PROFILE="${HERMES_PROFILE:-default}"
+S6_SVC="/package/admin/s6-2.15.0.0/command/s6-svc"
+if [ -x "${S6_SVC}" ]; then
+  (
+    # Wait for Hermes to create the gateway supervision trees
+    for _ in $(seq 1 12); do
+      sleep 5
+      ls /run/service/gateway-*/run >/dev/null 2>&1 && break
+    done
+    for svc_dir in /run/service/gateway-*; do
+      [ -d "${svc_dir}" ] || continue
+      svc_name="$(basename "${svc_dir}")"
+      profile_suffix="${svc_name#gateway-}"
+      # Keep the matching profile
+      if [ "${profile_suffix}" = "${HERMES_PROFILE}" ]; then
+        "${S6_SVC}" -k "${svc_dir}" 2>/dev/null || true
+        echo "   🔄 重启 ${HERMES_PROFILE} gateway（清理多余连接）"
+        continue
+      fi
+      # gateway-default = profile "default"
+      if [ "${profile_suffix}" = "default" ] && [ "${HERMES_PROFILE}" = "default" ]; then
+        "${S6_SVC}" -k "${svc_dir}" 2>/dev/null || true
+        echo "   🔄 重启 default gateway（清理多余连接）"
+        continue
+      fi
+      # Kill and disable every other gateway
+      "${S6_SVC}" -dk "${svc_dir}" 2>/dev/null || true
+      echo "   🚫 停止多余 gateway: ${svc_name}"
+    done
+  ) &
+fi
+
 # Hand off to s6-overlay init (v0.18+). The init system runs cont-init.d
 # scripts, then executes its first argument as the "main program".
 # main-wrapper.sh routes "$@" (Docker CMD, e.g. "gateway run") to "hermes gateway run".
