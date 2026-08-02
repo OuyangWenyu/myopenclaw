@@ -280,37 +280,29 @@ for _ext_dir in "${HOME}/.openclaw/extensions"/*/; do
   fi
 done
 
+# ── 拉取最新 OpenClaw 镜像 ──────────────────────────────────
+echo "🦞 拉取最新 OpenClaw 镜像..."
+set +e
+PULL_OUTPUT=$(docker compose pull openclaw-gateway 2>&1)
+PULL_EXIT=$?
+set -e
+if [[ "${PULL_EXIT}" -ne 0 ]]; then
+  echo "   ⚠️  OpenClaw 镜像拉取失败，将使用本地缓存继续启动"
+  echo "${PULL_OUTPUT}" | tail -3 | sed 's/^/   │  /'
+else
+  echo "   ✅ OpenClaw 镜像已更新"
+fi
+echo ""
+
 # ── OpenClaw：版本可见性 + 配置兼容性检查 ─────────────────────
-OPENCLAW_NPM_VERSION=""
 OPENCLAW_DOCKER_VERSION=""
-# 跨平台定位 openclaw binary：优先 which，其次常见 npm global 路径
-OPENCLAW_BIN=""
-if command -v openclaw 2>/dev/null; then
-  OPENCLAW_BIN="$(command -v openclaw)"
-elif [[ -x /opt/homebrew/lib/node_modules/openclaw/dist/index.js ]]; then
-  OPENCLAW_BIN="/opt/homebrew/lib/node_modules/openclaw/dist/index.js"
-elif [[ -x /usr/local/lib/node_modules/openclaw/dist/index.js ]]; then
-  OPENCLAW_BIN="/usr/local/lib/node_modules/openclaw/dist/index.js"
-fi
-if [[ -n "${OPENCLAW_BIN}" ]]; then
-  OPENCLAW_NPM_VERSION=$("${OPENCLAW_BIN}" --version 2>/dev/null | head -1 || echo "unknown")
-fi
 if docker compose config 2>/dev/null | grep -q "openclaw-gateway"; then
   OPENCLAW_DOCKER_VERSION=$(docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs --version 2>/dev/null | tail -1 || echo "unknown")
 fi
 
 echo ""
 echo "🦞 OpenClaw 版本检查"
-echo "   launchd 网关 (npm):  ${OPENCLAW_NPM_VERSION:-未安装}"
 echo "   Docker 网关 (镜像): ${OPENCLAW_DOCKER_VERSION:-未安装}"
-
-if [[ -n "${OPENCLAW_NPM_VERSION}" && -n "${OPENCLAW_DOCKER_VERSION}" ]] \
-  && [[ "${OPENCLAW_NPM_VERSION}" != "${OPENCLAW_DOCKER_VERSION}" ]]; then
-  echo "   ⚠️  版本不一致！npm 和 Docker 镜像应保持相同版本，避免配置格式不兼容"
-  echo "   升级方法: npm install -g openclaw@<版本> && 更新 .env OPENCLAW_IMAGE"
-elif [[ -z "${OPENCLAW_NPM_VERSION}" && -z "${OPENCLAW_DOCKER_VERSION}" ]]; then
-  echo "   ℹ️  未检测到 OpenClaw，跳过版本检查"
-fi
 
 # 用 Docker 镜像的 openclaw 校验配置文件兼容性
 # 如果 Docker 版本不认识配置格式，会在这里提前发现，而不是启动后沉默打 762MB 日志

@@ -138,9 +138,7 @@ cat /tmp/report.txt | docker compose exec -T hermes python3 /opt/hermes-skills/d
 
 ## ⚠️ OpenClaw 配置安全规则
 
-**两个网关共享同一份配置** `~/.openclaw/openclaw.json`：
-- launchd 网关 (npm global, 端口 18790) — dailyinfo Discord 推送
-- Docker 网关 (镜像, 端口 18789) — 虾酱主机器人
+OpenClaw 网关（Docker 镜像, 端口 18789）负责 虾酱 Discord 主机器人。配置文件 `~/.openclaw/openclaw.json` 通过 volume mount 挂载到容器内。
 
 **禁止从 host 运行任何会写入配置的 openclaw 命令**，必须在 Docker 容器内操作：
 
@@ -156,13 +154,10 @@ docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs config
 
 **原因**：2026.3.31 因为 host 上运行的 `openclaw doctor --fix` 写出了 Docker 不认识的 streaming 配置格式，导致 gateway.err.log 在 3 个月内增长到 762MB（2380 万行重复错误），无人察觉。
 
-**升级流程**（保持两个网关版本一致）：
+**升级流程**：
 ```bash
-# 1. 更新 npm global 版本
-npm install -g openclaw@<版本>
-# 2. 更新 .env 中的 OPENCLAW_IMAGE
-# 3. 拉取新镜像并重启
-docker compose pull openclaw-gateway
+# 1. 更新 .env 中的 OPENCLAW_IMAGE（默认 latest 自动跟随最新 stable）
+# 2. start.sh 启动前会自动 docker compose pull 拉取最新镜像
 ./scripts/start.sh
 ```
 
