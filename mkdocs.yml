@@ -61,9 +61,10 @@ nav:
       - TDAI 长期记忆: tdai-memory.md
       - Google Drive 论文: google-drive-rclone.md
       - Zotero 文献 (mylibrary): zotero-cli-cc.md
-  - 集成:
+  - 能力:
       - dailyinfo 调度: dailyinfo.md
       - 研发日报: daily-dev-report.md
+      - zhixun 知汛助手: zhixun-feishu-bot.md
       - 事务追踪 (aisecretary): aisecretary.md
   - 运维:
       - 调度系统: scheduling.md

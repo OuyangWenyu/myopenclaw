@@ -1,6 +1,6 @@
 # 架构
 
-myopenclaw 由 14 个 Docker 服务组成（不含 profile-gated 的 openclaw-cli），运行在共享的 `myopenclaw-net` 桥接网络上。
+myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务组成（不含 profile-gated 的 openclaw-cli）。主栈运行在共享的 `myopenclaw-net` 桥接网络上，zhixun 栈运行在独立的 `zhixun-bot-net` 上。
 
 ## 服务拓扑
 
@@ -28,6 +28,13 @@ myopenclaw 由 14 个 Docker 服务组成（不含 profile-gated 的 openclaw-cl
 | uptime-kuma | 3001 | 服务监控面板，HTTP + Docker 容器状态 |
 | backup-cron | — | 定时快照备份 |
 
+### zhixun 独立栈（`docker-compose.zhixun-bot.yml`，`zhixun-bot-net` 网络）
+
+| 服务 | 端口 | 说明 |
+|------|------|------|
+| zhixun-water-mcp | 18201 | 水文 MCP 服务（43 tools），包装 zhixun-agent 源码 + v2 兼容层 |
+| openclaw-zhixun | 18791 | OpenClaw gateway（知汛助手），飞书 bot，仅 MCP 工具无代码执行 |
+
 ## 数据目录映射
 
 所有持久化数据在宿主机，通过 Docker volume 挂载：
@@ -46,6 +53,8 @@ myopenclaw 由 14 个 Docker 服务组成（不含 profile-gated 的 openclaw-cl
 | `~/.config/opencode` | `/opt/opencode-config` | hermes | opencode 配置 |
 | `~/.lark-cli` | `/opt/lark-config` | hermes | lark-cli 配置 |
 | `~/.uptime-kuma` | `/app/data` | uptime-kuma | 监控 SQLite + 配置 |
+| `~/.openclaw-zhixun` | `/home/node/.openclaw` | openclaw-zhixun | zhixun bot 配置和插件 |
+| `~/.openclaw-zhixun-mcp` | `/var/lib/zhixun-water-mcp` | zhixun-water-mcp | 水文站点名称索引缓存 |
 | `~/code` + `~/Code` | `/home/node/code` + `/home/node/Code` | claude-code | 代码仓库 |
 
 ## 安全边界
@@ -56,9 +65,11 @@ myopenclaw 由 14 个 Docker 服务组成（不含 profile-gated 的 openclaw-cl
 
 - **Claude Code = 编码 Agent**。通过 cc-connect 直连飞书，专注于代码任务。持有 `DEEPSEEK_API_KEY` / `ANTHROPIC_API_KEY`，独立于 Hermes。
 
-- **OpenClaw = 协作网关**。不持有个人密钥，可安全开放到多人场景。配置与个人身份无关，适合工作流编排。
+- **OpenClaw 虾酱 = 协作网关**。不持有个人密钥，可安全开放到多人场景。配置与个人身份无关，适合工作流编排。
 
-**简言之：需要你的 key 的 → Hermes / Claude Code；可以给别人用的 → OpenClaw。**
+- **OpenClaw 知汛 = 独立水文 bot**。完全隔离的 Compose 栈，独立网络、独立飞书应用凭据、独立模型 API Key。不接入主栈的 Hermes、长期记忆或任何其他共享服务。仅开放 MCP 查询工具，写工具默认关闭。
+
+**简言之：需要你的 key 的 → Hermes / Claude Code；可以给别人用的 → OpenClaw 虾酱；查水文数据的 → OpenClaw 知汛。**
 
 ## 密钥传递机制
 
@@ -72,7 +83,7 @@ myopenclaw 由 14 个 Docker 服务组成（不含 profile-gated 的 openclaw-cl
 
 ## 网络
 
-所有服务在 `myopenclaw-net` 桥接网络上，通过 Docker DNS（容器名）互相访问。部分服务需要访问外部 Chinese 域名时，可能需要配置 DNS —— 详见 [DNS 配置](dns-setup.md)。
+主栈所有服务在 `myopenclaw-net` 桥接网络上，通过 Docker DNS（容器名）互相访问。zhixun 栈使用独立的 `zhixun-bot-net` 桥接网络，与主栈物理隔离。部分服务需要访问外部 Chinese 域名时，可能需要配置 DNS —— 详见 [DNS 配置](dns-setup.md)。
 
 ## 容器内路径注意事项
 
