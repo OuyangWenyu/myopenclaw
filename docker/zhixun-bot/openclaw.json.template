@@ -1,0 +1,148 @@
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "deepseek": {
+        "baseUrl": "__MODEL_BASE_URL__",
+        "apiKey": "__MODEL_API_KEY__",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "__MODEL_ID__",
+            "name": "Zhixun Bot Model",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "deepseek/__MODEL_ID__"
+      }
+    },
+    "list": [
+      {
+        "id": "zhixun-water",
+        "default": true,
+        "workspace": "/home/node/.openclaw/workspace",
+        "sandbox": {
+          "mode": "off"
+        },
+        "tools": {
+          "allow": ["bundle-mcp"]
+        }
+      }
+    ]
+  },
+  "tools": {
+    "profile": "messaging",
+    "codeMode": false
+  },
+  "mcp": {
+    "servers": {
+      "water_unified": {
+        "url": "http://zhixun-water-mcp:18201/sse",
+        "transport": "sse",
+        "connectionTimeoutMs": 10000,
+        "requestTimeoutMs": 120000,
+        "supportsParallelToolCalls": true,
+        "toolFilter": {
+          "exclude": [
+            "briefing_create",
+            "briefing_update",
+            "briefing_delete",
+            "briefing_execute_and_collect",
+            "briefing_save_as_template",
+            "briefing_create_from_template",
+            "briefing_clone",
+            "hydromodel_list",
+            "dispatch_task_create",
+            "dispatch_task_update_conditions",
+            "dispatch_task_execute",
+            "item_add",
+            "item_add_batch",
+            "item_update",
+            "item_delete"
+          ]
+        }
+      }
+    }
+  },
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "domain": "feishu",
+      "connectionMode": "websocket",
+      "appId": "__FEISHU_APP_ID__",
+      "appSecret": "__FEISHU_APP_SECRET__",
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
+      "groupPolicy": "open",
+      "requireMention": true,
+      "groupSessionScope": "group",
+      "streaming": true,
+      "typingIndicator": true,
+      "resolveSenderNames": false,
+      "configWrites": false,
+      "tools": {
+        "doc": false,
+        "chat": false,
+        "wiki": false,
+        "drive": false,
+        "perm": false,
+        "scopes": false,
+        "bitable": false
+      }
+    }
+  },
+  "bindings": [
+    {
+      "agentId": "zhixun-water",
+      "match": {
+        "channel": "feishu"
+      }
+    }
+  ],
+  "session": {
+    "dmScope": "per-channel-peer",
+    "resetByType": {
+      "group": {
+        "mode": "idle",
+        "idleMinutes": 120
+      }
+    }
+  },
+  "gateway": {
+    "port": 18791,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+  "plugins": {
+    "entries": {
+      "deepseek": {
+        "enabled": true
+      },
+      "feishu": {
+        "enabled": true
+      }
+    }
+  }
+}

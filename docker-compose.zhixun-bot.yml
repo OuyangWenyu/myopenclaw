@@ -1,0 +1,101 @@
+name: myopenclaw-zhixun-bot
+
+services:
+  zhixun-water-mcp:
+    build:
+      context: ./docker/zhixun-bot
+      dockerfile: Dockerfile.mcp
+      additional_contexts:
+        zhixun_src: ${ZHIXUN_AGENT_PATH:-../zhixun-agent}
+      args:
+        PYTHON_BASE_IMAGE: ${ZHIXUN_BOT_PYTHON_BASE_IMAGE:-docker.m.daocloud.io/library/python:3.12-slim}
+        PIP_INDEX_URL: ${ZHIXUN_BOT_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
+    image: myopenclaw/zhixun-water-mcp:latest
+    container_name: zhixun-water-mcp
+    restart: unless-stopped
+    working_dir: /app/mcp_servers/water
+    command:
+      - python
+      - mcp_entrypoint.py
+      - sse
+      - --host
+      - 0.0.0.0
+      - --port
+      - "18201"
+    environment:
+      ZHIXUN_CORE_BASE_URL: ${ZHIXUN_CORE_BASE_URL:-https://ws.waterism.tech:8090/api/v2}
+      ZHIXUN_MCP_STATION_INDEX_PATH: /var/lib/zhixun-water-mcp/station-index.json
+      ZHIXUN_MCP_STATION_INDEX_TTL_SECONDS: ${ZHIXUN_MCP_STATION_INDEX_TTL_SECONDS:-86400}
+      ZHIXUN_MCP_STATION_INDEX_WORKERS: ${ZHIXUN_MCP_STATION_INDEX_WORKERS:-12}
+    volumes:
+      - ${ZHIXUN_BOT_MCP_DATA_DIR:-${HOME}/.openclaw-zhixun-mcp}:/var/lib/zhixun-water-mcp
+    expose:
+      - "18201"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import socket; s=socket.create_connection(('127.0.0.1', 18201), 2); s.close()"
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+    networks:
+      - zhixun-bot-net
+
+  openclaw-zhixun:
+    image: ${ZHIXUN_BOT_OPENCLAW_IMAGE:-docker.m.daocloud.io/openclaw/openclaw:2026.7.1}
+    container_name: openclaw-zhixun
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - /opt/zhixun-bot/entrypoint.sh
+    volumes:
+      - ${ZHIXUN_BOT_DATA_DIR:-${HOME}/.openclaw-zhixun}:/home/node/.openclaw
+      - ./docker/zhixun-bot:/opt/zhixun-bot:ro
+      - ./openclaw-zhixun/workspace:/opt/zhixun-workspace:ro
+    environment:
+      HOME: /home/node
+      TZ: ${TZ:-Asia/Shanghai}
+      # OpenClaw custom providers may resolve the legacy built-in key name;
+      # keep both aliases while the displayed provider remains zhipu.
+      ZHIXUN_BOT_MODEL_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
+      ZHIPU_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
+      DEEPSEEK_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
+      ZHIXUN_BOT_FEISHU_APP_ID: ${ZHIXUN_BOT_FEISHU_APP_ID:?请设置飞书 App ID}
+      ZHIXUN_BOT_FEISHU_APP_SECRET: ${ZHIXUN_BOT_FEISHU_APP_SECRET:?请设置飞书 App Secret}
+      # false 使用普通文本回复，不显示流式卡片中的 Agent/Model/Provider 元信息。
+      ZHIXUN_BOT_FEISHU_STREAMING: ${ZHIXUN_BOT_FEISHU_STREAMING:-false}
+      ZHIXUN_BOT_MODEL_ID: ${ZHIXUN_BOT_MODEL_ID:-deepseek-v4-pro}
+      ZHIXUN_BOT_MODEL_BASE_URL: ${ZHIXUN_BOT_MODEL_BASE_URL:-https://api.deepseek.com}
+      ZHIXUN_BOT_ENABLE_WRITE_TOOLS: ${ZHIXUN_BOT_ENABLE_WRITE_TOOLS:-false}
+    depends_on:
+      zhixun-water-mcp:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:18791/healthz
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+    networks:
+      - zhixun-bot-net
+
+networks:
+  zhixun-bot-net:
+    driver: bridge

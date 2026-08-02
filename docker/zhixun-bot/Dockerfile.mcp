@@ -1,0 +1,25 @@
+ARG PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim
+FROM ${PYTHON_BASE_IMAGE}
+
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1
+
+RUN pip install --no-cache-dir --index-url "${PIP_INDEX_URL}" \
+    "mcp>=1.20.0,<2" \
+    "httpx>=0.27" \
+    "loguru>=0.7.3" \
+    "pypinyin>=0.50.0" \
+    "uvicorn>=0.30"
+
+WORKDIR /app/mcp_servers/water
+
+# zhixun_src is supplied by docker-compose.zhixun-bot.yml as an additional
+# BuildKit context. The zhixun-agent repository does not need a Dockerfile.
+COPY --from=zhixun_src /mcp_servers/water/ ./
+COPY zhixun_core_v2_compat.py related_page_compat.py briefing_compat.py mcp_entrypoint.py ./
+
+EXPOSE 18201
+
+CMD ["python", "mcp_entrypoint.py", "sse", "--host", "0.0.0.0", "--port", "18201"]
