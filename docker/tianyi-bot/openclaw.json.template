@@ -1,0 +1,126 @@
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "deepseek": {
+        "baseUrl": "__MODEL_BASE_URL__",
+        "apiKey": "__MODEL_API_KEY__",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "__MODEL_ID__",
+            "name": "Tianyi Bot Model",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "deepseek/__MODEL_ID__"
+      },
+      "workspace": "/home/node/.openclaw/workspace"
+    },
+    "list": [
+      {
+        "id": "tianyi-dev",
+        "default": true,
+        "workspace": "/home/node/.openclaw/workspace",
+        "sandbox": {
+          "mode": "off"
+        }
+      }
+    ]
+  },
+  "tools": {
+    "profile": "coding"
+  },
+  "mcp": {
+    "servers": {
+      "repo-scanner": {
+        "url": "http://repo-scanner-mcp:8001/mcp",
+        "transport": "sse",
+        "connectionTimeoutMs": 10000,
+        "requestTimeoutMs": 120000,
+        "supportsParallelToolCalls": true
+      }
+    }
+  },
+  "channels": {
+    "feishu": {
+      "enabled": true,
+      "domain": "feishu",
+      "connectionMode": "websocket",
+      "appId": "__FEISHU_APP_ID__",
+      "appSecret": "__FEISHU_APP_SECRET__",
+      "dmPolicy": "open",
+      "allowFrom": ["*"],
+      "groupPolicy": "open",
+      "requireMention": true,
+      "groupSessionScope": "group",
+      "streaming": true,
+      "typingIndicator": true,
+      "resolveSenderNames": false,
+      "configWrites": false,
+      "tools": {
+        "doc": false,
+        "chat": false,
+        "wiki": false,
+        "drive": false,
+        "perm": false,
+        "scopes": false,
+        "bitable": false
+      }
+    }
+  },
+  "bindings": [
+    {
+      "agentId": "tianyi-dev",
+      "match": {
+        "channel": "feishu"
+      }
+    }
+  ],
+  "session": {
+    "dmScope": "per-channel-peer",
+    "resetByType": {
+      "group": {
+        "mode": "idle",
+        "idleMinutes": 120
+      }
+    }
+  },
+  "gateway": {
+    "port": 18792,
+    "mode": "local",
+    "bind": "loopback",
+    "auth": {
+      "mode": "token"
+    },
+    "tailscale": {
+      "mode": "off",
+      "resetOnExit": false
+    }
+  },
+  "plugins": {
+    "entries": {
+      "deepseek": {
+        "enabled": true
+      },
+      "feishu": {
+        "enabled": true
+      }
+    }
+  }
+}
