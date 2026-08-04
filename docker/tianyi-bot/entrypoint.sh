@@ -31,8 +31,21 @@ if [ "$(id -u)" = "0" ]; then
     echo "✅ gitcode-cli installed: $(gc --version 2>&1 || true)"
   fi
 
-  # Fix ownership of home dir after root-level npm/cp operations
-  chown -R node:node /home/node 2>/dev/null || true
+  # Install feishu + deepseek plugins as root (OpenClaw requires root-owned plugin dirs)
+  PLUGIN_MARKER="/home/node/.openclaw/.plugins-installed"
+  mkdir -p /home/node/.openclaw
+  if [ ! -f "${PLUGIN_MARKER}" ]; then
+    echo "📦 Installing OpenClaw feishu plugin..."
+    HOME=/home/node node /app/openclaw.mjs plugins install @openclaw/feishu
+    echo "📦 Installing OpenClaw deepseek plugin..."
+    HOME=/home/node node /app/openclaw.mjs plugins install @openclaw/deepseek-provider
+    touch "${PLUGIN_MARKER}"
+  fi
+
+  # Fix ownership: state dir + config belong to node; npm/ stays root for plugins
+  chown node:node /home/node /home/node/.openclaw 2>/dev/null || true
+  [ -d /home/node/.config ] && chown -R node:node /home/node/.config 2>/dev/null || true
+  [ -d /home/node/.gitcode ] && chown -R node:node /home/node/.gitcode 2>/dev/null || true
 
   # Re-exec as node user for Phase 2
   echo "🔑 Switching to node user..."
@@ -75,6 +88,7 @@ fi
 
 if [ -n "${TIANYI_BOT_MODEL_API_KEY:-}" ]; then
   export DEEPSEEK_API_KEY="${TIANYI_BOT_MODEL_API_KEY}"
+  export OPENAI_API_KEY="${TIANYI_BOT_MODEL_API_KEY}"
 fi
 
 # ── Wait for repo-scanner-mcp ────────────────────────────────────────────
@@ -99,13 +113,6 @@ for source_file in /opt/tianyi-workspace/*; do
   target_file="${WORKSPACE_DIR}/$(basename "${source_file}")"
   cp "${source_file}" "${target_file}"
 done
-
-# ── Install feishu plugin (once) ─────────────────────────────────────────
-if [ ! -f "${PLUGIN_MARKER}" ]; then
-  echo "📦 Installing OpenClaw feishu plugin..."
-  node /app/openclaw.mjs plugins install @openclaw/feishu
-  touch "${PLUGIN_MARKER}"
-fi
 
 # ── Render config from template ──────────────────────────────────────────
 node /opt/tianyi-bot/render-config.mjs \
