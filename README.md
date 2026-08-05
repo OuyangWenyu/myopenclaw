@@ -15,6 +15,7 @@
 | 研发日报 | repo-scanner MCP 采集 27 仓库 → Hermes skill → 飞书推送 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
 | 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |
 | 事务追踪 | aisecretary MCP 服务 → SQLite 持久化 | [aisecretary](https://github.com/iHeadWater/aisecretary) |
+| 语雀知识库 | Hermes 远程 MCP（读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
 | 服务健康监控 | AgentOps 采集（容器/备份/磁盘/网关信号）→ 晨间三签输入 | — |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 | — |
@@ -84,6 +85,12 @@ cp .cloud.conf.example .cloud.conf
 | uptime-kuma | 3001 | 服务监控面板 |
 | backup-cron | — | 定时快照备份 |
 
+外部接入服务：
+
+| 服务 | 接入方式 | 说明 |
+|------|----------|------|
+| yuque-mcp | 远程 SSE（`scripts/bootstrap_hermes.sh` 注册） | 语雀知识库 MCP，服务端部署在服务器，Hermes 通过 Bearer key 访问，skill 由 `skills/yuque-knowledge/` 挂载 |
+
 ## 目录结构
 
 ```
@@ -109,6 +116,7 @@ myopenclaw/
 - [架构](https://ouyangwenyu.github.io/myopenclaw/architecture/) — 服务拓扑、数据目录、安全边界
 - [可移植性](https://ouyangwenyu.github.io/myopenclaw/portability/) — 换电脑需要准备什么
 - [备份系统](https://ouyangwenyu.github.io/myopenclaw/backup/) — 备份内容、恢复流程
+- [语雀知识库接入](https://ouyangwenyu.github.io/myopenclaw/yuque-mcp-hermes/) — Hermes 接入远程语雀 MCP 服务
 
 本地预览文档：
 
