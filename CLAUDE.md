@@ -145,6 +145,18 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml logs 
 docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml logs -f zhixun-water-mcp  # MCP 日志
 docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml exec openclaw-zhixun node /app/openclaw.mjs mcp probe water_unified --json  # MCP 工具列表（43 tools）
 docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml stop   # 停止服务
+
+# tianyi 飞书机器人（天一研发助手）— 独立 Compose 栈，GitHub/GitCode 仓库访问专用
+# 使用独立的 .env.tianyi-bot 配置 + docker-compose.tianyi-bot.yml
+# 前提：需要主栈已启动（共享 myopenclaw-net，复用 repo-scanner-mcp）
+./scripts/start-tianyi-bot.sh --build                        # 首次启动
+./scripts/start-tianyi-bot.sh                                # 启动（使用已有镜像）
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml ps     # 服务状态
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml logs -f openclaw-tianyi  # 网关日志
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi node /app/openclaw.mjs mcp probe repo-scanner --json  # MCP 连接测试
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi gh --version  # gh CLI 版本
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi gc --version  # gitcode-cli 版本
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml stop   # 停止服务
 ```
 
 ## ⚠️ OpenClaw 配置安全规则
@@ -179,7 +191,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 ## Architecture
 
-**Ten Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network (13 total including profile-gated containers). Plus a **separate zhixun bot stack** (`docker-compose.zhixun-bot.yml`) with its own isolated network:
+**Ten Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network (13 total including profile-gated containers). Plus two **separate bot stacks**: **zhixun** (`docker-compose.zhixun-bot.yml`, isolated `zhixun-bot-net`) and **tianyi** (`docker-compose.tianyi-bot.yml`, shares `myopenclaw-net`).
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
@@ -210,6 +222,10 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 11. **openclaw-zhixun** — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.7.1` image with custom entrypoint. Port 18791 (loopback only, not exposed). Connected to Feishu via independent bot (`ZHIXUN_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-v4-pro with independent API key. Only MCP tools allowed (no code execution, browser, or file access). Uses `render-config.mjs` to inject credentials into `openclaw.json.template` at startup. Resource limits: 2G/1 CPU.
 
+**tianyi bot stack** (`docker-compose.tianyi-bot.yml`, shares `myopenclaw-net` network with main stack, managed separately):
+
+12. **openclaw-tianyi** (天一研发助手) — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.7.1` image with custom entrypoint. Port 18792 (loopback only, not exposed). Connected to Feishu via independent bot (`TIANYI_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-v4-pro with independent API key. **Coding profile** (terminal + MCP): reads repo activity via shared `repo-scanner-mcp`, creates GitHub/GitCode issues via `gh` and `gc` CLI (installed at startup in entrypoint). No code execution sandbox. Data dir: `~/.openclaw-tianyi`. Requires main stack running (repo-scanner-mcp). Resource limits: 2G/1 CPU.
+
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
 **dailyinfo scheduling**: Managed via host launchd (not Docker). `scripts/launchd/` contains plist templates and install/uninstall scripts. dailyinfo is a sibling repo (`../dailyinfo`) with its own Docker services (FreshRSS).
@@ -238,7 +254,9 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 - **Zotero access model — write vs read-only**: 爱码士 (coder) has full write access via `ZOTERO_API_KEY` for paper injection. 道元 (daoyuan) has **read-only** access via `DAOYUAN_ZOTERO_API_KEY` — can query the library but cannot create/modify items. This separation is enforced at the Zotero API key level (read-only key only has "Allow library access", no write permission).
 
-- **zhixun bot — fully isolated stack**: The zhixun feishu bot (知汛助手) runs as a completely independent Docker Compose stack with its own network (`zhixun-bot-net`), data directory (`~/.openclaw-zhixun`), feishu app credentials, and model API key. It does NOT connect to the main stack's Hermes, cc-connect, TDAI memory, or any other shared service. The bot is restricted to MCP tools only (no code execution, browser, or file access). Write tools (briefing/dispatch/item) are disabled by default; enabling them requires `ZHIXUN_BOT_ENABLE_WRITE_TOOLS=true`. The MCP server wraps upstream zhixun-agent source code at build time via BuildKit `additional_contexts`, applying runtime compatibility patches for zhixun-core v2 without modifying the zhixun-agent repo. Full docs: `docs/zhixun-feishu-bot.md`.
+- **zhixun bot — fully isolated stack**: ... Full docs: `docs/zhixun-feishu-bot.md`.
+
+- **tianyi bot (天一) — shared-network stack**: The tianyi feishu bot runs as a separate Compose stack but shares `myopenclaw-net` with the main stack (unlike zhixun's fully isolated network). This allows it to reuse the existing `repo-scanner-mcp` for read operations (daily reports, commits, authors). For write operations, the entrypoint installs `gh` CLI (APT) and `gitcode-cli` (npm) at startup — the same pattern used by the Hermes Dockerfile. The agent uses `profile: "coding"` (terminal + MCP) rather than `bundle-mcp`, so it can run CLI commands directly. Startup dependency: main stack must be running first (`scripts/start.sh` before `scripts/start-tianyi-bot.sh`). Data dir: `~/.openclaw-tianyi`.
 
 - **mylibrary (hydrolitagent) — build-time install, local-first**: Paper pipeline code (paper_to_zotero, zot_link_gdrive, run_paper_pipeline.sh) lives in `~/code/mylibrary` and is installed into the hermes image at build time. `start.sh` rsyncs the local source into the Docker build context before `docker compose build`; the Dockerfile installs via `uv pip install` (with `--no-deps` to avoid mcp 2.0 conflicts with the Hermes agent). When local source is unavailable (CI / remote), falls back to `git clone --depth 1`. Skills from the same source are copied to `/opt/mylibrary-skills/` and registered via `external_dirs` in Hermes config. See `docs/zotero-cli-cc.md` for legacy zotero-cli-cc docs.
 
@@ -270,7 +288,9 @@ When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains,
 
 - `docker/<service>/Dockerfile` — custom images (hermes, claude-code, backup-cron)
 - `docker/zhixun-bot/` — zhixun bot MCP Dockerfile + compat layers + config template
+- `docker/tianyi-bot/` — tianyi bot entrypoint + config template + render script
 - `openclaw-zhixun/workspace/` — zhixun bot agent policy files (AGENTS.md, SOUL.md)
+- `openclaw-tianyi/workspace/` — tianyi bot agent policy files (AGENTS.md, SOUL.md)
 - `hermes/scripts/`, `openclaw/scripts/`, `claude/scripts/` — per-service backup scripts, mounted read-only into backup-cron
 - `scripts/` — top-level orchestration scripts (start, stop, restore, cloud setup, launchd, start-zhixun-bot)
 - `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, agentops, healthchecks）

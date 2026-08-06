@@ -12,13 +12,27 @@ set -euo pipefail
 umask 077
 
 # hermes user home = /opt/data; Hermes terminal HOME = /opt/data/home
-# gh CLI reads $HOME/.config/gh/ — symlink all three to the host-mounted config dir.
+# gh CLI reads $HOME/.config/gh/ — 仅显式授权的 profile 终端 home 链接到 host 挂载的配置目录。
 # 必须先 rm -rf，否则如果目标已存在为目录，ln 会把链接建在目录里面而非替换它。
-mkdir -p /opt/data/.config /opt/data/home/.config /root/.config
+#
+# ── gh config symlink — 仅显式授权的 profile 终端 home ──────────
+# 安全隔离：默认不授予任何 agent gh 权限。要授权某 agent，
+# 把它的 profile home（{HERMES_HOME}/profiles/<name>/home）加入列表。
+# Hermes 会从 terminal 子进程环境剥离 GH_TOKEN/GITHUB_TOKEN（Tier-1 secrets，
+# env_passthrough 无法放行），因此 gh 认证只能走 hosts.yml 文件通道 —— 链接到这里即授权。
+GH_ENABLED_PROFILE_HOMES="profiles/coder/home"
+
+# 先清除历史遗留的主 home 全局链接（爱玛士/道元/爱码士 finance 终端将不再有 gh 权限）
 rm -rf /opt/data/.config/gh /opt/data/home/.config/gh /root/.config/gh
-ln -sf /opt/gh-config /opt/data/.config/gh
-ln -sf /opt/gh-config /opt/data/home/.config/gh
-ln -sf /opt/gh-config /root/.config/gh
+
+for rel in $GH_ENABLED_PROFILE_HOMES; do
+  profile_home="/opt/data/$rel"
+  [ -d "$profile_home" ] || continue
+  mkdir -p "$profile_home/.config"
+  rm -rf "$profile_home/.config/gh"
+  ln -sf /opt/gh-config "$profile_home/.config/gh"
+  echo "   🔗 gh config → ${profile_home}/.config/gh"
+done
 
 # ── gh hosts.yml 自动同步 ───────────────────────────────────
 # 每次容器启动时，用 .env 里的 GH_TOKEN（传入为 GITHUB_TOKEN）更新
@@ -54,13 +68,18 @@ fi
 }
 
 # ── 验证 gh auth 是否可用 ───────────────────────────────────
+# 只验证显式授权列表（GH_ENABLED_PROFILE_HOMES）中的 profile home
 # stdout 重定向到 /dev/null，避免 gh auth status 输出写入 Docker 日志
 if command -v gh &>/dev/null; then
-  if su -s /bin/bash hermes -c "gh auth status --hostname github.com" >/dev/null 2>&1; then
-    echo "   ✅ gh auth 验证通过"
-  else
-    echo "   ⚠️  gh auth 验证失败 — 请检查 GH_TOKEN 是否在 .env 中设置"
-  fi
+  for rel in $GH_ENABLED_PROFILE_HOMES; do
+    profile_home="/opt/data/$rel"
+    [ -d "$profile_home" ] || continue
+    if su -s /bin/bash hermes -c "HOME='$profile_home' gh auth status --hostname github.com" >/dev/null 2>&1; then
+      echo "   ✅ gh auth 验证通过 ($profile_home)"
+    else
+      echo "   ⚠️  gh auth 验证失败 ($profile_home) — 请检查 GH_TOKEN 或 hosts.yml"
+    fi
+  done
 fi
 
 # himalaya email CLI — config lives on /opt/data volume (~/.hermes on host)

@@ -22,6 +22,7 @@ services:
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
+      - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
@@ -84,6 +85,7 @@ services:
       - ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
+      - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
 
     environment:
