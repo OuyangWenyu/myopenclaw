@@ -20,6 +20,7 @@
 | 邮件 | himalaya CLI 邮件客户端（IMAP/SMTP，多账户） | — |
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |
 | Google Drive | rclone 直连云端上传论文 PDF | — |
+| 语雀知识库 | Hermes 远程 MCP（读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 + AgentOps 健康采集 | — |
 
@@ -107,6 +108,12 @@ cp .env.zhixun-bot.example .env.zhixun-bot  # 编辑填入飞书 App ID/Secret +
 | zhixun-water-mcp | 18201 | zhixun 栈 | 水文 MCP（43 tools），兼容 zhixun-core v2 |
 | openclaw-zhixun | 18791 | zhixun 栈 | 知汛助手 — OpenClaw 飞书 bot（独立网络 + 数据目录） |
 
+外部接入服务：
+
+| 服务 | 接入方式 | 说明 |
+|------|----------|------|
+| yuque-mcp | 远程 SSE（`scripts/bootstrap_hermes.sh` 注册） | 语雀知识库 MCP，服务端部署在服务器，Hermes 通过 Bearer key 访问，skill 由 `skills/yuque-knowledge/` 挂载 |
+
 ## 目录结构
 
 ```
@@ -144,6 +151,8 @@ myopenclaw/
 - [集成](https://ouyangwenyu.github.io/myopenclaw/dailyinfo/) — dailyinfo 调度、研发日报、zhixun 飞书机器人
 - [运维](https://ouyangwenyu.github.io/myopenclaw/scheduling/) — 调度、备份、监控、AgentOps、DNS
 - [可移植性](https://ouyangwenyu.github.io/myopenclaw/portability/) — 换电脑需要准备什么
+- [备份系统](https://ouyangwenyu.github.io/myopenclaw/backup/) — 备份内容、恢复流程
+- [语雀知识库接入](https://ouyangwenyu.github.io/myopenclaw/yuque-mcp-hermes/) — Hermes 接入远程语雀 MCP 服务
 
 本地预览文档：
 
