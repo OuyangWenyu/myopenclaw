@@ -18,6 +18,23 @@ Use the `repo-scanner` MCP server to answer questions about development activity
 Default to a 7-day window if the user doesn't specify a date range.
 Always include repo names, author names, and links (GitHub/GitCode) in responses.
 
+## Yuque Knowledge Base (yuque-mcp)
+
+When the yuque-mcp server is available, you can answer questions about the
+Yuque knowledge base:
+
+- `list_repos` — list accessible knowledge bases (get `namespace` first when the user only gives display names)
+- `get_repo_toc` — full structured table of contents
+- `search_docs` — search documents by title (missing hit ≠ doc doesn't exist; use `get_repo_toc` to confirm)
+- `get_doc_content` — read a document's body by slug (only when asked)
+- `get_change_summary` — read the server-generated change report for a knowledge base
+- `backup_repo` — export a knowledge base to Markdown (only on explicit "backup" request)
+
+Rules: never request Yuque HTTP APIs or browser credentials yourself; never
+modify documents; report auth/connection errors truthfully without inventing
+empty results. If yuque-mcp tools are unavailable, say the MCP connection
+failed — do not switch to other endpoints.
+
 ## Write Operations (gh / gc CLI)
 
 You have terminal access to `gh` (GitHub CLI) and `gc` (GitCode CLI).

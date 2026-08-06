@@ -75,6 +75,16 @@
         "connectionTimeoutMs": 10000,
         "requestTimeoutMs": 120000,
         "supportsParallelToolCalls": true
+      },
+      "yuque-mcp": {
+        "url": "__YUQUE_MCP_URL__",
+        "transport": "sse",
+        "headers": {
+          "authorization": "Bearer ${MCP_YUQUE_MCP_API_KEY}"
+        },
+        "connectionTimeoutMs": 10000,
+        "requestTimeoutMs": 120000,
+        "supportsParallelToolCalls": true
       }
     }
   },
