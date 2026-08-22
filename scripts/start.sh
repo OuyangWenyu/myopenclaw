@@ -133,22 +133,22 @@ if [[ ! -f "${HOME}/.openclaw/openclaw.json" ]]; then
   echo "   📝 已创建 OpenClaw 配置: ~/.openclaw/openclaw.json"
 fi
 
-# ── 确保 Hermes coder profile 使用 deepseek-v4-pro ──────────────
+# ── 确保 Hermes coder profile 使用 xiaomi mimo-v2.5-pro ────────
 CODER_CONFIG="${HOME}/.hermes/profiles/coder/config.yaml"
 mkdir -p "$(dirname "${CODER_CONFIG}")"
 if [[ ! -f "${CODER_CONFIG}" ]]; then
   cat > "${CODER_CONFIG}" << 'YAML'
 model:
-  default: deepseek-v4-pro
-  provider: deepseek
-  base_url: https://api.deepseek.com
+  default: mimo-v2.5-pro
+  provider: xiaomi
+  base_url: https://api.xiaomimimo.com/v1
 fallback_providers:
 - zai
 fallback_model:
   provider: zai
   model: glm-5.1
 YAML
-  echo "   📝 已创建 Hermes coder profile 配置（模型: deepseek-v4-pro）"
+  echo "   📝 已创建 Hermes coder profile 配置（模型: mimo-v2.5-pro）"
 fi
 
 # ── 确保 Hermes daoyuan profile（道元·文献学者）──────────────
@@ -157,7 +157,7 @@ mkdir -p "$(dirname "${DAOYUAN_CONFIG}")"
 if [[ ! -f "${DAOYUAN_CONFIG}" ]]; then
   cat > "${DAOYUAN_CONFIG}" << 'YAML'
 model:
-  default: deepseek-v4-pro
+  default: deepseek-v4-flash
   provider: deepseek
   base_url: https://api.deepseek.com
 fallback_providers:
@@ -172,7 +172,7 @@ mcp_servers:
 memory:
   memory_enabled: true
 YAML
-  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-v4-pro + zotero-mcp + memory 隔离）"
+  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-v4-flash + zotero-mcp + memory 隔离）"
 fi
 
 # ── 确保 zotero-mcp 在默认配置的 mcp_servers 中 ─────────────────

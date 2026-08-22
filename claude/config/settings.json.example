@@ -1,11 +1,11 @@
 {
   "env": {
     "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
-    "ANTHROPIC_MODEL": "deepseek-v4-pro[1M]",
+    "ANTHROPIC_MODEL": "deepseek-v4-flash[1M]",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-flash",
-    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-pro[1M]",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-flash[1M]",
     "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-pro[1M]",
-    "ANTHROPIC_DEFAULT_FABLE_MODEL": "deepseek-v4-pro[1M]",
+    "ANTHROPIC_DEFAULT_FABLE_MODEL": "deepseek-v4-flash-vision-exp[1M]",
     "API_TIMEOUT_MS": "3000000",
     "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
     "CLAUDE_CODE_EFFORT_LEVEL": "max"

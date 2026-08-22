@@ -226,7 +226,7 @@ if (!settings.permissions.allow.includes("mcp__playwright__*")) {
     changed = true;
 }
 
-// Model defaults (deepseek-v4-pro 主模型，防止 cc-connect 重写后丢失)
+// Model defaults (deepseek-v4-flash 主模型，防止 cc-connect 重写后丢失)
 if (!settings.env) {
     settings.env = {};
 }
@@ -235,7 +235,7 @@ if (!settings.env.ANTHROPIC_BASE_URL || settings.env.ANTHROPIC_BASE_URL.includes
     changed = true;
 }
 if (!settings.env.ANTHROPIC_MODEL || settings.env.ANTHROPIC_MODEL.includes("glm")) {
-    settings.env.ANTHROPIC_MODEL = "deepseek-v4-pro[1M]";
+    settings.env.ANTHROPIC_MODEL = "deepseek-v4-flash[1M]";
     changed = true;
 }
 if (!settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL.includes("glm")) {
@@ -243,7 +243,7 @@ if (!settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || settings.env.ANTHROPIC_DEFAUL
     changed = true;
 }
 if (!settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL || settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL.includes("glm")) {
-    settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL = "deepseek-v4-pro[1M]";
+    settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL = "deepseek-v4-flash[1M]";
     changed = true;
 }
 if (!settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL || settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL.includes("glm")) {
@@ -251,7 +251,7 @@ if (!settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL || settings.env.ANTHROPIC_DEFAULT
     changed = true;
 }
 if (!settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL || settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL.includes("glm")) {
-    settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL = "deepseek-v4-pro[1M]";
+    settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL = "deepseek-v4-flash-vision-exp[1M]";
     changed = true;
 }
 if (!settings.env.API_TIMEOUT_MS) {
@@ -311,7 +311,7 @@ if (!settings.mcpServers.codegraph) {
 
 if (changed) {
     fs.writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
-    console.log("🔧 settings.json 已恢复: deepseek-v4-pro 主模型 + ECC/pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
+    console.log("🔧 settings.json 已恢复: deepseek-v4-flash 主模型 + ECC/pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
 }
 
 } catch(e) {
