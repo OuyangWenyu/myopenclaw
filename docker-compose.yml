@@ -346,6 +346,7 @@ services:
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
+      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo provider (虾酱 mimo-v2.5 多模态)
       - UNPAYWALL_EMAIL=${UNPAYWALL_EMAIL:-}
       - PAPER_FETCH_NO_SCIHUB=${PAPER_FETCH_NO_SCIHUB:-}
       - GITHUB_PERSONAL_ACCESS_TOKEN=${OPENCLAW_GH_TOKEN:-}
