@@ -8,7 +8,7 @@
 
 - 服务端：`yuque_mcp_server` 以 `RUN_MODE=cloud` 部署在服务器上，持有 `YUQUE_TOKEN`，端口 18000。
 - 客户端：本机只需远程 SSE 地址（`YUQUE_MCP_URL`）和访问 key（`MCP_YUQUE_MCP_API_KEY`），**不需要** `YUQUE_TOKEN`。
-- 本机配置由 [scripts/bootstrap_hermes.sh](../scripts/bootstrap_hermes.sh) 写入 `~/.hermes/config.yaml`、`~/.hermes/.env`；skill 由 docker-compose 只读挂载（`./skills/yuque-knowledge` → `/opt/hermes-skills/yuque-knowledge`）。
+- 本机配置由 `scripts/bootstrap_hermes.sh` 写入 `~/.hermes/config.yaml`、`~/.hermes/.env`；skill 由 docker-compose 只读挂载（`./skills/yuque-knowledge` → `/opt/hermes-skills/yuque-knowledge`）。
 
 ## 配置
 
