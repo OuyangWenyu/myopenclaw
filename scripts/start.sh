@@ -16,6 +16,9 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   exit 1
 fi
 
+# ── OpenClaw 配置文件路径（凭据注入块先使用后赋值，须提前定义）──
+OPENCLAW_CONFIG="${HOME}/.openclaw/openclaw.json"
+
 # ── 检查 GH_TOKEN 是否设置（gh CLI / git 认证用）────────────
 if ! grep -q '^GH_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
   echo "   ⚠️  GH_TOKEN 未设置 — gh CLI 和 git clone 私有仓库将不可用"
@@ -244,7 +247,7 @@ install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
 
 # ── 注入 OpenClaw Discord Bot Token ─────────────────────────────
 # 从 .env 读取 OPENCLAW_DISCORD_BOT_TOKEN，注入到 openclaw.json 的 channels.discord.token
-OPENCLAW_DISCORD_BOT_TOKEN="${OPENCLAW_DISCORD_BOT_TOKEN:-$(grep '^OPENCLAW_DISCORD_BOT_TOKEN=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+OPENCLAW_DISCORD_BOT_TOKEN="${OPENCLAW_DISCORD_BOT_TOKEN:-$(grep '^OPENCLAW_DISCORD_BOT_TOKEN=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
 if [[ -f "${OPENCLAW_CONFIG}" && -n "${OPENCLAW_DISCORD_BOT_TOKEN:-}" ]]; then
   python3 -c "
 import json, sys
@@ -267,7 +270,7 @@ fi
 # ── 注入 OpenClaw 飞书凭据 ──────────────────────────────────────
 # 从 .env 读取 OPENCLAW_FEISHU_APP_ID / OPENCLAW_FEISHU_APP_SECRET，
 # 注入到 openclaw.json 的 channels.feishu 段。仅当两个值都非空时注入。
-OPENCLAW_FEISHU_APP_ID="${OPENCLAW_FEISHU_APP_ID:-$(grep '^OPENCLAW_FEISHU_APP_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+OPENCLAW_FEISHU_APP_ID="${OPENCLAW_FEISHU_APP_ID:-$(grep '^OPENCLAW_FEISHU_APP_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
 OPENCLAW_FEISHU_APP_SECRET="${OPENCLAW_FEISHU_APP_SECRET:-$(grep '^OPENCLAW_FEISHU_APP_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
 if [[ -f "${OPENCLAW_CONFIG}" && -n "${OPENCLAW_FEISHU_APP_ID:-}" && -n "${OPENCLAW_FEISHU_APP_SECRET:-}" ]]; then
   python3 -c "
@@ -293,8 +296,8 @@ fi
 # ── 注入 OpenClaw 钉钉凭据 ──────────────────────────────────────
 # 从 .env 读取 OPENCLAW_DINGTALK_CLIENT_ID / OPENCLAW_DINGTALK_CLIENT_SECRET，
 # 注入到 openclaw.json 的 channels.dingtalk-connector 段。仅当两个值都非空时注入。
-OPENCLAW_DINGTALK_CLIENT_ID="${OPENCLAW_DINGTALK_CLIENT_ID:-$(grep '^OPENCLAW_DINGTALK_CLIENT_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
-OPENCLAW_DINGTALK_CLIENT_SECRET="${OPENCLAW_DINGTALK_CLIENT_SECRET:-$(grep '^OPENCLAW_DINGTALK_CLIENT_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+OPENCLAW_DINGTALK_CLIENT_ID="${OPENCLAW_DINGTALK_CLIENT_ID:-$(grep '^OPENCLAW_DINGTALK_CLIENT_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
+OPENCLAW_DINGTALK_CLIENT_SECRET="${OPENCLAW_DINGTALK_CLIENT_SECRET:-$(grep '^OPENCLAW_DINGTALK_CLIENT_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
 if [[ -f "${OPENCLAW_CONFIG}" && -n "${OPENCLAW_DINGTALK_CLIENT_ID:-}" && -n "${OPENCLAW_DINGTALK_CLIENT_SECRET:-}" ]]; then
   python3 -c "
 import json, sys
