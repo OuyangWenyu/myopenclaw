@@ -6,21 +6,21 @@
 
 | 能力 | 实现方式 | 依赖仓库 |
 |------|----------|----------|
-| 多 Agent 协作 | Hermes ×4（爱玛士 / 爱码士 / 道元 / finance）+ Claude Code + OpenClaw ×2（虾酱 / 知汛） | — |
+| 多 Agent 协作 | Hermes ×4（爱玛士 / 爱码士 / 道元 / finance）+ Claude Code + OpenClaw ×3（虾酱 / 知汛 / 天一） | — |
 | 跨 Agent 长期记忆 | TDAI Memory L0→L3 分层管线，3 agent + CC飞总 共享（道元独立） | — |
 | Zotero 文献系统 | zotero-mcp 12 tools（mylibrary 提供）+ paper pipeline（爱码士写入，道元只读） | [mylibrary](https://github.com/OuyangWenyu/mylibrary) |
-| 飞书直连 | cc-connect（CC飞总）+ lark-cli（Hermes CLI）+ 道元 bot + zhixun 知汛 bot | — |
+| 飞书直连 | cc-connect（CC飞总）+ lark-cli（Hermes CLI）+ 道元 bot + zhixun 知汛 bot + tianyi 天一 bot | — |
 | Discord 桥接 | Hermes coder（爱码士）+ OpenClaw 虾酱 | — |
 | 晨间三签 | Hermes cron skill → TDAI + AgentOps 信号 → 飞书推送 | — |
 | AI 情报聚合 | dailyinfo 多源抓取 + AI 摘要 → 飞书 / Discord 推送 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) |
-| 研发日报 | repo-scanner MCP 采集 27 仓库 → Hermes skill → 飞书推送 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
+| 研发日报 | repo-scanner MCP 采集 27 仓库 → Hermes skill → 飞书推送；天一 bot 复用同源读能力 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
 | 水文智能问答 | zhixun 知汛助手 — OpenClaw + zhixun-water-mcp → 飞书 bot（独立栈） | [zhixun-agent](https://github.com/OuyangWenyu/zhixun-agent) |
 | 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |
 | 事务追踪 | aisecretary MCP 服务 → SQLite 持久化 | [aisecretary](https://github.com/iHeadWater/aisecretary) |
 | 邮件 | himalaya CLI 邮件客户端（IMAP/SMTP，多账户） | — |
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |
 | Google Drive | rclone 直连云端上传论文 PDF | — |
-| 语雀知识库 | Hermes 远程 MCP（读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
+| 语雀知识库 | Hermes + 天一 远程 MCP（读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 + AgentOps 健康采集 | — |
 
@@ -41,6 +41,7 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     ├─ claude-code   (CC飞总，飞书直连)
     ├─ openclaw      (虾酱，Discord 网关)
     ├─ openclaw-zhixun (知汛助手，飞书水文 bot，独立栈)
+    ├─ openclaw-tianyi (天一，飞书研发 bot，独立栈共享主栈网络)
     ├─ zotero-mcp    (文献查询 MCP，mylibrary 源码)
     ├─ repo-scanner-mcp (研发日报 MCP)
     ├─ aisecretary   (事务数据库 MCP)
@@ -87,6 +88,13 @@ cp .env.zhixun-bot.example .env.zhixun-bot  # 编辑填入飞书 App ID/Secret +
 ./scripts/start-zhixun-bot.sh --build
 ```
 
+如需启动 tianyi 飞书机器人（天一·研发助手，前提：主栈已启动，共享 repo-scanner-mcp）：
+
+```bash
+cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret + 模型 key + GitHub/GitCode token
+./scripts/start-tianyi-bot.sh --build
+```
+
 ## 服务一览
 
 | 服务 | 端口 | Compose 文件 | 说明 |
@@ -107,12 +115,13 @@ cp .env.zhixun-bot.example .env.zhixun-bot  # 编辑填入飞书 App ID/Secret +
 | backup-cron | — | 主栈 | 定时快照备份 |
 | zhixun-water-mcp | 18201 | zhixun 栈 | 水文 MCP（43 tools），兼容 zhixun-core v2 |
 | openclaw-zhixun | 18791 | zhixun 栈 | 知汛助手 — OpenClaw 飞书 bot（独立网络 + 数据目录） |
+| openclaw-tianyi | 18792 | tianyi 栈 | 天一研发助手 — OpenClaw 飞书 bot（共享主栈网络，复用 repo-scanner-mcp，gh/gc 写 GitHub/GitCode issue） |
 
 外部接入服务：
 
 | 服务 | 接入方式 | 说明 |
 |------|----------|------|
-| yuque-mcp | 远程 SSE（`scripts/bootstrap_hermes.sh` 注册） | 语雀知识库 MCP，服务端部署在服务器，Hermes 通过 Bearer key 访问，skill 由 `skills/yuque-knowledge/` 挂载 |
+| yuque-mcp | 远程 SSE（Hermes 经 `scripts/bootstrap_hermes.sh` 注册；天一经 `docker/tianyi-bot/openclaw.json.template` 注册） | 语雀知识库 MCP，服务端部署在服务器，通过 Bearer key 访问，skill 由 `skills/yuque-knowledge/` 挂载 |
 
 ## 目录结构
 
@@ -120,8 +129,10 @@ cp .env.zhixun-bot.example .env.zhixun-bot  # 编辑填入飞书 App ID/Secret +
 myopenclaw/
 ├── docker-compose.yml                # 主栈服务编排
 ├── docker-compose.zhixun-bot.yml     # zhixun 独立栈
+├── docker-compose.tianyi-bot.yml     # tianyi 独立栈（共享主栈网络）
 ├── .env.example                      # 主栈环境变量模板
 ├── .env.zhixun-bot.example           # zhixun bot 环境变量模板
+├── .env.tianyi-bot.example           # tianyi bot 环境变量模板
 ├── .cloud.conf.example               # 云盘路径模板
 ├── docs/                             # 文档（→ GitHub Pages）
 ├── docker/                           # 自定义镜像
@@ -131,8 +142,10 @@ myopenclaw/
 │   ├── tdai-memory/                  #   Agent 长期记忆
 │   ├── repo-scanner-mcp/             #   研发日报 MCP
 │   ├── zotero-mcp/                   #   Zotero 文献 MCP（mylibrary 源码）
-│   └── zhixun-bot/                   #   zhixun 水文 MCP + 兼容层
+│   ├── zhixun-bot/                   #   zhixun 水文 MCP + 兼容层
+│   └── tianyi-bot/                   #   tianyi bot entrypoint + 配置模板 + 渲染脚本
 ├── openclaw-zhixun/workspace/        # zhixun bot agent 策略文件（AGENTS.md, SOUL.md）
+├── openclaw-tianyi/workspace/        # tianyi bot agent 策略文件（AGENTS.md, SOUL.md）
 ├── hermes/                           # Hermes 配置模板 + 备份脚本
 ├── claude/                           # Claude Code / cc-connect 配置模板 + 备份脚本
 ├── openclaw/                         # OpenClaw 配置模板 + 备份脚本

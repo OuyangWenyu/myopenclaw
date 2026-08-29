@@ -9,8 +9,11 @@
 | DeepSeek API | api.deepseek.com | Hermes / OpenClaw 默认模型 |
 | 智谱 GLM API | open.bigmodel.cn | Claude Code 后端 |
 | 钉钉 Stream | api.dingtalk.com, wss-open-connection.dingtalk.com | Hermes / OpenClaw 钉钉机器人 |
-| 飞书 WebSocket | open.feishu.cn | Hermes 飞书机器人 |
+| 飞书 WebSocket | open.feishu.cn, msg-frontier.feishu.cn | Hermes 飞书机器人 |
 | Moonshot API | api.moonshot.cn | OpenClaw 备用模型 |
+| 小米 MiMo API | api.xiaomimimo.com | 爱玛士/爱码士/虾酱 主模型 + 虾酱 TTS |
+| QQ 邮箱 | imap.qq.com, smtp.qq.com | himalaya 邮件客户端 |
+| WorkBuddy | workbuddy.cn | 外部服务依赖 |
 | GitCode | gitcode.com | 代码托管 |
 
 典型表现：日志中出现 `ENOTFOUND`、`NameResolutionError`、`getaddrinfo failed` 等错误。
@@ -38,7 +41,7 @@ macOS 支持 `/etc/resolver/` 机制，可以按域名指定 DNS 服务器。本
 # /etc/resolver/ 下的每个文件对应一个域名及其子域名
 # 文件名 = 域名，内容 = nameserver 指令
 
-DOMAINS="alibabadns.com aliyunddos1022.com bigmodel.cn bytedns1.com cdngslb.com deepseek.com dingtalk.com eo.dnse1.com feishu.cn gitcode.com gtm-a4b8.com moonshot.cn open.bigmodel.cn yundunwaf3.com zhipu.ai"
+DOMAINS="alibabadns.com aliyunddos1022.com bigmodel.cn bytedns1.com cdngslb.com deepseek.com dingtalk.com eo.dnse1.com eo.dnse5.com feishu.cn gitcode.com gtm-a4b8.com moonshot.cn open.bigmodel.cn qq.com queniuyk.com queniuck.com xiaomimimo.com xiaomi.com workbuddy.cn yundunwaf3.com zhipu.ai"
 
 for domain in $DOMAINS; do
   echo "nameserver 223.5.5.5" | sudo tee /etc/resolver/$domain
@@ -59,7 +62,10 @@ sudo killall -HUP mDNSResponder
 |------|-------------------|------|
 | 钉钉 api.dingtalk.com | `gds.alibabadns.com` | 阿里云 GSLB |
 | DeepSeek api.deepseek.com | `eo.dnse1.com` | 火山引擎 CDN |
-| 飞书 open.feishu.cn | `bytedns1.com` → `cdngslb.com` | 字节 CDN → GSLB |
+| WorkBuddy workbuddy.cn | `eo.dnse5.com` | 腾讯 EdgeOne CDN（与 DeepSeek 的 dnse1 是两条独立链） |
+| 飞书 open.feishu.cn | `bytedns1.com` → `cdngslb.com` → `queniuyk.com` | 字节 CDN → GSLB → 金山云 CNAME 终端 |
+| 飞书 msg-frontier.feishu.cn | `queniuck.com` | 飞书长连接 CNAME 终端 |
+| 小米 MiMo api.xiaomimimo.com | `xiaomi.com` | `mimo-pri-alisgp.alb.xiaomi.com` |
 | Moonshot api.moonshot.cn | `aliyunddos1022.com` | 阿里云 DDoS 防护 |
 | 智谱 open.bigmodel.cn | `yundunwaf3.com` → `gtm-a4b8.com` | 阿里云 WAF → GTM |
 
@@ -77,6 +83,17 @@ CNAME 链经过了 `gds.alibabadns.com`（阿里云 GSLB 内部域），它不�
 ### /etc/hosts 备份作用
 
 `/etc/hosts` 中的条目优先级高于 DNS 查询，作为额外的安全网。但其中的 IP 来自 CDN，会随时间变化，需要定期更新。运行 `./scripts/setup-dns.sh` 即可刷新。
+
+当前写入的备份条目（共 8 条，与 `scripts/setup-dns.sh` 的 `HOSTS_DOMAINS` 一致）：
+
+```
+open.bigmodel.cn                    # 智谱 GLM API
+mcp.dingtalk.com                    # 钉钉 MCP
+wss-open-connection.dingtalk.com    # 钉钉 Stream 长连接
+imap.qq.com / smtp.qq.com           # QQ 邮箱
+api.xiaomimimo.com                  # 小米 MiMo API
+workbuddy.cn / www.workbuddy.cn     # WorkBuddy
+```
 
 ### Docker 容器 DNS 链路
 

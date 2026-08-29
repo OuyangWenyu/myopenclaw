@@ -1,8 +1,13 @@
 # 语雀 MCP 接入（Hermes）
 
-> 最后更新：2026-08-05
+> 最后更新：2026-08-29
 
-本机 Hermes（`hermes` / `hermes-coder` 容器）通过远程 SSE 接入语雀 MCP 服务，读取、搜索、备份语雀知识库并查询服务端生成的变更报告。
+本机通过远程 SSE 接入语雀 MCP 服务（服务端为 `yuque_mcp_server` 的 `RUN_MODE=cloud` 部署），读取、搜索、备份语雀知识库并查询服务端生成的变更报告。
+
+**当前消费者**（2026-08-29 双端 E2E 验证通过：`hermes mcp test yuque-mcp` Connected / 7 tools；天一 probe + `list_repos` 真实调用）：
+
+- **Hermes 侧**：`hermes` / `hermes-coder` / `hermes-daoyuan` / `hermes-finance` 四个容器共享 `~/.hermes` 配置，MCP 注册全部生效（`skills/yuque-knowledge` 仅挂载前两者）
+- **天一（openclaw-tianyi）**：经 `docker/tianyi-bot/openclaw.json.template` 独立注册（SSE + Bearer，凭据 `TIANYI_BOT_YUQUE_MCP_URL` / `TIANYI_BOT_MCP_YUQUE_MCP_API_KEY` 来自 `.env.tianyi-bot`，compose 以无前缀 `MCP_YUQUE_MCP_API_KEY` 注入容器环境供 OpenClaw 运行时展开）
 
 ## 架构边界
 

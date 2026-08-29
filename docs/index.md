@@ -8,9 +8,9 @@ myopenclaw 用 Docker 运行三个 AI Agent 框架 — [Hermes Agent](https://gi
 
 ## 核心能力
 
-- **多 Agent 协作**：Hermes ×4（爱玛士 / 爱码士 / 道元 / finance）+ Claude Code + OpenClaw ×2（虾酱 / 知汛），各自负责不同领域
+- **多 Agent 协作**：Hermes ×4（爱玛士 / 爱码士 / 道元 / finance）+ Claude Code + OpenClaw ×3（虾酱 / 知汛 / 天一），各自负责不同领域
 - **跨 Agent 长期记忆**：TDAI Memory L0→L3 分层管线，飞书说的 Discord 能召回
-- **飞书 + Discord 双通道**：cc-connect（CC飞总）+ OpenClaw 虾酱 + 道元 bot + zhixun 知汛 bot
+- **飞书 + Discord 双通道**：cc-connect（CC飞总）+ OpenClaw 虾酱 + 道元 bot + zhixun 知汛 bot + tianyi 天一 bot
 - **自动化工作流**：晨间三签、AI 情报聚合、研发日报、论文管线
 - **水文智能问答**：zhixun 知汛助手，独立 Compose 栈，飞书 bot 直达水库/河道/雨量/流域查询
 - **文献管理**：Zotero MCP 共享服务 + paper pipeline 论文下载入库 + Google Drive 云端存档
