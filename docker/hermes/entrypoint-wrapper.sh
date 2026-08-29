@@ -82,10 +82,18 @@ if command -v gh &>/dev/null; then
   done
 fi
 
-# himalaya email CLI — config lives on /opt/data volume (~/.hermes on host)
-# symlink for both hermes user and root (docker exec runs as root)
-mkdir -p /opt/data/.config/himalaya
-ln -sf /opt/data/.config/himalaya /root/.config/himalaya
+# himalaya + ortie — config lives on /opt/data volume (~/.hermes on host)
+# Symlink for root (docker exec) and the terminal HOME (/opt/data/home)
+# so both `docker compose exec` and Hermes agent terminals find the files.
+mkdir -p /opt/data/.config/himalaya /opt/data/.config/ortie/tokens
+mkdir -p /root/.config /opt/data/home/.config
+chmod 700 /opt/data/.config/ortie /opt/data/.config/ortie/tokens
+rm -rf /root/.config/himalaya /root/.config/ortie
+rm -rf /opt/data/home/.config/himalaya /opt/data/home/.config/ortie
+ln -sfn /opt/data/.config/himalaya /root/.config/himalaya
+ln -sfn /opt/data/.config/ortie /root/.config/ortie
+ln -sfn /opt/data/.config/himalaya /opt/data/home/.config/himalaya
+ln -sfn /opt/data/.config/ortie /opt/data/home/.config/ortie
 
 # lark-cli reads config from $HOME/.lark-cli/ (NOT .config/lark-cli/)
 # symlink to host-mounted config dir for persistence across container recreates
@@ -190,12 +198,14 @@ done
 # ── Auto-configure himalaya from Hermes email settings ─────
 # Parses /opt/data/.env for EMAIL_* vars and generates ~/.config/himalaya/config.toml
 # Works whether the vars are commented out (email platform disabled) or active.
+# EMAIL_* is always loaded so Outlook can be appended to an existing config.
 HIMALAYA_CONFIG="/opt/data/.config/himalaya/config.toml"
-if [[ -f /opt/data/.env && ! -f "${HIMALAYA_CONFIG}" ]]; then
-  # Strip leading "#" so commented-out vars are also picked up
+if [[ -f /opt/data/.env ]]; then
   set -a
   eval "$(sed 's/^#[[:space:]]*//' /opt/data/.env 2>/dev/null | grep -E '^EMAIL_' || true)"
   set +a
+fi
+if [[ -f /opt/data/.env && ! -f "${HIMALAYA_CONFIG}" ]]; then
   if [[ -n "${EMAIL_ADDRESS:-}" && -n "${EMAIL_PASSWORD:-}" && -n "${EMAIL_IMAP_HOST:-}" ]]; then
     mkdir -p "$(dirname "${HIMALAYA_CONFIG}")"
     cat > "${HIMALAYA_CONFIG}" << TOML
@@ -261,6 +271,15 @@ message.send.backend.auth.raw = "${EMAIL2_PASSWORD}"
 TOML
     echo "   📧 himalaya 已自动配置 — ${EMAIL2_ADDRESS} (account: ${H2_ACCT})"
   fi
+fi
+
+# ── Outlook / Microsoft 365 via ortie OAuth ─────────────────
+# Idempotent: appends [accounts.outlook] to an existing himalaya config
+# and writes ~/.config/ortie/config.toml. First-time auth is interactive
+# (`ortie auth get`) and is intentionally not run here.
+if [[ -n "${EMAIL_OUTLOOK_ADDRESS:-}" ]]; then
+  HERMES_DATA=/opt/data /opt/hermes/configure-outlook.sh
+  chown -R hermes:hermes /opt/data/.config/himalaya /opt/data/.config/ortie 2>/dev/null || true
 fi
 
 # ── Auto-detect sent/drafts/trash folder names ─────────────

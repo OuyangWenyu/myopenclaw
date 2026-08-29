@@ -57,6 +57,18 @@ RUN HIMALAYA_VER="1.2.0" && \
     chmod +x /usr/local/bin/himalaya && \
     rm /tmp/himalaya.tgz
 
+# ── Install ortie (OAuth 2.0 token broker) ──────────────────
+# Pre-built static binary. Himalaya v1.2.0 has no OAuth wizard that
+# works headless; ortie owns authorization + refresh, himalaya reads
+# the access token via `backend.auth.access-token.cmd`.
+# Used for Outlook / Microsoft 365 (basic auth retired).
+RUN ORTIE_VER="2.2.0" && \
+    ARCH=$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/aarch64/') && \
+    wget -qO /tmp/ortie.tgz "https://github.com/pimalaya/ortie/releases/download/v${ORTIE_VER}/ortie.${ARCH}-linux.tgz" && \
+    tar xzf /tmp/ortie.tgz -C /usr/local/bin ortie && \
+    chmod +x /usr/local/bin/ortie && \
+    rm /tmp/ortie.tgz
+
 # ── Install cardamum (CLI contact manager) ────────────────────
 # Built from source (master) — v0.1.0 is the only binary release and
 # uses the old EDITOR-based cards create flow. v0.2.0 accepts vCard
@@ -133,6 +145,7 @@ ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
 # because hermes user home is /opt/data. We symlink it to the
 # mounted host dir so gh auth state survives container rebuilds.
 COPY entrypoint-wrapper.sh /opt/hermes/entrypoint-wrapper.sh
-RUN chmod +x /opt/hermes/entrypoint-wrapper.sh
+COPY configure-outlook.sh /opt/hermes/configure-outlook.sh
+RUN chmod +x /opt/hermes/entrypoint-wrapper.sh /opt/hermes/configure-outlook.sh
 
 ENTRYPOINT ["/opt/hermes/entrypoint-wrapper.sh"]

@@ -19,7 +19,7 @@ backup-all-docker.sh
 
 | 范围 | 内容 |
 |------|------|
-| Hermes | `config.yaml`、`SOUL.md`、`memories/`、`skills/`、`hooks/`、`cron/` |
+| Hermes | `config.yaml`、`SOUL.md`、`memories/`、`skills/`、`hooks/`、`cron/`、`.contacts/`、`.config/himalaya/`、`.config/ortie/`（Outlook OAuth token） |
 | Claude Code | `settings.json`、`projects/`、`skills/`、`plans/`、`tasks/`、cc-connect `config.toml` |
 | OpenClaw | `openclaw.json`、`agents/`、`flows/`、`extensions/`、`memory/main.sqlite`（热备份）、`memory-tdai/memories.sqlite`（虾酱记忆） |
 | TDAI Memory | `memories.sqlite`（sqlite3 热备）、`scene_blocks/`、`persona.md`、`checkpoint.json` |
@@ -27,9 +27,10 @@ backup-all-docker.sh
 
 ## 不备份的内容
 
-- 大型缓存、临时会话、auth token、日志
+- 大型缓存、临时会话、日志
 - `~/.config/gh`、`~/.config/opencode` 中的敏感内容（需重新配置）
 - `~/.hermes/secrets/`（API Key 文件）
+- 其他 auth token（Outlook 的 ortie token 例外：恢复后无需重新浏览器授权）
 
 ## 手动备份
 

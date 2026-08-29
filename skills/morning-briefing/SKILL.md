@@ -76,6 +76,16 @@ himalaya envelope list --page-size 10 --output json
 
 默认账号（QQ），无需 `-a` 参数。同样输出 JSON。
 
+### 4. 获取 Outlook 邮件（OAuth 账户，可选）
+
+若 `himalaya account list` 含 `outlook`：
+
+```bash
+himalaya envelope list -a outlook --page-size 10 --output json
+```
+
+未授权时跳过，不要阻塞 briefing。授权方式见仓库 `docs/email.md`。
+
 ## 筛选规则
 
 ### 邮件过滤
