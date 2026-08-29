@@ -27,7 +27,7 @@ fi
 
 # Read GDRIVE_PAPERS_LOCAL_PATH from .env (can't source directly — cron expressions break bash)
 if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
-  GDRIVE_PAPERS_LOCAL_PATH=$(grep '^GDRIVE_PAPERS_LOCAL_PATH=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)
+  GDRIVE_PAPERS_LOCAL_PATH=$(grep '^GDRIVE_PAPERS_LOCAL_PATH=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)
   GDRIVE_PAPERS_LOCAL_PATH="${GDRIVE_PAPERS_LOCAL_PATH/#\~/$HOME}"
   if [[ -n "${GDRIVE_PAPERS_LOCAL_PATH}" ]]; then
     export GDRIVE_PAPERS_LOCAL_PATH
@@ -271,7 +271,7 @@ fi
 # 从 .env 读取 OPENCLAW_FEISHU_APP_ID / OPENCLAW_FEISHU_APP_SECRET，
 # 注入到 openclaw.json 的 channels.feishu 段。仅当两个值都非空时注入。
 OPENCLAW_FEISHU_APP_ID="${OPENCLAW_FEISHU_APP_ID:-$(grep '^OPENCLAW_FEISHU_APP_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
-OPENCLAW_FEISHU_APP_SECRET="${OPENCLAW_FEISHU_APP_SECRET:-$(grep '^OPENCLAW_FEISHU_APP_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+OPENCLAW_FEISHU_APP_SECRET="${OPENCLAW_FEISHU_APP_SECRET:-$(grep '^OPENCLAW_FEISHU_APP_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
 if [[ -f "${OPENCLAW_CONFIG}" && -n "${OPENCLAW_FEISHU_APP_ID:-}" && -n "${OPENCLAW_FEISHU_APP_SECRET:-}" ]]; then
   python3 -c "
 import json, sys
@@ -483,8 +483,8 @@ with open('${HERMES_CONFIG}', 'w') as f:
 fi
 
 # 从 .env 读取 FEISHU_HOME_CHANNEL 和 LARK_USER_OPEN_ID（不能 source .env，cron 表达式会破坏 bash）
-FEISHU_HOME_CHANNEL="${FEISHU_HOME_CHANNEL:-$(grep '^FEISHU_HOME_CHANNEL=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
-LARK_USER_OPEN_ID="${LARK_USER_OPEN_ID:-$(grep '^LARK_USER_OPEN_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2-)}"
+FEISHU_HOME_CHANNEL="${FEISHU_HOME_CHANNEL:-$(grep '^FEISHU_HOME_CHANNEL=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
+LARK_USER_OPEN_ID="${LARK_USER_OPEN_ID:-$(grep '^LARK_USER_OPEN_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
 
 # ── 注册 Morning Triage v2 Cron Job ───────────────────────────
 # 仅在 cron_mode=allow 时注册
