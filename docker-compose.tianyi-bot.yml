@@ -1,0 +1,52 @@
+name: myopenclaw-tianyi-bot
+
+services:
+  openclaw-tianyi:
+    image: ${TIANYI_BOT_OPENCLAW_IMAGE:-docker.m.daocloud.io/openclaw/openclaw:2026.7.1}
+    container_name: openclaw-tianyi
+    restart: unless-stopped
+    user: root
+    entrypoint:
+      - /bin/sh
+      - /opt/tianyi-bot/entrypoint.sh
+    volumes:
+      - ${TIANYI_BOT_DATA_DIR:-${HOME}/.openclaw-tianyi}:/home/node/.openclaw
+      - ./docker/tianyi-bot:/opt/tianyi-bot:ro
+      - ./openclaw-tianyi/workspace:/opt/tianyi-workspace:ro
+    environment:
+      HOME: /home/node
+      TZ: ${TZ:-Asia/Shanghai}
+      TIANYI_BOT_MODEL_API_KEY: ${TIANYI_BOT_MODEL_API_KEY:?Model API key required}
+      TIANYI_BOT_FEISHU_APP_ID: ${TIANYI_BOT_FEISHU_APP_ID:?Feishu App ID required}
+      TIANYI_BOT_FEISHU_APP_SECRET: ${TIANYI_BOT_FEISHU_APP_SECRET:?Feishu App Secret required}
+      TIANYI_BOT_FEISHU_STREAMING: ${TIANYI_BOT_FEISHU_STREAMING:-false}
+      TIANYI_BOT_MODEL_ID: ${TIANYI_BOT_MODEL_ID:-deepseek-v4-flash}
+      TIANYI_BOT_MODEL_BASE_URL: ${TIANYI_BOT_MODEL_BASE_URL:-https://api.deepseek.com}
+      TIANYI_BOT_GITHUB_TOKEN: ${TIANYI_BOT_GITHUB_TOKEN:-}
+      TIANYI_BOT_GITCODE_TOKEN: ${TIANYI_BOT_GITCODE_TOKEN:-}
+      # 远程语雀 MCP（可选，未配置则渲染时移除 yuque-mcp 条目）
+      TIANYI_BOT_YUQUE_MCP_URL: ${TIANYI_BOT_YUQUE_MCP_URL:-}
+      TIANYI_BOT_MCP_YUQUE_MCP_API_KEY: ${TIANYI_BOT_MCP_YUQUE_MCP_API_KEY:-}
+      MCP_YUQUE_MCP_API_KEY: ${TIANYI_BOT_MCP_YUQUE_MCP_API_KEY:-}
+    healthcheck:
+      test:
+        - CMD
+        - curl
+        - -fsS
+        - http://127.0.0.1:18792/healthz
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: "1.0"
+    networks:
+      - myopenclaw-net
+
+networks:
+  myopenclaw-net:
+    external: true
+    name: myopenclaw_myopenclaw-net

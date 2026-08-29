@@ -125,7 +125,7 @@ ZHIXUN_BOT_MODEL_API_KEY=xxx
 
 ```dotenv
 ZHIXUN_BOT_MODEL_API_KEY=你的 DeepSeek API Key
-ZHIXUN_BOT_MODEL_ID=deepseek-v4-pro
+ZHIXUN_BOT_MODEL_ID=deepseek-v4-flash
 ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com
 ```
 

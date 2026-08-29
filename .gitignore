@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.zhixun-bot
+.env.tianyi-bot
 # .secrets/ 目录由 git-crypt 加密，.gitattributes 中已声明
 
 # ── 云盘配置（本机路径，不入 git） ──────────────────────────────
@@ -21,6 +22,7 @@ logs/
 # ── 允许提交的模板文件（显式覆盖上面的忽略规则） ─────────────────
 !.env.example
 !.env.zhixun-bot.example
+!.env.tianyi-bot.example
 !*/.env.example
 !.cloud.conf.example
 # Python

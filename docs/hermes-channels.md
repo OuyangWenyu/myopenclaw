@@ -69,4 +69,4 @@ Discord 网关 (`gateway.discord.gg`) 在国内可能间歇性 DNS 解析失败�
 
 ## coder profile 模型
 
-首次启动时 `start.sh` 自动创建 `~/.hermes/profiles/coder/config.yaml`，默认模型 `deepseek-v4-pro`（DeepSeek API），备用模型 `glm-5.1`（z.ai）。
+首次启动时 `start.sh` 自动创建 `~/.hermes/profiles/coder/config.yaml`，默认模型 `mimo-v2.5-pro`（小米 MiMo API，`XIAOMI_API_KEY`），备用模型 `glm-5.1`（z.ai）。

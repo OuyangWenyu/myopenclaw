@@ -18,6 +18,7 @@ NAMESERVER="223.5.5.5"
 # ─ CDN/GSLB 外域（CNAME 链经过这些域，境外 DNS 无法解析）──
 #   alibabadns.com  — 钉钉 api.dingtalk.com CNAME 链
 #   eo.dnse1.com    — DeepSeek api.deepseek.com CNAME 链（火山引擎 CDN）
+#   eo.dnse5.com    — WorkBuddy workbuddy.cn CNAME 链（腾讯 EdgeOne）
 #   bytedns1.com    — 飞书 open.feishu.cn CNAME 链（字节 CDN）
 #   aliyunddos1022.com — Moonshot api.moonshot.cn CNAME 链（阿里云 DDoS 防护）
 #   yundunwaf3.com  — 智谱 open.bigmodel.cn CNAME 链（阿里云 WAF）
@@ -25,6 +26,9 @@ NAMESERVER="223.5.5.5"
 #   gtm-a4b8.com    — 智谱 GTM 跳转
 #   queniuyk.com    — 飞书 open.feishu.cn CNAME 终端（金山云 CDN）
 #   queniuck.com    — 飞书 msg-frontier.feishu.cn CNAME 终端
+#   xiaomimimo.com  — 小米 MiMo api.xiaomimimo.com 主域（mimo-v2.5 多模态模型）
+#   xiaomi.com      — 小米 MiMo CNAME 链 (mimo-pri-alisgp.alb.xiaomi.com)
+#   workbuddy.cn    — WorkBuddy 主域（www.workbuddy.cn 官网）
 RESOLVER_DOMAINS=(
   alibabadns.com
   aliyunddos1022.com
@@ -34,6 +38,7 @@ RESOLVER_DOMAINS=(
   deepseek.com
   dingtalk.com
   eo.dnse1.com
+  eo.dnse5.com
   feishu.cn
   gitcode.com
   gtm-a4b8.com
@@ -45,6 +50,9 @@ RESOLVER_DOMAINS=(
   qq.com
   queniuyk.com
   queniuck.com
+  xiaomimimo.com
+  xiaomi.com
+  workbuddy.cn
 )
 
 # /etc/hosts 备份条目（这些域的 IP 可能随 CDN 变化，脚本自动获取最新 IP）
@@ -54,6 +62,9 @@ HOSTS_DOMAINS=(
   wss-open-connection.dingtalk.com
   imap.qq.com
   smtp.qq.com
+  api.xiaomimimo.com
+  workbuddy.cn
+  www.workbuddy.cn
 )
 
 echo "🔧 中国域名 DNS 配置工具"
@@ -142,7 +153,7 @@ echo ""
 echo "🧪 验证 DNS 解析..."
 
 FAIL=0
-for domain in api.deepseek.com open.bigmodel.cn api.dingtalk.com wss-open-connection.dingtalk.com open.feishu.cn api.moonshot.cn; do
+for domain in api.deepseek.com open.bigmodel.cn api.dingtalk.com wss-open-connection.dingtalk.com open.feishu.cn api.moonshot.cn api.xiaomimimo.com workbuddy.cn; do
   if python3 -c "import socket; socket.getaddrinfo('${domain}', 443)" 2>/dev/null; then
     ip=$(python3 -c "import socket; print(socket.getaddrinfo('${domain}', 443)[0][4][0])" 2>/dev/null)
     echo "   ✅ ${domain} → ${ip}"
