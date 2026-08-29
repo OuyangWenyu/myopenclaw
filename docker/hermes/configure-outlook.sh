@@ -3,7 +3,8 @@
 #
 # Ortie owns the OAuth grant and token refresh. Himalaya v1.2.0 consumes the
 # access token through `backend.auth.access-token.cmd` (XOAUTH2). This script
-# is idempotent: existing account sections are left untouched.
+# is idempotent for our own Outlook sections and refuses to clobber a foreign
+# account that already uses the same name.
 #
 # Required environment:
 #   EMAIL_OUTLOOK_ADDRESS  Mailbox address used as IMAP/SMTP login.
@@ -18,6 +19,7 @@
 #   EMAIL_OUTLOOK_SMTP_HOST     Default smtp.office365.com.
 #   EMAIL_OUTLOOK_SMTP_PORT     Default 587.
 #   HERMES_DATA                 Config root (default: /opt/data).
+#   ORTIE_STORE_TOKEN           Token writer path (default: /opt/hermes/...).
 set -euo pipefail
 umask 077
 
@@ -38,6 +40,35 @@ IMAP_HOST="${EMAIL_OUTLOOK_IMAP_HOST:-outlook.office365.com}"
 IMAP_PORT="${EMAIL_OUTLOOK_IMAP_PORT:-993}"
 SMTP_HOST="${EMAIL_OUTLOOK_SMTP_HOST:-smtp.office365.com}"
 SMTP_PORT="${EMAIL_OUTLOOK_SMTP_PORT:-587}"
+ORTIE_STORE_TOKEN="${ORTIE_STORE_TOKEN:-/opt/hermes/ortie-store-token.sh}"
+
+toml_string() {
+  # Quote a value as a TOML basic string. Rejects newlines.
+  local s="$1"
+  if [[ "${s}" == *$'\n'* || "${s}" == *$'\r'* ]]; then
+    echo "   ❌ value must not contain newlines: ${s@Q}" >&2
+    return 1
+  fi
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  printf '"%s"' "${s}"
+}
+
+validate_port() {
+  local name="$1" port="$2"
+  if [[ ! "${port}" =~ ^[0-9]+$ ]] || ((port < 1 || port > 65535)); then
+    echo "   ❌ ${name} must be an integer 1-65535: ${port}" >&2
+    return 1
+  fi
+}
+
+validate_host() {
+  local name="$1" host="$2"
+  if [[ ! "${host}" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]]; then
+    echo "   ❌ ${name} is not a valid hostname: ${host}" >&2
+    return 1
+  fi
+}
 
 if [[ ! "${ACCT}" =~ ^[A-Za-z0-9_-]+$ ]]; then
   echo "   ❌ EMAIL_OUTLOOK_ACCOUNT_NAME must be alphanumeric, '_' or '-': ${ACCT}" >&2
@@ -49,19 +80,105 @@ if [[ "${GRANT}" != "device" && "${GRANT}" != "authorization-code" ]]; then
   exit 1
 fi
 
+if [[ "${ADDRESS}" != *@* || "${ADDRESS}" == *@*@* || "${ADDRESS}" == *[[:space:]]* ]]; then
+  echo "   ❌ EMAIL_OUTLOOK_ADDRESS is not a valid mailbox: ${ADDRESS}" >&2
+  exit 1
+fi
+
+if [[ ! "${CLIENT_ID}" =~ ^[A-Za-z0-9._-]+$ ]]; then
+  echo "   ❌ EMAIL_OUTLOOK_CLIENT_ID contains unsupported characters" >&2
+  exit 1
+fi
+
+validate_host EMAIL_OUTLOOK_IMAP_HOST "${IMAP_HOST}"
+validate_host EMAIL_OUTLOOK_SMTP_HOST "${SMTP_HOST}"
+validate_port EMAIL_OUTLOOK_IMAP_PORT "${IMAP_PORT}"
+validate_port EMAIL_OUTLOOK_SMTP_PORT "${SMTP_PORT}"
+toml_string "${ADDRESS}" >/dev/null
+toml_string "${DISPLAY_NAME}" >/dev/null
+
 ORTIE_DIR="${HERMES_DATA}/.config/ortie"
 TOKEN_DIR="${ORTIE_DIR}/tokens"
 TOKEN_FILE="${TOKEN_DIR}/${ACCT}.json"
 ORTIE_CONFIG="${ORTIE_DIR}/config.toml"
 HIMALAYA_CONFIG="${HERMES_DATA}/.config/himalaya/config.toml"
+LOCK_DIR="${HERMES_DATA}/.config/outlook-configure.lock"
 
 mkdir -p "${TOKEN_DIR}" "${HERMES_DATA}/.config/himalaya"
 chmod 700 "${ORTIE_DIR}" "${TOKEN_DIR}"
 
-# ── ortie account ─────────────────────────────────────────────
-if [[ -f "${ORTIE_CONFIG}" ]] && grep -q "^\[accounts\.${ACCT}\]" "${ORTIE_CONFIG}"; then
-  echo "   📧 ortie account '${ACCT}' already present — skip"
-else
+# Directory lock (atomic mkdir) so concurrent Hermes profiles sharing
+# /opt/data cannot append the same [accounts.*] section twice.
+acquired=0
+for _ in $(seq 1 100); do
+  if mkdir "${LOCK_DIR}" 2>/dev/null; then
+    acquired=1
+    break
+  fi
+  sleep 0.05
+done
+if [[ "${acquired}" -ne 1 ]]; then
+  echo "   ❌ timed out waiting for Outlook config lock" >&2
+  exit 1
+fi
+trap 'rmdir "${LOCK_DIR}" 2>/dev/null || true' EXIT
+
+toml_account_exists() {
+  local file="$1"
+  [[ -f "${file}" ]] && grep -q "^\[accounts\.${ACCT}\]" "${file}"
+}
+
+toml_section_body() {
+  local file="$1"
+  [[ -f "${file}" ]] || return 0
+  awk -v acct="${ACCT}" '
+    $0 == "[accounts." acct "]" {p=1; next}
+    p && /^\[/ {exit}
+    p {print}
+  ' "${file}"
+}
+
+himalaya_section_is_ours() {
+  local body email_line
+  body="$(toml_section_body "${HIMALAYA_CONFIG}")"
+  email_line="email = $(toml_string "${ADDRESS}")"
+  grep -q 'backend.auth.type = "oauth2"' <<<"${body}" \
+    && grep -q 'backend.auth.access-token.cmd' <<<"${body}" \
+    && grep -q 'ortie' <<<"${body}" \
+    && grep -Fxq "${email_line}" <<<"${body}"
+}
+
+ortie_section_is_ours() {
+  local body
+  body="$(toml_section_body "${ORTIE_CONFIG}")"
+  grep -Fq "${TOKEN_FILE}" <<<"${body}" \
+    && grep -q "client-id = $(toml_string "${CLIENT_ID}")" <<<"${body}"
+}
+
+SKIP_ORTIE=0
+SKIP_HIMALAYA=0
+
+if toml_account_exists "${ORTIE_CONFIG}"; then
+  if ortie_section_is_ours; then
+    SKIP_ORTIE=1
+    echo "   📧 ortie account '${ACCT}' already present — skip"
+  else
+    echo "   ❌ account '${ACCT}' already exists in ortie and is not this Outlook mailbox" >&2
+    exit 1
+  fi
+fi
+
+if toml_account_exists "${HIMALAYA_CONFIG}"; then
+  if himalaya_section_is_ours; then
+    SKIP_HIMALAYA=1
+    echo "   📧 himalaya account '${ACCT}' already present — skip"
+  else
+    echo "   ❌ account '${ACCT}' already exists in himalaya (collision with EMAIL_OUTLOOK_ACCOUNT_NAME)" >&2
+    exit 1
+  fi
+fi
+
+if [[ "${SKIP_ORTIE}" -eq 0 ]]; then
   if [[ "${GRANT}" == "device" ]]; then
     GRANT_BLOCK="$(cat << EOF
 grant = "device"
@@ -91,7 +208,7 @@ EOF
 
 [accounts.${ACCT}]
 default = true
-client-id = "${CLIENT_ID}"
+client-id = $(toml_string "${CLIENT_ID}")
 ${GRANT_BLOCK}
 scopes = [
   "offline_access",
@@ -99,19 +216,16 @@ scopes = [
   "https://outlook.office.com/SMTP.Send",
 ]
 auto-refresh = true
-storage.read.command = ["cat", "${TOKEN_FILE}"]
-storage.write.command = "umask 077 && cat > ${TOKEN_FILE}"
+storage.read.command = ["cat", $(toml_string "${TOKEN_FILE}")]
+storage.write.command = [$(toml_string "${ORTIE_STORE_TOKEN}"), $(toml_string "${TOKEN_FILE}")]
 EOF
   chmod 600 "${ORTIE_CONFIG}"
   echo "   📧 ortie 已配置 — ${ADDRESS} (account: ${ACCT}, grant: ${GRANT})"
 fi
 
-# ── himalaya account ──────────────────────────────────────────
 TOKEN_CMD="ortie -c ${ORTIE_CONFIG} token show -a ${ACCT}"
 
-if [[ -f "${HIMALAYA_CONFIG}" ]] && grep -q "^\[accounts\.${ACCT}\]" "${HIMALAYA_CONFIG}"; then
-  echo "   📧 himalaya account '${ACCT}' already present — skip"
-else
+if [[ "${SKIP_HIMALAYA}" -eq 0 ]]; then
   DEFAULT_FLAG="false"
   if [[ ! -f "${HIMALAYA_CONFIG}" ]] || ! grep -q "^\[accounts\." "${HIMALAYA_CONFIG}"; then
     DEFAULT_FLAG="true"
@@ -120,29 +234,29 @@ else
   cat >> "${HIMALAYA_CONFIG}" << EOF
 
 [accounts.${ACCT}]
-email = "${ADDRESS}"
-display-name = "${DISPLAY_NAME}"
+email = $(toml_string "${ADDRESS}")
+display-name = $(toml_string "${DISPLAY_NAME}")
 default = ${DEFAULT_FLAG}
 
 backend.type = "imap"
-backend.host = "${IMAP_HOST}"
+backend.host = $(toml_string "${IMAP_HOST}")
 backend.port = ${IMAP_PORT}
 backend.encryption.type = "tls"
-backend.login = "${ADDRESS}"
+backend.login = $(toml_string "${ADDRESS}")
 backend.auth.type = "oauth2"
 backend.auth.method = "xoauth2"
-backend.auth.client-id = "${CLIENT_ID}"
-backend.auth.access-token.cmd = "${TOKEN_CMD}"
+backend.auth.client-id = $(toml_string "${CLIENT_ID}")
+backend.auth.access-token.cmd = $(toml_string "${TOKEN_CMD}")
 
 message.send.backend.type = "smtp"
-message.send.backend.host = "${SMTP_HOST}"
+message.send.backend.host = $(toml_string "${SMTP_HOST}")
 message.send.backend.port = ${SMTP_PORT}
 message.send.backend.encryption.type = "start-tls"
-message.send.backend.login = "${ADDRESS}"
+message.send.backend.login = $(toml_string "${ADDRESS}")
 message.send.backend.auth.type = "oauth2"
 message.send.backend.auth.method = "xoauth2"
-message.send.backend.auth.client-id = "${CLIENT_ID}"
-message.send.backend.auth.access-token.cmd = "${TOKEN_CMD}"
+message.send.backend.auth.client-id = $(toml_string "${CLIENT_ID}")
+message.send.backend.auth.access-token.cmd = $(toml_string "${TOKEN_CMD}")
 EOF
   chmod 600 "${HIMALAYA_CONFIG}"
   echo "   📧 himalaya 已配置 Outlook — ${ADDRESS} (account: ${ACCT})"
@@ -151,8 +265,8 @@ fi
 if [[ -s "${TOKEN_FILE}" ]]; then
   echo "   🔑 Outlook OAuth token present — ${TOKEN_FILE}"
 else
-  echo "   ⚠️  Outlook OAuth 尚未授权。容器内一次性执行："
-  echo "      ortie -c ${ORTIE_CONFIG} auth get -a ${ACCT}"
+  echo "   ⚠️  Outlook OAuth 尚未授权。容器内一次性执行（以 hermes 用户）："
+  echo "      docker compose exec -u hermes -it hermes ortie auth get -a ${ACCT}"
   if [[ "${GRANT}" == "device" ]]; then
     echo "      （device grant：打开 https://microsoft.com/devicelogin 并输入显示的代码）"
   else

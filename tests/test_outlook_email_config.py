@@ -78,6 +78,9 @@ class TestDeviceGrantDefaults:
         assert endpoints["device-authorization"].endswith("/oauth2/v2.0/devicecode")
         token_file = str(generated / ".config" / "ortie" / "tokens" / "outlook.json")
         assert acct["storage"]["read"]["command"] == ["cat", token_file]
+        write_cmd = acct["storage"]["write"]["command"]
+        assert write_cmd[0].endswith("ortie-store-token.sh")
+        assert write_cmd[1] == token_file
 
     def test_himalaya_outlook_is_default_when_alone(self, generated: Path):
         cfg = _load_toml(generated / ".config" / "himalaya" / "config.toml")
@@ -218,6 +221,117 @@ class TestValidation:
         assert "-a ms365" in cmd
 
 
+class TestCollision:
+    """Refuse to overwrite a foreign himalaya/ortie account with the same name."""
+
+    def test_rejects_existing_password_account(self, tmp_path: Path):
+        himalaya = tmp_path / ".config" / "himalaya" / "config.toml"
+        himalaya.parent.mkdir(parents=True)
+        himalaya.write_text("""[accounts.dlut]
+email = "user@dlut.edu.cn"
+default = false
+backend.type = "imap"
+backend.auth.type = "password"
+""")
+        result = _run_configure(
+            tmp_path,
+            {
+                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ACCOUNT_NAME": "dlut",
+            },
+        )
+        assert result.returncode != 0
+        assert "collision" in result.stderr
+        cfg = _load_toml(himalaya)
+        assert cfg["accounts"]["dlut"]["email"] == "user@dlut.edu.cn"
+        assert "auth" in cfg["accounts"]["dlut"]["backend"]
+        assert cfg["accounts"]["dlut"]["backend"]["auth"]["type"] == "password"
+
+
+class TestTomlSafety:
+    """User-controlled values must be escaped or rejected."""
+
+    def test_escapes_quotes_in_display_name(self, tmp_path: Path):
+        result = _run_configure(
+            tmp_path,
+            {
+                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_DISPLAY_NAME": 'Owen "Wenyu"',
+            },
+        )
+        assert result.returncode == 0, result.stderr
+        cfg = _load_toml(tmp_path / ".config" / "himalaya" / "config.toml")
+        assert cfg["accounts"]["outlook"]["display-name"] == 'Owen "Wenyu"'
+
+    def test_rejects_newline_in_address(self, tmp_path: Path):
+        result = _run_configure(
+            tmp_path,
+            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com\nextra"},
+        )
+        assert result.returncode != 0
+
+    def test_rejects_invalid_port(self, tmp_path: Path):
+        result = _run_configure(
+            tmp_path,
+            {
+                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_IMAP_PORT": "not-a-port",
+            },
+        )
+        assert result.returncode != 0
+
+    def test_rejects_invalid_host(self, tmp_path: Path):
+        result = _run_configure(
+            tmp_path,
+            {
+                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_IMAP_HOST": 'evil.com"; ignored = true',
+            },
+        )
+        assert result.returncode != 0
+
+
+class TestConcurrency:
+    """Parallel Hermes profile startups must not duplicate TOML sections."""
+
+    def test_parallel_runs_write_one_section(self, tmp_path: Path):
+        env = {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"}
+        procs = [
+            subprocess.Popen(
+                ["bash", str(CONFIGURE_SCRIPT)],
+                env={**os.environ, **env, "HERMES_DATA": str(tmp_path)},
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+            for _ in range(8)
+        ]
+        codes = [p.wait() for p in procs]
+        assert codes == [0] * 8, [p.stderr.read() for p in procs]
+        himalaya = (tmp_path / ".config" / "himalaya" / "config.toml").read_text()
+        ortie = (tmp_path / ".config" / "ortie" / "config.toml").read_text()
+        assert himalaya.count("[accounts.outlook]") == 1
+        assert ortie.count("[accounts.outlook]") == 1
+
+
+class TestTokenStoreHelper:
+    """Root-created tokens must become readable by hermes when that user exists."""
+
+    def test_writes_token_file_mode_600(self, tmp_path: Path):
+        helper = REPO_ROOT / "docker" / "hermes" / "ortie-store-token.sh"
+        dest = tmp_path / "outlook.json"
+        result = subprocess.run(
+            ["bash", str(helper), str(dest)],
+            input="access-token-value\n",
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert result.returncode == 0, result.stderr
+        assert dest.read_text() == "access-token-value\n"
+        assert dest.stat().st_mode & 0o777 == 0o600
+
+
 class TestBackupCoverage:
     """Hermes backup must copy himalaya config and ortie tokens."""
 
@@ -234,7 +348,11 @@ class TestImageInstall:
         dockerfile = (REPO_ROOT / "docker" / "hermes" / "Dockerfile").read_text()
         assert 'ORTIE_VER="2.2.0"' in dockerfile
         assert "ortie.${ARCH}-linux.tgz" in dockerfile
-        assert "COPY configure-outlook.sh" in dockerfile
+        assert (
+            "COPY configure-outlook.sh" in dockerfile
+            or "configure-outlook.sh" in dockerfile
+        )
+        assert "ortie-store-token.sh" in dockerfile
         wrapper = (
             REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
         ).read_text()

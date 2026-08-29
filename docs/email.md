@@ -81,10 +81,10 @@ himalaya → XOAUTH2 读/发信（access-token.cmd 调用 ortie）
 一次性授权（在容器内，交互式）：
 
 ```bash
-docker compose exec -it hermes ortie auth get -a outlook
+docker compose exec -u hermes -it hermes ortie auth get -a outlook
 ```
 
-- **device**：按提示打开 https://microsoft.com/devicelogin，输入代码，用 Microsoft 账号同意 IMAP/SMTP 权限。
+- **device**：按提示打开 https://microsoft.com/devicelogin，输入代码，用 Microsoft 账号同意 IMAP/SMTP 权限。必须加 `-u hermes`，否则 token 文件属主是 root，爱玛士进程读不到。
 - **authorization-code**：打开打印的 URL；若容器收不到回调，把浏览器最终跳转的地址交给 `ortie auth resume <redirect-uri>`。
 
 Outlook 网页设置里还需开启 IMAP：设置 → 邮件 → 转发和 IMAP。
@@ -92,8 +92,8 @@ Outlook 网页设置里还需开启 IMAP：设置 → 邮件 → 转发和 IMAP�
 验证：
 
 ```bash
-docker compose exec hermes ortie token inspect -a outlook
-docker compose exec hermes himalaya envelope list -a outlook --page-size 5
+docker compose exec -u hermes hermes ortie token inspect -a outlook
+docker compose exec -u hermes hermes himalaya envelope list -a outlook --page-size 5
 ```
 
 QQ / DLUT 密码账户保持不变，Outlook 是额外账户。Token 随 hermes 备份一起进云盘快照。
