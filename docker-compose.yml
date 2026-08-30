@@ -98,6 +98,9 @@ services:
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
+      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
+      - email-config-none:/opt/data/.config/himalaya
+      - email-tokens-none:/opt/data/.config/ortie
 
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
@@ -108,16 +111,6 @@ services:
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo provider (爱码士 mimo-v2.5-pro)
-      # Outlook OAuth（非机密配置，repo .env 单一来源；token 由 ortie 管理，不经环境传递）
-      - EMAIL_OUTLOOK_ADDRESS=${EMAIL_OUTLOOK_ADDRESS:-}
-      - EMAIL_OUTLOOK_ACCOUNT_NAME=${EMAIL_OUTLOOK_ACCOUNT_NAME:-}
-      - EMAIL_OUTLOOK_DISPLAY_NAME=${EMAIL_OUTLOOK_DISPLAY_NAME:-}
-      - EMAIL_OUTLOOK_GRANT=${EMAIL_OUTLOOK_GRANT:-}
-      - EMAIL_OUTLOOK_CLIENT_ID=${EMAIL_OUTLOOK_CLIENT_ID:-}
-      - EMAIL_OUTLOOK_IMAP_HOST=${EMAIL_OUTLOOK_IMAP_HOST:-}
-      - EMAIL_OUTLOOK_IMAP_PORT=${EMAIL_OUTLOOK_IMAP_PORT:-}
-      - EMAIL_OUTLOOK_SMTP_HOST=${EMAIL_OUTLOOK_SMTP_HOST:-}
-      - EMAIL_OUTLOOK_SMTP_PORT=${EMAIL_OUTLOOK_SMTP_PORT:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
@@ -169,6 +162,9 @@ services:
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
+      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
+      - email-config-none:/opt/data/.config/himalaya
+      - email-tokens-none:/opt/data/.config/ortie
 
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
@@ -187,16 +183,6 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=finance
-      # Outlook OAuth（非机密配置，repo .env 单一来源；token 由 ortie 管理，不经环境传递）
-      - EMAIL_OUTLOOK_ADDRESS=${EMAIL_OUTLOOK_ADDRESS:-}
-      - EMAIL_OUTLOOK_ACCOUNT_NAME=${EMAIL_OUTLOOK_ACCOUNT_NAME:-}
-      - EMAIL_OUTLOOK_DISPLAY_NAME=${EMAIL_OUTLOOK_DISPLAY_NAME:-}
-      - EMAIL_OUTLOOK_GRANT=${EMAIL_OUTLOOK_GRANT:-}
-      - EMAIL_OUTLOOK_CLIENT_ID=${EMAIL_OUTLOOK_CLIENT_ID:-}
-      - EMAIL_OUTLOOK_IMAP_HOST=${EMAIL_OUTLOOK_IMAP_HOST:-}
-      - EMAIL_OUTLOOK_IMAP_PORT=${EMAIL_OUTLOOK_IMAP_PORT:-}
-      - EMAIL_OUTLOOK_SMTP_HOST=${EMAIL_OUTLOOK_SMTP_HOST:-}
-      - EMAIL_OUTLOOK_SMTP_PORT=${EMAIL_OUTLOOK_SMTP_PORT:-}
       - ZOT_DATA_DIR=/opt/zotero-data
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
@@ -233,6 +219,9 @@ services:
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
+      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
+      - email-config-none:/opt/data/.config/himalaya
+      - email-tokens-none:/opt/data/.config/ortie
 
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
@@ -251,16 +240,6 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=daoyuan
-      # Outlook OAuth（非机密配置，repo .env 单一来源；token 由 ortie 管理，不经环境传递）
-      - EMAIL_OUTLOOK_ADDRESS=${EMAIL_OUTLOOK_ADDRESS:-}
-      - EMAIL_OUTLOOK_ACCOUNT_NAME=${EMAIL_OUTLOOK_ACCOUNT_NAME:-}
-      - EMAIL_OUTLOOK_DISPLAY_NAME=${EMAIL_OUTLOOK_DISPLAY_NAME:-}
-      - EMAIL_OUTLOOK_GRANT=${EMAIL_OUTLOOK_GRANT:-}
-      - EMAIL_OUTLOOK_CLIENT_ID=${EMAIL_OUTLOOK_CLIENT_ID:-}
-      - EMAIL_OUTLOOK_IMAP_HOST=${EMAIL_OUTLOOK_IMAP_HOST:-}
-      - EMAIL_OUTLOOK_IMAP_PORT=${EMAIL_OUTLOOK_IMAP_PORT:-}
-      - EMAIL_OUTLOOK_SMTP_HOST=${EMAIL_OUTLOOK_SMTP_HOST:-}
-      - EMAIL_OUTLOOK_SMTP_PORT=${EMAIL_OUTLOOK_SMTP_PORT:-}
       # 道元不共享 TDAI memory — memory_enabled: false，独立记忆体系
       # Feishu (道元·文献学者 — 开放给群内所有人)
       - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}
@@ -559,3 +538,9 @@ services:
 networks:
   myopenclaw-net:
     driver: bridge
+
+# 邮箱能力收敛到爱玛士（默认 profile）：受限 profile（爱码士/道元/finance）
+# 用这两个恒空卷遮蔽共享卷上的邮箱路径——配置与 token 对其不可见
+volumes:
+  email-config-none:
+  email-tokens-none:

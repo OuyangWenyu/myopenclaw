@@ -475,6 +475,37 @@ class TestEntrypointWiring:
         assert "while IFS= read -r kv" in wrapper
         assert '"${!key:-}"' in wrapper
 
+    def test_wrapper_gates_email_capability_by_profile(self):
+        """Email is granted to the default profile only (爱玛士); others denied."""
+        wrapper = (
+            REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
+        ).read_text()
+        # profile gate: coder/finance/daoyuan set HERMES_PROFILE, default does not
+        # (gate appears in: env loading, config generation, outlook invocation)
+        assert wrapper.count('-z "${HERMES_PROFILE:-}"') >= 3
+        # deny stubs replace both binaries in restricted profiles
+        assert "邮箱访问未授权" in wrapper
+        assert "/usr/local/bin/himalaya" in wrapper
+        assert "/usr/local/bin/ortie" in wrapper
+
+    def test_wrapper_folder_alias_handles_last_section(self):
+        """Alias insertion must not land in the PREVIOUS account section when
+        the target account is the last one (regression: duplicate-key error)."""
+        wrapper = (
+            REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
+        ).read_text()
+        # next-section lookup must compare line numbers (> own), not grep -A1
+        assert "$1 > own" in wrapper
+
+    def test_wrapper_alias_append_never_nests_quotes_in_expansion(self):
+        """Quotes inside ${var:+word} heredoc expansions get eaten by bash —
+        the end-of-file alias append must use explicit echo lines instead
+        (regression: `folder.aliases.drafts = Drafts` failed TOML parsing)."""
+        wrapper = (
+            REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
+        ).read_text()
+        assert 'folder.aliases.drafts = "${H_DRAFTS}"}' not in wrapper
+
 
 class TestComposeInjection:
     """Repo-root .env is the single config source for Outlook (non-secret vars)."""
@@ -498,12 +529,31 @@ class TestComposeInjection:
         parts = re.split(r"\n  ([\w-]+):\n", "\n" + compose_text)
         return {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
 
-    def test_compose_injects_outlook_env_for_all_hermes_services(self):
+    def test_compose_injects_outlook_env_only_for_default_hermes(self):
+        """Email capability is granted to the default profile (爱玛士) only."""
         blocks = self._service_blocks(self.COMPOSE.read_text())
-        for service in ("hermes", "hermes-coder", "hermes-finance", "hermes-daoyuan"):
-            assert service in blocks, f"service missing in compose: {service}"
-            for var in self.OUTLOOK_VARS:
-                assert f"- {var}=${{{var}:-}}" in blocks[service], (service, var)
+        assert "hermes" in blocks, "hermes service missing in compose"
+        for var in self.OUTLOOK_VARS:
+            assert f"- {var}=${{{var}:-}}" in blocks["hermes"], var
+        for service in ("hermes-coder", "hermes-finance", "hermes-daoyuan"):
+            assert "- EMAIL_OUTLOOK_" not in blocks[service], (
+                f"{service} must not receive email env vars"
+            )
+
+    def test_restricted_services_shadow_email_paths_with_empty_volumes(self):
+        """coder/finance/daoyuan must not see the shared email config or tokens."""
+        blocks = self._service_blocks(self.COMPOSE.read_text())
+        for service in ("hermes-coder", "hermes-finance", "hermes-daoyuan"):
+            assert "email-config-none:/opt/data/.config/himalaya" in blocks[service], service
+            assert "email-tokens-none:/opt/data/.config/ortie" in blocks[service], service
+        # 爱玛士 keeps the real shared paths
+        assert "email-config-none:/opt/data/.config/himalaya" not in blocks["hermes"]
+        assert "email-tokens-none:/opt/data/.config/ortie" not in blocks["hermes"]
+
+    def test_compose_declares_shadow_volumes(self):
+        text = self.COMPOSE.read_text()
+        assert re.search(r"^  email-config-none:", text, re.M)
+        assert re.search(r"^  email-tokens-none:", text, re.M)
 
     def test_hermes_dashboard_not_injected(self):
         blocks = self._service_blocks(self.COMPOSE.read_text())

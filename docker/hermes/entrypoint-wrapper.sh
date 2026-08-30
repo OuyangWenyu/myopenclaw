@@ -195,6 +195,20 @@ for pair in \
   fi
 done
 
+# ── Email capability gate: 默认 profile（爱玛士）独占 ────────
+# 爱码士/道元/finance 与爱玛士共享 /opt/data（邮箱配置与 token 都在共享卷上，
+# 同 UID 无法按容器 chmod），因此：
+#   1) 受限 profile 在容器文件系统内用拒绝桩替换 himalaya/ortie 二进制
+#      （重建容器即从镜像恢复，不影响镜像本身）；
+#   2) 配置与 token 路径由 compose 空卷遮蔽（email-*-none），cat 也拿不到。
+if [[ -n "${HERMES_PROFILE:-}" ]]; then
+  printf '#!/bin/sh\necho "🚫 邮箱访问未授权给此 profile（仅爱玛士可用）" >&2\nexit 126\n' \
+    > /usr/local/bin/himalaya
+  printf '#!/bin/sh\necho "🚫 邮箱访问未授权给此 profile（仅爱玛士可用）" >&2\nexit 126\n' \
+    > /usr/local/bin/ortie
+  chmod +x /usr/local/bin/himalaya /usr/local/bin/ortie
+fi
+
 # ── Auto-configure himalaya from Hermes email settings ─────
 # Parses /opt/data/.env for EMAIL_* vars and generates ~/.config/himalaya/config.toml
 # Works whether the vars are commented out (email platform disabled) or active.
@@ -202,7 +216,7 @@ done
 # 变量只赋值为本脚本 shell 变量，不导出——绝不进入 Hermes 进程环境
 # （EMAIL_PASSWORD 等真机密留在文件里，Hermes 不把 email 当消息平台）。
 HIMALAYA_CONFIG="/opt/data/.config/himalaya/config.toml"
-if [[ -f /opt/data/.env ]]; then
+if [[ -f /opt/data/.env && -z "${HERMES_PROFILE:-}" ]]; then
   while IFS= read -r kv; do
     key="${kv%%=*}"
     if [[ -n "${key}" && -z "${!key:-}" ]]; then
@@ -210,7 +224,7 @@ if [[ -f /opt/data/.env ]]; then
     fi
   done < <(sed 's/^#[[:space:]]*//' /opt/data/.env 2>/dev/null | grep -E '^EMAIL_' || true)
 fi
-if [[ -f /opt/data/.env && ! -f "${HIMALAYA_CONFIG}" ]]; then
+if [[ -f /opt/data/.env && ! -f "${HIMALAYA_CONFIG}" && -z "${HERMES_PROFILE:-}" ]]; then
   if [[ -n "${EMAIL_ADDRESS:-}" && -n "${EMAIL_PASSWORD:-}" && -n "${EMAIL_IMAP_HOST:-}" ]]; then
     mkdir -p "$(dirname "${HIMALAYA_CONFIG}")"
     cat > "${HIMALAYA_CONFIG}" << TOML
@@ -282,7 +296,7 @@ fi
 # Idempotent: appends [accounts.outlook] to an existing himalaya config
 # and writes ~/.config/ortie/config.toml. First-time auth is interactive
 # (`ortie auth get`) and is intentionally not run here.
-if [[ -n "${EMAIL_OUTLOOK_ADDRESS:-}" ]]; then
+if [[ -z "${HERMES_PROFILE:-}" && -n "${EMAIL_OUTLOOK_ADDRESS:-}" ]]; then
   # 失败降级：Outlook 是可选增强，配置错误不应拖垮整个 Hermes 容器
   if ! HERMES_DATA=/opt/data /opt/hermes/configure-outlook.sh; then
     echo "   ⚠️  Outlook 配置生成失败（检查 EMAIL_OUTLOOK_* 设置），跳过"
@@ -316,9 +330,12 @@ if command -v himalaya &>/dev/null && [[ -f "${HIMALAYA_CONFIG}" ]]; then
     H_TRASH="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'trash\|deleted')"
     if [[ -n "${H_SENT}" ]]; then
       # Append folder.aliases as dotted keys after the account section.
-      # We find the line after the last setting of this account (before next
-      # [accounts.xxx] or end of file) and insert there.
-      H_NEXT_SECTION="$(grep -n "^\[accounts\." "${HIMALAYA_CONFIG}" | grep -A1 "^[0-9]*:\[accounts\.${H_ACCT}\]" | tail -1 | cut -d: -f1)"
+      # Find the section header AFTER this account's own header — the naive
+      # `grep -A1 | tail -1` returned the account's OWN line when it was the
+      # last section, inserting aliases into the previous account's table
+      # (duplicate-key parse error). None found → append at end of file.
+      H_OWN_LINE="$(grep -n "^\[accounts\.${H_ACCT}\]" "${HIMALAYA_CONFIG}" | head -1 | cut -d: -f1)"
+      H_NEXT_SECTION="$(grep -n "^\[accounts\." "${HIMALAYA_CONFIG}" | awk -F: -v own="${H_OWN_LINE}" '$1 > own {print $1; exit}')"
       if [[ -n "${H_NEXT_SECTION}" ]]; then
         # Insert before the next section
         sed -i "${H_NEXT_SECTION}i\\
@@ -327,12 +344,15 @@ folder.aliases.drafts = \"${H_DRAFTS}\"}${H_TRASH:+\\
 folder.aliases.trash = \"${H_TRASH}\"}\\
 " "${HIMALAYA_CONFIG}"
       else
-        # No next section — append at end of file
-        cat >> "${HIMALAYA_CONFIG}" << TOML
-folder.aliases.sent = "${H_SENT}"${H_DRAFTS:+
-folder.aliases.drafts = "${H_DRAFTS}"}${H_TRASH:+
-folder.aliases.trash = "${H_TRASH}"}
-TOML
+        # No next section — append at end of file.
+        # Explicit echo lines instead of a heredoc: quotes nested inside
+        # ${var:+word} expansions get stripped in heredoc context, which
+        # produced unquoted TOML values (`drafts = Drafts` → parse error).
+        {
+          echo "folder.aliases.sent = \"${H_SENT}\""
+          if [[ -n "${H_DRAFTS}" ]]; then echo "folder.aliases.drafts = \"${H_DRAFTS}\""; fi
+          if [[ -n "${H_TRASH}" ]]; then echo "folder.aliases.trash = \"${H_TRASH}\""; fi
+        } >> "${HIMALAYA_CONFIG}"
       fi
       echo "   📧 himalaya folder.aliases → ${H_ACCT}: sent=${H_SENT}${H_DRAFTS:+, drafts=${H_DRAFTS}}${H_TRASH:+, trash=${H_TRASH}}"
     fi

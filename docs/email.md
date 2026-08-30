@@ -112,3 +112,13 @@ docker compose exec hermes himalaya envelope list --page-size 5
 ## 使用方式
 
 直接跟 Hermes 说「查收件箱」「搜来自 xxx 的邮件」「给 xxx 发封邮件」。Outlook 加一句「用 outlook 账户」。
+
+## 授权范围（仅爱玛士）
+
+邮箱能力（QQ/DLUT/Outlook 全部账户）**只授权给默认 profile 爱玛士**。爱码士/道元/finance 的容器里：
+
+- `himalaya` / `ortie` 二进制被拒绝桩替换，调用即返回「🚫 邮箱访问未授权给此 profile（仅爱玛士可用）」
+- 邮箱配置与 token 路径被恒空卷遮蔽（`email-config-none` / `email-tokens-none`），token 对其不可见
+- `EMAIL_*` 环境变量不注入、entrypoint 不生成任何邮箱配置
+
+你本人仍可 `docker compose exec`（root）进入受限容器操作邮箱——门禁针对 agent 行为，人是超管。要调整授权范围：改 `docker-compose.yml` 中对应服务的遮蔽卷与 `EMAIL_OUTLOOK_*` 注入，并重建镜像。
