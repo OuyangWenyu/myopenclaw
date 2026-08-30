@@ -45,23 +45,27 @@ Hermes 通过 [himalaya](https://github.com/pimalaya/himalaya) CLI 工具管理�
 
 ## 添加 Outlook / Microsoft 365（OAuth）
 
-Microsoft 个人/企业邮箱已停用 IMAP/SMTP 密码认证，必须走 OAuth 2.0。本仓库拆成两层：
+### 为什么以前「常规方式」配不上
+
+不是配置问题：Microsoft 已**全面停用**个人 Outlook 的 IMAP/SMTP 基础认证——密码、应用密码全部失效，只剩 OAuth 2.0 一条路。而 himalaya 自带的 OAuth2（keyring 变体，见官方 `config.sample.toml`）需要浏览器回调 `localhost` 随机端口——Docker 容器里做不到。所以本仓库把授权交给 [ortie](https://github.com/pimalaya/ortie)（与 himalaya 同作者，专为无浏览器场景设计 device grant），himalaya 只消费现成 token：
 
 ```
-ortie  →  授权 + 刷新 access token（token 落在 ~/.hermes/.config/ortie/tokens/）
-himalaya → XOAUTH2 读/发信（access-token.cmd 调用 ortie）
+ortie    →  授权 + 自动刷新 access token（token 落在 ~/.hermes/.config/ortie/tokens/）
+himalaya →  XOAUTH2 读/发信（官方 access-token.cmd 变体调用 ortie）
 ```
 
-默认用 **IMAP/SMTP**（不是 Microsoft Graph），客户端是 Thunderbird 已验证的公共应用，无需自己注册 Azure 应用。Docker 无浏览器，默认 **device grant**：容器打印一组代码，你在手机/电脑打开 https://microsoft.com/devicelogin 完成登录。
+默认走 **IMAP/SMTP**（不是 Microsoft Graph），客户端用 Mozilla 注册的 Thunderbird 公共应用 ID（全球共用、开源可复用），**无需自己注册 Azure 应用、无需安装任何东西**。Docker 无浏览器，默认 **device grant**：容器打印一组代码，你在手机/电脑打开 https://microsoft.com/devicelogin 完成登录。
 
-在 `~/.hermes/.env` 中追加（同样保持注释）：
+### 配置（项目根 `.env`，换电脑一个 env 走天下）
+
+`EMAIL_OUTLOOK_*` 全部是**非机密**变量（OAuth 模型下没有邮箱密码），直接写在仓库根目录 `.env`，经 docker-compose 注入容器——换电脑时 clone 项目 + 复制 `.env` + `./scripts/start.sh --build` 即拉起。模板见 `.env.example`：
 
 ```
-# EMAIL_OUTLOOK_ADDRESS=you@outlook.com
-# EMAIL_OUTLOOK_ACCOUNT_NAME=outlook
-# EMAIL_OUTLOOK_DISPLAY_NAME=Wenyu Ouyang
-# EMAIL_OUTLOOK_GRANT=device
+EMAIL_OUTLOOK_ADDRESS=you@outlook.com
+EMAIL_OUTLOOK_DISPLAY_NAME=Wenyu Ouyang
 ```
+
+其余变量有合理默认，可不填；**不填 `EMAIL_OUTLOOK_ADDRESS` 则整个功能关闭**。QQ/DLUT 密码账户不同：密码是真机密，仍留在 `~/.hermes/.env`（见上文），不进项目 `.env`。
 
 可选覆盖：
 
@@ -69,6 +73,7 @@ himalaya → XOAUTH2 读/发信（access-token.cmd 调用 ortie）
 |------|------|------|
 | `EMAIL_OUTLOOK_GRANT` | `device` | `device`（推荐，无浏览器）或 `authorization-code` |
 | `EMAIL_OUTLOOK_CLIENT_ID` | Thunderbird 公共 client | 换自己的 Azure 应用时覆盖 |
+| `EMAIL_OUTLOOK_ACCOUNT_NAME` | `outlook` | himalaya/ortie 里的账户 id |
 | `EMAIL_OUTLOOK_IMAP_HOST` / `PORT` | `outlook.office365.com` / `993` | |
 | `EMAIL_OUTLOOK_SMTP_HOST` / `PORT` | `smtp.office365.com` / `587` | |
 
@@ -78,16 +83,14 @@ himalaya → XOAUTH2 读/发信（access-token.cmd 调用 ortie）
 ./scripts/start.sh --build    # 首次：镜像需包含 ortie
 ```
 
-一次性授权（在容器内，交互式）：
+### 一次性授权（唯一人工步骤，每台新机器一次）
 
 ```bash
 docker compose exec -u hermes -it hermes ortie auth get -a outlook
 ```
 
-- **device**：按提示打开 https://microsoft.com/devicelogin，输入代码，用 Microsoft 账号同意 IMAP/SMTP 权限。必须加 `-u hermes`，否则 token 文件属主是 root，爱玛士进程读不到。
+- **device**：按提示打开 https://microsoft.com/devicelogin，输入代码，用 Microsoft 账号登录并同意 **Thunderbird** 想要访问的 IMAP/SMTP 权限即可，无需 `auth resume`。加 `-u hermes` 是让授权交互与后续读取保持同一用户身份（token 写入助手 `ortie-store-token.sh` 本身也会把属主修正为 hermes）。代码约 15 分钟有效，过期重跑命令。
 - **authorization-code**：打开打印的 URL；若容器收不到回调，把浏览器最终跳转的地址交给 `ortie auth resume <redirect-uri>`。
-
-Outlook 网页设置里还需开启 IMAP：设置 → 邮件 → 转发和 IMAP。
 
 验证：
 
@@ -96,7 +99,9 @@ docker compose exec -u hermes hermes ortie token inspect -a outlook
 docker compose exec -u hermes hermes himalaya envelope list -a outlook --page-size 5
 ```
 
-QQ / DLUT 密码账户保持不变，Outlook 是额外账户。Token 随 hermes 备份一起进云盘快照。
+QQ / DLUT 密码账户保持不变，Outlook 是额外账户。Token 由 ortie 自动续期，随 hermes 备份一起进云盘快照——换电脑时可从备份恢复 `~/.hermes/.config/ortie/`，连授权都免了。
+
+配置漂移说明：首次生成后修改 `EMAIL_OUTLOOK_*` 不会自动重写已写入的配置段，启动日志会出现「检测到 EMAIL_OUTLOOK_* 与已写入配置不一致」警告；此时删除 `~/.hermes/.config/{himalaya,ortie}/config.toml` 中对应 `[accounts.<name>]` 段再重启即可应用新值。
 
 ## 验证
 
