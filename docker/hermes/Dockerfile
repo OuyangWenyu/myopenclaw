@@ -3,13 +3,19 @@
 # Base: nousresearch/hermes-agent:latest (debian:13.4)
 # =============================================================
 
-# ── Stage 1: Build cardamum from source (master) ───────────────
-# v0.2.0-dev has cards create <id> <VCARD> — vCard passed directly,
-# no EDITOR hack needed. Stable enough for CLI use.
+# ── Stage 1: Rust builds (cardamum + himalaya, both from source) ──
+# cardamum: v0.2.0-dev has cards create <id> <VCARD> — vCard passed
+# directly, no EDITOR hack needed. Stable enough for CLI use.
+# himalaya: GitHub release binaries ship with default cargo features only,
+# which EXCLUDE `oauth2` — config parsing then rejects
+# `backend.auth.type = "oauth2"` and breaks EVERY account in config.toml.
 FROM rust:1.96-slim-bookworm AS cardamum-builder
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev && \
     rm -rf /var/lib/apt/lists/*
 RUN cargo install --git https://github.com/pimalaya/cardamum.git --rev 771879c1d510b6625dfd7f33c59112b0eab2775d cardamum
+# oauth2 implies keyring (secret-lib) at compile time only — token
+# consumption goes through backend.auth.access-token.cmd, not the keyring.
+RUN cargo install himalaya --version 1.2.0 --locked --features oauth2
 
 # ── Stage 2: Hermes custom image ──────────────────────────────
 FROM nousresearch/hermes-agent:latest
@@ -47,15 +53,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # ── Install himalaya (CLI email client) ─────────────────────
-# Pre-built static binary for Linux x86_64
+# Built from source in stage 1 with `--features oauth2` (see stage 1 comment:
+# release binaries cannot parse `backend.auth.type = "oauth2"`).
 # Provides IMAP/SMTP email management from terminal (list, read, search, reply, etc.)
 # Used by the built-in email skill at /opt/hermes/skills/email/himalaya/
-RUN HIMALAYA_VER="1.2.0" && \
-    ARCH=$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/aarch64/') && \
-    wget -qO /tmp/himalaya.tgz "https://github.com/pimalaya/himalaya/releases/download/v${HIMALAYA_VER}/himalaya.${ARCH}-linux.tgz" && \
-    tar xzf /tmp/himalaya.tgz -C /usr/local/bin himalaya && \
-    chmod +x /usr/local/bin/himalaya && \
-    rm /tmp/himalaya.tgz
+COPY --from=cardamum-builder /usr/local/cargo/bin/himalaya /usr/local/bin/himalaya
 
 # ── Install ortie (OAuth 2.0 token broker) ──────────────────
 # Pre-built static binary. Himalaya v1.2.0 has no OAuth wizard that

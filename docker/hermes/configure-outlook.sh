@@ -312,6 +312,17 @@ backend.encryption.type = "tls"
 backend.login = $(toml_string "${ADDRESS}")
 backend.auth.type = "oauth2"
 backend.auth.method = "xoauth2"
+# Required by himalaya v1.2.0 to deserialize oauth2 auth config even when
+# only access-token.cmd is used — missing any of these fails the WHOLE
+# config.toml parse (breaking password accounts too). pkce=false: ortie
+# owns the actual grant, himalaya only presents the token.
+backend.auth.auth-url = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+backend.auth.token-url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+backend.auth.pkce = false
+backend.auth.scopes = [
+  "https://outlook.office.com/IMAP.AccessAsUser.All",
+  "https://outlook.office.com/SMTP.Send",
+]
 backend.auth.client-id = $(toml_string "${CLIENT_ID}")
 backend.auth.access-token.cmd = $(toml_string "${TOKEN_CMD}")
 
@@ -322,6 +333,13 @@ message.send.backend.encryption.type = "start-tls"
 message.send.backend.login = $(toml_string "${ADDRESS}")
 message.send.backend.auth.type = "oauth2"
 message.send.backend.auth.method = "xoauth2"
+message.send.backend.auth.auth-url = "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+message.send.backend.auth.token-url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+message.send.backend.auth.pkce = false
+message.send.backend.auth.scopes = [
+  "https://outlook.office.com/IMAP.AccessAsUser.All",
+  "https://outlook.office.com/SMTP.Send",
+]
 message.send.backend.auth.client-id = $(toml_string "${CLIENT_ID}")
 message.send.backend.auth.access-token.cmd = $(toml_string "${TOKEN_CMD}")
 EOF

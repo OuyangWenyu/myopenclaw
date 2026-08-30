@@ -100,12 +100,24 @@ class TestDeviceGrantDefaults:
         token_cmd = backend["auth"]["access-token"]["cmd"]
         assert "ortie" in token_cmd
         assert "-a outlook" in token_cmd
+        # himalaya v1.2.0 requires these for deserializing oauth2 auth config
+        # (even when only access-token.cmd is used) — verified empirically:
+        # missing any of them fails the WHOLE config parse, QQ/DLUT included.
         smtp = acct["message"]["send"]["backend"]
         assert smtp["type"] == "smtp"
         assert smtp["host"] == "smtp.office365.com"
         assert smtp["port"] == 587
         assert smtp["encryption"]["type"] == "start-tls"
         assert smtp["auth"]["method"] == "xoauth2"
+        for side_auth in (backend["auth"], smtp["auth"]):
+            assert side_auth["auth-url"] == (
+                "https://login.microsoftonline.com/common/oauth2/v2.0/authorize"
+            )
+            assert side_auth["token-url"] == (
+                "https://login.microsoftonline.com/common/oauth2/v2.0/token"
+            )
+            assert side_auth["pkce"] is False
+            assert "https://outlook.office.com/IMAP.AccessAsUser.All" in side_auth["scopes"]
 
     def test_warns_when_token_missing(self, tmp_path: Path):
         """Fresh generation without a token must print the auth hint."""
@@ -521,6 +533,14 @@ class TestImageInstall:
         ortie_block = dockerfile.split("# ── Install ortie")[1]
         assert "ARCH=$(uname -m)" in ortie_block
         assert "s/x86_64/x86_64/" not in ortie_block
+
+    def test_himalaya_built_with_oauth2_feature(self):
+        """Release binaries lack the oauth2 cargo feature — must build from source."""
+        dockerfile = (REPO_ROOT / "docker" / "hermes" / "Dockerfile").read_text()
+        assert "cargo install himalaya" in dockerfile
+        assert "--features oauth2" in dockerfile
+        # release-tarball install would ship without oauth2 and break config parsing
+        assert "himalaya.tgz" not in dockerfile
 
     def test_wrapper_wires_configure_script(self):
         wrapper = (
