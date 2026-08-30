@@ -208,6 +208,7 @@ print('done')
   fi
   # DuckDuckGo web_search backend (no API key). Idempotent; does not
   # overwrite an operator-chosen backend such as brave_free.
+  # The helper uses surgical YAML edits and does not require host PyYAML.
   python3 "${REPO_ROOT}/scripts/ensure_hermes_web_search.py" \
     "${HERMES_DEFAULT_CONFIG}" || \
     echo "   ⚠️  Hermes web.search_backend 注入失败（不影响启动）"
