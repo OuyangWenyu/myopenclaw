@@ -85,6 +85,7 @@ git clone https://github.com/OuyangWenyu/zhixun-agent.git ../zhixun-agent
 | 安装 paper-fetch skill | `~/.openclaw/skills/paper-fetch` |
 | 物化黑名单 API Key | 容器内 `/opt/data/secrets/` |
 | 生成 himalaya 邮件配置 | `~/.hermes/.config/himalaya/config.toml` |
+| 生成 ortie Outlook OAuth 配置 | `~/.hermes/.config/ortie/config.toml`（首次授权需手动 `ortie auth get`） |
 | 生成 cardamum 联系人配置 | `~/.hermes/home/.config/cardamum/config.toml` |
 | 映射 DEEPSEEK_API_KEY → ANTHROPIC_API_KEY | claude-code 容器环境变量 |
 | 初始化 lark-cli 配置 | `~/.lark-cli/` |

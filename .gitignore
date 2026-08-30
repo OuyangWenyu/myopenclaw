@@ -28,6 +28,7 @@ logs/
 # Python
 __pycache__/
 .pytest_cache/
+.venv/
 .claude/worktrees/
 
 # ── Build context temporary files ──────────────────────────────────

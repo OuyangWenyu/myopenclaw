@@ -36,6 +36,16 @@ services:
       # Blocked by Hermes env blacklist, materialized to secrets files by entrypoint
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo provider (mimo-v2.5 多模态秘书模型)
+      # Outlook OAuth（非机密配置，repo .env 单一来源；token 由 ortie 管理，不经环境传递）
+      - EMAIL_OUTLOOK_ADDRESS=${EMAIL_OUTLOOK_ADDRESS:-}
+      - EMAIL_OUTLOOK_ACCOUNT_NAME=${EMAIL_OUTLOOK_ACCOUNT_NAME:-}
+      - EMAIL_OUTLOOK_DISPLAY_NAME=${EMAIL_OUTLOOK_DISPLAY_NAME:-}
+      - EMAIL_OUTLOOK_GRANT=${EMAIL_OUTLOOK_GRANT:-}
+      - EMAIL_OUTLOOK_CLIENT_ID=${EMAIL_OUTLOOK_CLIENT_ID:-}
+      - EMAIL_OUTLOOK_IMAP_HOST=${EMAIL_OUTLOOK_IMAP_HOST:-}
+      - EMAIL_OUTLOOK_IMAP_PORT=${EMAIL_OUTLOOK_IMAP_PORT:-}
+      - EMAIL_OUTLOOK_SMTP_HOST=${EMAIL_OUTLOOK_SMTP_HOST:-}
+      - EMAIL_OUTLOOK_SMTP_PORT=${EMAIL_OUTLOOK_SMTP_PORT:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
@@ -88,6 +98,9 @@ services:
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
+      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
+      - email-config-none:/opt/data/.config/himalaya
+      - email-tokens-none:/opt/data/.config/ortie
 
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
@@ -149,6 +162,9 @@ services:
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
+      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
+      - email-config-none:/opt/data/.config/himalaya
+      - email-tokens-none:/opt/data/.config/ortie
 
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
@@ -203,6 +219,9 @@ services:
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
+      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
+      - email-config-none:/opt/data/.config/himalaya
+      - email-tokens-none:/opt/data/.config/ortie
 
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
@@ -519,3 +538,9 @@ services:
 networks:
   myopenclaw-net:
     driver: bridge
+
+# 邮箱能力收敛到爱玛士（默认 profile）：受限 profile（爱码士/道元/finance）
+# 用这两个恒空卷遮蔽共享卷上的邮箱路径——配置与 token 对其不可见
+volumes:
+  email-config-none:
+  email-tokens-none:

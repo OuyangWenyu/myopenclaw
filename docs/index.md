@@ -14,7 +14,7 @@ myopenclaw 用 Docker 运行三个 AI Agent 框架 — [Hermes Agent](https://gi
 - **自动化工作流**：晨间三签、AI 情报聚合、研发日报、论文管线
 - **水文智能问答**：zhixun 知汛助手，独立 Compose 栈，飞书 bot 直达水库/河道/雨量/流域查询
 - **文献管理**：Zotero MCP 共享服务 + paper pipeline 论文下载入库 + Google Drive 云端存档
-- **通讯与邮件**：cardamum 联系人管理 + himalaya CLI 邮件客户端
+- **通讯与邮件**：cardamum 联系人管理 + himalaya CLI 邮件客户端（Outlook 经 ortie OAuth）
 - **数据安全**：数据全在本机，配置 Git 管理，定时快照备份到云盘
 
 ## 快速导航
