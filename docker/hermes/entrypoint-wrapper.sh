@@ -210,19 +210,16 @@ if [[ -n "${HERMES_PROFILE:-}" ]]; then
 fi
 
 # ── Auto-configure himalaya from Hermes email settings ─────
-# Parses /opt/data/.env for EMAIL_* vars and generates ~/.config/himalaya/config.toml
-# Works whether the vars are commented out (email platform disabled) or active.
-# EMAIL_* 加载优先级：容器环境（repo .env 经 compose 注入）优先，~/.hermes/.env 兜底。
-# 变量只赋值为本脚本 shell 变量，不导出——绝不进入 Hermes 进程环境
-# （EMAIL_PASSWORD 等真机密留在文件里，Hermes 不把 email 当消息平台）。
+# EMAIL_*/EMAIL2_*/EMAIL_OUTLOOK_* 加载逻辑在 load-email-env.sh（可独立测试）：
+# 容器环境（compose 注入）优先、注释行同样生效、只赋值不导出。
+# 仅默认 profile 加载（受限 profile 无需任何邮箱凭据）。
 HIMALAYA_CONFIG="/opt/data/.config/himalaya/config.toml"
+if [[ -f /opt/hermes/load-email-env.sh ]]; then
+  # shellcheck source=/dev/null
+  source /opt/hermes/load-email-env.sh
+fi
 if [[ -f /opt/data/.env && -z "${HERMES_PROFILE:-}" ]]; then
-  while IFS= read -r kv; do
-    key="${kv%%=*}"
-    if [[ -n "${key}" && -z "${!key:-}" ]]; then
-      eval "${kv}"
-    fi
-  done < <(sed 's/^#[[:space:]]*//' /opt/data/.env 2>/dev/null | grep -E '^EMAIL_' || true)
+  load_email_env /opt/data/.env
 fi
 if [[ -f /opt/data/.env && ! -f "${HIMALAYA_CONFIG}" && -z "${HERMES_PROFILE:-}" ]]; then
   if [[ -n "${EMAIL_ADDRESS:-}" && -n "${EMAIL_PASSWORD:-}" && -n "${EMAIL_IMAP_HOST:-}" ]]; then

@@ -381,6 +381,147 @@ class TestTokenStoreHelper:
         assert dest.stat().st_mode & 0o777 == 0o600
 
 
+class TestEmailEnvLoading:
+    """load-email-env.sh must load EMAIL_* AND EMAIL2_* (and EMAIL3+...).
+
+    回归：wrapper 用 `grep -E '^EMAIL_'` 过滤，EMAIL2_*（第 6 字符是 2）
+    从不被加载——dlut 账户是旧版本脚本生成的残存配置。
+    """
+
+    SCRIPT = REPO_ROOT / "docker" / "hermes" / "load-email-env.sh"
+
+    def _load(self, env_lines: list[str], preset: dict[str, str] | None = None):
+        """Source the script, load env_lines from a fixture file, report state."""
+        env_file = None
+        import shlex
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
+            f.write("\n".join(env_lines) + "\n")
+            env_file = f.name
+        preset_src = "".join(
+            f"export {k}={shlex.quote(v)}\n" for k, v in (preset or {}).items()
+        )
+        proc = subprocess.run(
+            [
+                "bash",
+                "-c",
+                f"""
+set -euo pipefail
+{preset_src}
+source {shlex.quote(str(self.SCRIPT))}
+load_email_env {shlex.quote(env_file)}
+echo SHELLVARS-BEGIN
+for v in $(compgen -A variable | grep -E '^EMAIL' | sort); do
+  echo "$v=${{!v}}"
+done
+echo SHELLVARS-END
+echo EXPORTED-BEGIN
+env | grep -oE '^EMAIL[A-Z0-9_]*' | sort || true
+echo EXPORTED-END
+""",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        out = proc.stdout
+        shell_vars = {}
+        in_block = False
+        exported: set[str] = set()
+        for line in out.splitlines():
+            if line == "SHELLVARS-BEGIN":
+                in_block = True
+            elif line == "SHELLVARS-END":
+                in_block = False
+            elif line == "EXPORTED-BEGIN":
+                in_block = "exported"
+            elif line == "EXPORTED-END":
+                in_block = False
+            elif in_block is True and "=" in line:
+                k, _, v = line.partition("=")
+                shell_vars[k] = v
+            elif in_block == "exported":
+                exported.add(line)
+        return shell_vars, exported
+
+    ENV_LINES = [
+        "# EMAIL_ADDRESS=user@qq.com",
+        "# EMAIL_PASSWORD=qqpass",
+        "# EMAIL_IMAP_HOST=imap.qq.com",
+        "# EMAIL2_ADDRESS=user@dlut.edu.cn",
+        "# EMAIL2_PASSWORD=dlutpass",
+        "# EMAIL2_IMAP_HOST=mail.dlut.edu.cn",
+        "# EMAIL_OUTLOOK_ADDRESS=from-file@outlook.com",
+    ]
+
+    def test_email2_family_is_loaded(self):
+        vars_, _ = self._load(self.ENV_LINES)
+        assert vars_["EMAIL2_PASSWORD"] == "dlutpass"
+        assert vars_["EMAIL2_ADDRESS"] == "user@dlut.edu.cn"
+
+    def test_commented_lines_are_loaded(self):
+        vars_, _ = self._load(self.ENV_LINES)
+        assert vars_["EMAIL_PASSWORD"] == "qqpass"
+
+    def test_compose_env_wins_over_file(self):
+        vars_, _ = self._load(
+            self.ENV_LINES,
+            preset={"EMAIL_OUTLOOK_ADDRESS": "from-compose@outlook.com"},
+        )
+        assert vars_["EMAIL_OUTLOOK_ADDRESS"] == "from-compose@outlook.com"
+
+    def test_vars_stay_shell_local_never_exported(self):
+        _, exported = self._load(self.ENV_LINES)
+        assert not exported, f"EMAIL_* vars leaked to process env: {exported}"
+
+    def test_values_with_spaces_load_intact(self):
+        """`EMAIL2_DISPLAY_NAME=Wenyu Ouyang` — eval 把空格后的词当命令执行
+        （真机报错 Ouyang: command not found），必须原样赋值。"""
+        vars_, _ = self._load(
+            [*self.ENV_LINES, "# EMAIL2_DISPLAY_NAME=Wenyu Ouyang"]
+        )
+        assert vars_["EMAIL2_DISPLAY_NAME"] == "Wenyu Ouyang"
+
+    def test_command_substitution_in_value_is_not_executed(self, tmp_path: Path):
+        """值里的 $(...) 必须作为字面量存储，绝不执行（防注入）。"""
+        marker = tmp_path / "marker"
+        vars_, _ = self._load(
+            [f"# EMAIL_INJECT=$({marker})"]
+        )
+        assert vars_["EMAIL_INJECT"] == f"$({marker})"
+        assert not marker.exists(), "注入的命令被执行了！"
+
+    def test_direct_run_prints_names_only(self):
+        """直接执行自测只输出变量名，不输出值（防止密码打印）。"""
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as f:
+            f.write("\n".join(self.ENV_LINES) + "\n")
+            env_file = f.name
+        proc = subprocess.run(
+            ["bash", str(self.SCRIPT), env_file],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        assert proc.returncode == 0, proc.stderr
+        assert "EMAIL2_PASSWORD" in proc.stdout
+        assert "qqpass" not in proc.stdout and "dlutpass" not in proc.stdout
+
+    def test_wrapper_sources_the_loader(self):
+        wrapper = (
+            REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
+        ).read_text()
+        assert "load-email-env.sh" in wrapper
+        assert "load_email_env" in wrapper
+
+    def test_dockerfile_ships_the_loader(self):
+        dockerfile = (REPO_ROOT / "docker" / "hermes" / "Dockerfile").read_text()
+        assert "load-email-env.sh" in dockerfile
+
+
 class TestBackupCoverage:
     """Hermes backup must copy himalaya config and ortie tokens."""
 
@@ -465,15 +606,16 @@ class TestEntrypointWiring:
         ).read_text()
         assert "set -a" not in wrapper
         assert "set +a" not in wrapper
-        assert "grep -E '^EMAIL_'" in wrapper
+        loader = REPO_ROOT / "docker" / "hermes" / "load-email-env.sh"
+        assert "grep -E '^EMAIL'" in loader.read_text()
 
     def test_wrapper_loads_env_with_compose_precedence(self):
-        wrapper = (
-            REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
+        loader = (
+            REPO_ROOT / "docker" / "hermes" / "load-email-env.sh"
         ).read_text()
         # skip-if-set loop: container env (compose) wins over ~/.hermes/.env
-        assert "while IFS= read -r kv" in wrapper
-        assert '"${!key:-}"' in wrapper
+        assert "while IFS= read -r kv" in loader
+        assert '"${!key:-}"' in loader
 
     def test_wrapper_gates_email_capability_by_profile(self):
         """Email is granted to the default profile only (爱玛士); others denied."""

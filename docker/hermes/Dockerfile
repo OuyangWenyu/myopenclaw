@@ -146,7 +146,7 @@ ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the
 # mounted host dir so gh auth state survives container rebuilds.
-COPY entrypoint-wrapper.sh configure-outlook.sh ortie-store-token.sh /opt/hermes/
-RUN chmod +x /opt/hermes/entrypoint-wrapper.sh /opt/hermes/configure-outlook.sh /opt/hermes/ortie-store-token.sh
+COPY entrypoint-wrapper.sh configure-outlook.sh ortie-store-token.sh load-email-env.sh /opt/hermes/
+RUN chmod +x /opt/hermes/entrypoint-wrapper.sh /opt/hermes/configure-outlook.sh /opt/hermes/ortie-store-token.sh /opt/hermes/load-email-env.sh
 
 ENTRYPOINT ["/opt/hermes/entrypoint-wrapper.sh"]
