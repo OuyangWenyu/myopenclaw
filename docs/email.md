@@ -31,7 +31,7 @@ Hermes 通过 [himalaya](https://github.com/pimalaya/himalaya) CLI 工具管理�
 在 `~/.hermes/.env` 中追加 `EMAIL2_*` 变量：
 
 ```
-# EMAIL2_ADDRESS=wenyuouyang@dlut.edu.cn
+# EMAIL2_ADDRESS=your@dlut.edu.cn
 # EMAIL2_PASSWORD=你的密码
 # EMAIL2_IMAP_HOST=mail.dlut.edu.cn
 # EMAIL2_IMAP_PORT=993

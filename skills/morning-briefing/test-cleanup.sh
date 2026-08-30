@@ -7,10 +7,15 @@ SCRIPTS_DIR="${HOME}/.hermes/scripts"
 PASS=0
 FAIL=0
 
-# These values appear in this test script itself (for verification).
-# grep patterns must exclude this file to avoid false positives.
-QQ_PWD="dbecofbvljbqffaa"
-DLUT_PWD="CjZGZT@g!vsy9q8"
+# 运行时从 himalaya 配置提取密码——本仓库是公开的，绝不硬编码真实密码
+# （历史教训：本文件曾把真实密码写死在此处公开暴露，见 PR #62 的泄漏整改）
+HIMALAYA_CONFIG="${HOME}/.hermes/.config/himalaya/config.toml"
+QQ_PWD="$(sed -n 's/^backend\.auth\.raw = "\(.*\)"$/\1/p' "$HIMALAYA_CONFIG" 2>/dev/null | head -1)"
+DLUT_PWD="$(sed -n 's/^backend\.auth\.raw = "\(.*\)"$/\1/p' "$HIMALAYA_CONFIG" 2>/dev/null | tail -1)"
+if [[ -z "$QQ_PWD" || -z "$DLUT_PWD" ]]; then
+    echo "SKIP: 无法从 himalaya 配置提取密码（配置未生成或为空）"
+    exit 0
+fi
 
 check() {
     local desc="$1"
