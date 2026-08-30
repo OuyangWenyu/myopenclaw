@@ -33,6 +33,7 @@ AGENTOPS_LEDGER = Path(AGENTOPS_DATA_DIR) / "inbox.md"
 
 # Thresholds (configurable via env vars)
 RESTART_THRESHOLD_HOURS = int(os.environ.get("AGENTOPS_RESTART_THRESHOLD", "2"))
+# Default 24h matches daily backup-cron (BACKUP_CRON=0 2 * * *).
 BACKUP_STALE_HOURS = int(os.environ.get("AGENTOPS_BACKUP_STALE_HOURS", "24"))
 DISK_THRESHOLD_PERCENT = int(os.environ.get("AGENTOPS_DISK_THRESHOLD", "85"))
 

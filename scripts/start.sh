@@ -105,6 +105,16 @@ fi
 mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode" "${HOME}/.lark-cli"
 mkdir -p "${HOME}/.myagentdata/aisecretary"
 mkdir -p "${HOME}/.myagentdata/tdai-memory"
+mkdir -p "${HOME}/.myagentdata/agentops"
+# inbox.md is produced by collect_agentops.py (host launchd). Without the
+# directory, Docker's ro mount of ~/.myagentdata has no agentops/ subdir
+# and Daily Command Center reports a false "AgentOps 未部署".
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  if [[ ! -f "${HOME}/Library/LaunchAgents/ai.myopenclaw.collect-agentops.plist" ]]; then
+    echo "   ⚠️  AgentOps launchd 未安装，inbox.md 不会自动生成"
+    echo "      运行: ./scripts/launchd/install-collect-agentops.sh"
+  fi
+fi
 if [[ ! -f "${HOME}/.config/opencode/opencode.json" ]]; then
   cp "${REPO_ROOT}/hermes/config/opencode.json.example" "${HOME}/.config/opencode/opencode.json"
   echo "   📝 已创建 opencode 配置: ~/.config/opencode/opencode.json"
@@ -196,6 +206,11 @@ print('done')
   else
     echo "   ✅ zotero-mcp 已在 Hermes 默认配置中"
   fi
+  # DuckDuckGo web_search backend (no API key). Idempotent; does not
+  # overwrite an operator-chosen backend such as brave_free.
+  python3 "${REPO_ROOT}/scripts/ensure_hermes_web_search.py" \
+    "${HERMES_DEFAULT_CONFIG}" || \
+    echo "   ⚠️  Hermes web.search_backend 注入失败（不影响启动）"
 else
   echo "   ⚠️  ${HERMES_DEFAULT_CONFIG} 不存在，跳过 zotero-mcp 注入"
 fi

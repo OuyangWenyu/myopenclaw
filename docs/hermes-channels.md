@@ -70,3 +70,24 @@ Discord 网关 (`gateway.discord.gg`) 在国内可能间歇性 DNS 解析失败�
 ## coder profile 模型
 
 首次启动时 `start.sh` 自动创建 `~/.hermes/profiles/coder/config.yaml`，默认模型 `mimo-v2.5-pro`（小米 MiMo API，`XIAOMI_API_KEY`），备用模型 `glm-5.1`（z.ai）。
+
+## 网络搜索（web_search）
+
+四个 Hermes profile 共用同一镜像。`web_search` 默认走 **ddgs**（DuckDuckGo 抓取，免 API key）：
+
+1. 镜像安装 `ddgs` 包（`docker/hermes/Dockerfile`）
+2. `start.sh` 幂等写入 `~/.hermes/config.yaml`：
+
+```yaml
+web:
+  search_backend: "ddgs"
+```
+
+已有 `search_backend` 不会被覆盖（可手动改成 `brave_free`）。Dockerfile 变更后需要重建镜像：
+
+```bash
+docker compose build hermes
+docker compose up -d hermes hermes-coder hermes-finance hermes-daoyuan
+```
+
+DuckDuckGo 从国内网络的可达性依赖宿主机 VPN（与 Discord 同通道）。provider 自带 30s 超时，失败时工具返回错误文本，agent 不会挂死。
