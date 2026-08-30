@@ -109,19 +109,52 @@ chmod 700 "${ORTIE_DIR}" "${TOKEN_DIR}"
 
 # Directory lock (atomic mkdir) so concurrent Hermes profiles sharing
 # /opt/data cannot append the same [accounts.*] section twice.
-acquired=0
-for _ in $(seq 1 100); do
-  if mkdir "${LOCK_DIR}" 2>/dev/null; then
-    acquired=1
-    break
+# A lock left by a SIGKILLed run (EXIT trap never fires; the dir sits on the
+# persistent volume) would block every future start — reclaim it when its
+# mtime is older than 60s, which no live run could plausibly still hold.
+lock_age_seconds() {
+  local path="$1" mtime
+  if [[ "$(uname)" == "Darwin" ]]; then
+    mtime="$(stat -f %m "${path}")"
+  else
+    mtime="$(stat -c %Y "${path}")"
   fi
-  sleep 0.05
-done
-if [[ "${acquired}" -ne 1 ]]; then
-  echo "   ❌ timed out waiting for Outlook config lock" >&2
-  exit 1
+  echo $(( $(date +%s) - mtime ))
+}
+
+cleanup_lock() {
+  rmdir "${LOCK_DIR}" 2>/dev/null || true
+}
+
+acquire_lock() {
+  local _i
+  for _i in $(seq 1 100); do
+    if mkdir "${LOCK_DIR}" 2>/dev/null; then
+      return 0
+    fi
+    sleep 0.05
+  done
+  return 1
+}
+
+if ! acquire_lock; then
+  age="$(lock_age_seconds "${LOCK_DIR}")"
+  if (( age > 60 )); then
+    echo "   ⚠️  清理过期的 Outlook 配置锁（${age}s，疑似上次启动被中断）"
+    rm -rf "${LOCK_DIR}"
+    if ! acquire_lock; then
+      echo "   ❌ timed out waiting for Outlook config lock" >&2
+      exit 1
+    fi
+  else
+    echo "   ❌ timed out waiting for Outlook config lock" >&2
+    exit 1
+  fi
 fi
-trap 'rmdir "${LOCK_DIR}" 2>/dev/null || true' EXIT
+trap cleanup_lock EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
 
 toml_account_exists() {
   local file="$1"
@@ -155,6 +188,25 @@ ortie_section_is_ours() {
     && grep -q "client-id = $(toml_string "${CLIENT_ID}")" <<<"${body}"
 }
 
+# Idempotency keeps the written section even when EMAIL_OUTLOOK_* drifts from
+# it — surface that loudly instead of silently ignoring the new values.
+declare -a DRIFT=()
+
+check_drift() {
+  local label="$1" expected="$2" body="$3"
+  if ! grep -Fxq "${expected}" <<<"${body}"; then
+    DRIFT+=("${label}")
+  fi
+}
+
+warn_drift() {
+  local side="$1" config_file="$2"
+  if ((${#DRIFT[@]} > 0)); then
+    echo "   ⚠️  检测到 EMAIL_OUTLOOK_* 与已写入配置不一致（${side}: ${DRIFT[*]}，旧值保留）。如需应用新值，删除 ${config_file} 中 [accounts.${ACCT}] 段后重启"
+    DRIFT=()
+  fi
+}
+
 SKIP_ORTIE=0
 SKIP_HIMALAYA=0
 
@@ -176,6 +228,23 @@ if toml_account_exists "${HIMALAYA_CONFIG}"; then
     echo "   ❌ account '${ACCT}' already exists in himalaya (collision with EMAIL_OUTLOOK_ACCOUNT_NAME)" >&2
     exit 1
   fi
+fi
+
+if [[ "${SKIP_ORTIE}" -eq 1 ]]; then
+  ortie_body="$(toml_section_body "${ORTIE_CONFIG}")"
+  check_drift "client-id" "client-id = $(toml_string "${CLIENT_ID}")" "${ortie_body}"
+  check_drift "grant" "grant = \"${GRANT}\"" "${ortie_body}"
+  warn_drift "ortie" "${ORTIE_CONFIG}"
+fi
+
+if [[ "${SKIP_HIMALAYA}" -eq 1 ]]; then
+  himalaya_body="$(toml_section_body "${HIMALAYA_CONFIG}")"
+  check_drift "display-name" "display-name = $(toml_string "${DISPLAY_NAME}")" "${himalaya_body}"
+  check_drift "imap-host" "backend.host = $(toml_string "${IMAP_HOST}")" "${himalaya_body}"
+  check_drift "imap-port" "backend.port = ${IMAP_PORT}" "${himalaya_body}"
+  check_drift "smtp-host" "message.send.backend.host = $(toml_string "${SMTP_HOST}")" "${himalaya_body}"
+  check_drift "smtp-port" "message.send.backend.port = ${SMTP_PORT}" "${himalaya_body}"
+  warn_drift "himalaya" "${HIMALAYA_CONFIG}"
 fi
 
 if [[ "${SKIP_ORTIE}" -eq 0 ]]; then
@@ -207,7 +276,6 @@ EOF
   cat >> "${ORTIE_CONFIG}" << EOF
 
 [accounts.${ACCT}]
-default = true
 client-id = $(toml_string "${CLIENT_ID}")
 ${GRANT_BLOCK}
 scopes = [
@@ -230,7 +298,6 @@ if [[ "${SKIP_HIMALAYA}" -eq 0 ]]; then
   if [[ ! -f "${HIMALAYA_CONFIG}" ]] || ! grep -q "^\[accounts\." "${HIMALAYA_CONFIG}"; then
     DEFAULT_FLAG="true"
   fi
-  mkdir -p "$(dirname "${HIMALAYA_CONFIG}")"
   cat >> "${HIMALAYA_CONFIG}" << EOF
 
 [accounts.${ACCT}]
@@ -268,7 +335,7 @@ else
   echo "   ⚠️  Outlook OAuth 尚未授权。容器内一次性执行（以 hermes 用户）："
   echo "      docker compose exec -u hermes -it hermes ortie auth get -a ${ACCT}"
   if [[ "${GRANT}" == "device" ]]; then
-    echo "      （device grant：打开 https://microsoft.com/devicelogin 并输入显示的代码）"
+    echo "      （device grant：打开 https://microsoft.com/devicelogin 并输入显示的代码即可，无需 auth resume）"
   else
     echo "      （authorization-code：用浏览器打开打印的 URL，再 ortie auth resume <redirect-uri>）"
   fi

@@ -198,12 +198,17 @@ done
 # ── Auto-configure himalaya from Hermes email settings ─────
 # Parses /opt/data/.env for EMAIL_* vars and generates ~/.config/himalaya/config.toml
 # Works whether the vars are commented out (email platform disabled) or active.
-# EMAIL_* is always loaded so Outlook can be appended to an existing config.
+# EMAIL_* 加载优先级：容器环境（repo .env 经 compose 注入）优先，~/.hermes/.env 兜底。
+# 变量只赋值为本脚本 shell 变量，不导出——绝不进入 Hermes 进程环境
+# （EMAIL_PASSWORD 等真机密留在文件里，Hermes 不把 email 当消息平台）。
 HIMALAYA_CONFIG="/opt/data/.config/himalaya/config.toml"
 if [[ -f /opt/data/.env ]]; then
-  set -a
-  eval "$(sed 's/^#[[:space:]]*//' /opt/data/.env 2>/dev/null | grep -E '^EMAIL_' || true)"
-  set +a
+  while IFS= read -r kv; do
+    key="${kv%%=*}"
+    if [[ -n "${key}" && -z "${!key:-}" ]]; then
+      eval "${kv}"
+    fi
+  done < <(sed 's/^#[[:space:]]*//' /opt/data/.env 2>/dev/null | grep -E '^EMAIL_' || true)
 fi
 if [[ -f /opt/data/.env && ! -f "${HIMALAYA_CONFIG}" ]]; then
   if [[ -n "${EMAIL_ADDRESS:-}" && -n "${EMAIL_PASSWORD:-}" && -n "${EMAIL_IMAP_HOST:-}" ]]; then
@@ -278,7 +283,10 @@ fi
 # and writes ~/.config/ortie/config.toml. First-time auth is interactive
 # (`ortie auth get`) and is intentionally not run here.
 if [[ -n "${EMAIL_OUTLOOK_ADDRESS:-}" ]]; then
-  HERMES_DATA=/opt/data /opt/hermes/configure-outlook.sh
+  # 失败降级：Outlook 是可选增强，配置错误不应拖垮整个 Hermes 容器
+  if ! HERMES_DATA=/opt/data /opt/hermes/configure-outlook.sh; then
+    echo "   ⚠️  Outlook 配置生成失败（检查 EMAIL_OUTLOOK_* 设置），跳过"
+  fi
   chown -R hermes:hermes /opt/data/.config/himalaya /opt/data/.config/ortie 2>/dev/null || true
 fi
 

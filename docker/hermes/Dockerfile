@@ -63,7 +63,7 @@ RUN HIMALAYA_VER="1.2.0" && \
 # the access token via `backend.auth.access-token.cmd`.
 # Used for Outlook / Microsoft 365 (basic auth retired).
 RUN ORTIE_VER="2.2.0" && \
-    ARCH=$(uname -m | sed 's/x86_64/x86_64/;s/aarch64/aarch64/') && \
+    ARCH=$(uname -m) && \
     wget -qO /tmp/ortie.tgz "https://github.com/pimalaya/ortie/releases/download/v${ORTIE_VER}/ortie.${ARCH}-linux.tgz" && \
     tar xzf /tmp/ortie.tgz -C /usr/local/bin ortie && \
     chmod +x /usr/local/bin/ortie && \

@@ -6,7 +6,9 @@ Run: uv run --with pytest pytest tests/test_outlook_email_config.py -v
 from __future__ import annotations
 
 import os
+import re
 import subprocess
+import time
 import tomllib
 from pathlib import Path
 
@@ -105,16 +107,15 @@ class TestDeviceGrantDefaults:
         assert smtp["encryption"]["type"] == "start-tls"
         assert smtp["auth"]["method"] == "xoauth2"
 
-    def test_warns_when_token_missing(self, generated: Path, tmp_path: Path):
+    def test_warns_when_token_missing(self, tmp_path: Path):
+        """Fresh generation without a token must print the auth hint."""
         result = _run_configure(
             tmp_path,
             {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
         )
-        # Second run is idempotent; first fixture already warned. Re-read stdout
-        # from a dedicated run is the fixture's generation — check files instead.
-        token = generated / ".config" / "ortie" / "tokens" / "outlook.json"
+        assert result.returncode == 0, result.stderr + result.stdout
+        token = tmp_path / ".config" / "ortie" / "tokens" / "outlook.json"
         assert not token.exists() or token.stat().st_size == 0
-        assert result.returncode == 0
         assert "尚未授权" in result.stdout
 
     def test_token_dir_is_private(self, generated: Path):
@@ -143,6 +144,23 @@ backend.type = "imap"
         assert cfg["accounts"]["default"]["default"] is True
         assert cfg["accounts"]["outlook"]["default"] is False
         assert cfg["accounts"]["outlook"]["email"] == "owen@outlook.com"
+
+    def test_existing_qq_section_untouched(self, tmp_path: Path):
+        """Appending Outlook must not modify existing password accounts."""
+        himalaya = tmp_path / ".config" / "himalaya" / "config.toml"
+        himalaya.parent.mkdir(parents=True)
+        original = """[accounts.default]
+email = "user@qq.com"
+default = true
+backend.type = "imap"
+"""
+        himalaya.write_text(original)
+        result = _run_configure(
+            tmp_path,
+            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+        )
+        assert result.returncode == 0, result.stderr
+        assert himalaya.read_text().startswith(original)
 
 
 class TestIdempotency:
@@ -247,6 +265,25 @@ backend.auth.type = "password"
         assert "auth" in cfg["accounts"]["dlut"]["backend"]
         assert cfg["accounts"]["dlut"]["backend"]["auth"]["type"] == "password"
 
+    def test_rejects_same_name_different_email(self, tmp_path: Path):
+        """An existing [accounts.outlook] bound to another mailbox must block."""
+        himalaya = tmp_path / ".config" / "himalaya" / "config.toml"
+        himalaya.parent.mkdir(parents=True)
+        himalaya.write_text("""[accounts.outlook]
+email = "someone.else@outlook.com"
+default = false
+backend.type = "imap"
+backend.auth.type = "password"
+""")
+        result = _run_configure(
+            tmp_path,
+            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+        )
+        assert result.returncode != 0
+        assert "collision" in result.stderr
+        cfg = _load_toml(himalaya)
+        assert cfg["accounts"]["outlook"]["email"] == "someone.else@outlook.com"
+
 
 class TestTomlSafety:
     """User-controlled values must be escaped or rejected."""
@@ -341,6 +378,136 @@ class TestBackupCoverage:
         assert ".config/ortie" in text
 
 
+class TestStaleLock:
+    """A lock left by a SIGKILLed run must be reclaimed, not deadlock startup."""
+
+    LOCK_DIR = ".config/outlook-configure.lock"
+
+    def _backdate_lock(self, tmp_path: Path) -> Path:
+        lock = tmp_path / self.LOCK_DIR
+        lock.mkdir(parents=True, exist_ok=True)
+        # mtime 2 minutes in the past; BSD touch has no -d, GNU touch has no -A
+        if (
+            subprocess.run(
+                ["touch", "-d", "2 minutes ago", str(lock)],
+                check=False,
+                capture_output=True,
+            ).returncode
+            != 0
+        ):
+            stamp = time.strftime("%Y%m%d%H%M.%S", time.localtime(time.time() - 120))
+            subprocess.run(["touch", "-t", stamp, str(lock)], check=True)
+        return lock
+
+    def test_reclaims_stale_lock(self, tmp_path: Path):
+        lock = self._backdate_lock(tmp_path)
+        result = _run_configure(
+            tmp_path,
+            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+        )
+        assert result.returncode == 0, result.stderr + result.stdout
+        assert "过期" in result.stdout
+        assert not lock.exists()
+
+    def test_fresh_lock_times_out_and_is_preserved(self, tmp_path: Path):
+        lock = tmp_path / self.LOCK_DIR
+        lock.mkdir(parents=True)
+        result = _run_configure(
+            tmp_path,
+            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+        )
+        assert result.returncode != 0
+        assert "timed out" in result.stderr
+        assert lock.exists()
+
+
+class TestDriftWarning:
+    """Env changes after the first run must warn, not silently rewrite."""
+
+    def test_warns_and_keeps_old_values(self, tmp_path: Path):
+        first = _run_configure(
+            tmp_path, {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"}
+        )
+        assert first.returncode == 0, first.stderr + first.stdout
+        second = _run_configure(
+            tmp_path,
+            {
+                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_IMAP_HOST": "alt.office365.com",
+            },
+        )
+        assert second.returncode == 0, second.stderr + second.stdout
+        assert "不一致" in second.stdout
+        himalaya_cfg = tmp_path / ".config" / "himalaya" / "config.toml"
+        cfg = _load_toml(himalaya_cfg)
+        assert cfg["accounts"]["outlook"]["backend"]["host"] == "outlook.office365.com"
+        assert himalaya_cfg.read_text().count("[accounts.outlook]") == 1
+
+
+class TestEntrypointWiring:
+    """EMAIL_* must stay shell-local in the wrapper (never reach Hermes env)."""
+
+    def test_wrapper_does_not_export_email_vars(self):
+        wrapper = (
+            REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
+        ).read_text()
+        assert "set -a" not in wrapper
+        assert "set +a" not in wrapper
+        assert "grep -E '^EMAIL_'" in wrapper
+
+    def test_wrapper_loads_env_with_compose_precedence(self):
+        wrapper = (
+            REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
+        ).read_text()
+        # skip-if-set loop: container env (compose) wins over ~/.hermes/.env
+        assert "while IFS= read -r kv" in wrapper
+        assert '"${!key:-}"' in wrapper
+
+
+class TestComposeInjection:
+    """Repo-root .env is the single config source for Outlook (non-secret vars)."""
+
+    COMPOSE = REPO_ROOT / "docker-compose.yml"
+    ENV_EXAMPLE = REPO_ROOT / ".env.example"
+    OUTLOOK_VARS = [
+        "EMAIL_OUTLOOK_ADDRESS",
+        "EMAIL_OUTLOOK_ACCOUNT_NAME",
+        "EMAIL_OUTLOOK_DISPLAY_NAME",
+        "EMAIL_OUTLOOK_GRANT",
+        "EMAIL_OUTLOOK_CLIENT_ID",
+        "EMAIL_OUTLOOK_IMAP_HOST",
+        "EMAIL_OUTLOOK_IMAP_PORT",
+        "EMAIL_OUTLOOK_SMTP_HOST",
+        "EMAIL_OUTLOOK_SMTP_PORT",
+    ]
+
+    @staticmethod
+    def _service_blocks(compose_text: str) -> dict[str, str]:
+        parts = re.split(r"\n  ([\w-]+):\n", "\n" + compose_text)
+        return {parts[i]: parts[i + 1] for i in range(1, len(parts) - 1, 2)}
+
+    def test_compose_injects_outlook_env_for_all_hermes_services(self):
+        blocks = self._service_blocks(self.COMPOSE.read_text())
+        for service in ("hermes", "hermes-coder", "hermes-finance", "hermes-daoyuan"):
+            assert service in blocks, f"service missing in compose: {service}"
+            for var in self.OUTLOOK_VARS:
+                assert f"- {var}=${{{var}:-}}" in blocks[service], (service, var)
+
+    def test_hermes_dashboard_not_injected(self):
+        blocks = self._service_blocks(self.COMPOSE.read_text())
+        assert "EMAIL_OUTLOOK_ADDRESS" not in blocks["hermes-dashboard"]
+
+    def test_env_example_documents_outlook_vars(self):
+        text = self.ENV_EXAMPLE.read_text()
+        for var in (
+            "EMAIL_OUTLOOK_ADDRESS",
+            "EMAIL_OUTLOOK_DISPLAY_NAME",
+            "EMAIL_OUTLOOK_GRANT",
+            "EMAIL_OUTLOOK_CLIENT_ID",
+        ):
+            assert f"# {var}=" in text
+
+
 class TestImageInstall:
     """Dockerfile pins a released ortie linux tarball next to himalaya."""
 
@@ -348,11 +515,14 @@ class TestImageInstall:
         dockerfile = (REPO_ROOT / "docker" / "hermes" / "Dockerfile").read_text()
         assert 'ORTIE_VER="2.2.0"' in dockerfile
         assert "ortie.${ARCH}-linux.tgz" in dockerfile
-        assert (
-            "COPY configure-outlook.sh" in dockerfile
-            or "configure-outlook.sh" in dockerfile
-        )
+        assert "configure-outlook.sh" in dockerfile
         assert "ortie-store-token.sh" in dockerfile
+        # ortie block must map uname directly (no identity sed)
+        ortie_block = dockerfile.split("# ── Install ortie")[1]
+        assert "ARCH=$(uname -m)" in ortie_block
+        assert "s/x86_64/x86_64/" not in ortie_block
+
+    def test_wrapper_wires_configure_script(self):
         wrapper = (
             REPO_ROOT / "docker" / "hermes" / "entrypoint-wrapper.sh"
         ).read_text()
