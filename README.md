@@ -17,7 +17,7 @@
 | 水文智能问答 | zhixun 知汛助手 — OpenClaw + zhixun-water-mcp → 飞书 bot（独立栈） | [zhixun-agent](https://github.com/OuyangWenyu/zhixun-agent) |
 | 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |
 | 事务追踪 | aisecretary MCP 服务 → SQLite 持久化 | [aisecretary](https://github.com/iHeadWater/aisecretary) |
-| 邮件 | himalaya CLI 邮件客户端（IMAP/SMTP 多账户；Outlook 走 ortie OAuth） | — |
+| 邮件 | himalaya CLI 邮件客户端（IMAP/SMTP 多账户；Outlook 走 ortie OAuth；仅爱玛士可用，其余 agent 拒绝访问） | — |
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |
 | Google Drive | rclone 直连云端上传论文 PDF | — |
 | 语雀知识库 | Hermes + 天一 远程 MCP（读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
