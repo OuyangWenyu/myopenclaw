@@ -353,8 +353,8 @@ else
   echo "   ⚠️  Outlook OAuth 尚未授权。容器内一次性执行（以 hermes 用户）："
   echo "      docker compose exec -u hermes -it hermes ortie auth get -a ${ACCT}"
   if [[ "${GRANT}" == "device" ]]; then
-    echo "      （device grant：打开 https://microsoft.com/devicelogin 并输入显示的代码即可，无需 auth resume）"
+    echo "      （device grant：打开 https://login.microsoft.com/device 并输入显示的代码；交互式终端会自动轮询完成）"
   else
-    echo "      （authorization-code：用浏览器打开打印的 URL，再 ortie auth resume <redirect-uri>）"
+    echo "      （authorization-code：用浏览器打开打印的 URL，再 ortie auth resume -a ${ACCT} <redirect-uri>）"
   fi
 fi

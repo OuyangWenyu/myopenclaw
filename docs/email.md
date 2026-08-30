@@ -54,7 +54,7 @@ ortie    →  授权 + 自动刷新 access token（token 落在 ~/.hermes/.confi
 himalaya →  XOAUTH2 读/发信（官方 access-token.cmd 变体调用 ortie）
 ```
 
-默认走 **IMAP/SMTP**（不是 Microsoft Graph），客户端用 Mozilla 注册的 Thunderbird 公共应用 ID（全球共用、开源可复用），**无需自己注册 Azure 应用、无需安装任何东西**。Docker 无浏览器，默认 **device grant**：容器打印一组代码，你在手机/电脑打开 https://microsoft.com/devicelogin 完成登录。
+默认走 **IMAP/SMTP**（不是 Microsoft Graph），客户端用 Mozilla 注册的 Thunderbird 公共应用 ID（全球共用、开源可复用），**无需自己注册 Azure 应用、无需安装任何东西**。Docker 无浏览器，默认 **device grant**：容器打印一组代码，你在手机/电脑打开 https://login.microsoft.com/device 完成登录。
 
 ### 配置（项目根 `.env`，换电脑一个 env 走天下）
 
@@ -89,8 +89,8 @@ EMAIL_OUTLOOK_DISPLAY_NAME=Wenyu Ouyang
 docker compose exec -u hermes -it hermes ortie auth get -a outlook
 ```
 
-- **device**：按提示打开 https://microsoft.com/devicelogin，输入代码，用 Microsoft 账号登录并同意 **Thunderbird** 想要访问的 IMAP/SMTP 权限即可，无需 `auth resume`。加 `-u hermes` 是让授权交互与后续读取保持同一用户身份（token 写入助手 `ortie-store-token.sh` 本身也会把属主修正为 hermes）。代码约 15 分钟有效，过期重跑命令。
-- **authorization-code**：打开打印的 URL；若容器收不到回调，把浏览器最终跳转的地址交给 `ortie auth resume <redirect-uri>`。
+- **device**：按提示打开 https://login.microsoft.com/device，输入代码，用 Microsoft 账号登录并同意 **Thunderbird** 想要访问的 IMAP/SMTP 权限。**在交互式终端里跑**（普通 Terminal，非 IDE 内嵌）：ortie 会自动轮询并在授权后自行结束，无需 `auth resume`；无 TTY 的会话里它会打印 `ortie auth resume -a outlook '<device_code>'` 提示，照做即可（`-a` 必须带，账户未标记 default）。加 `-u hermes` 是让授权交互与后续读取保持同一用户身份（token 写入助手 `ortie-store-token.sh` 本身也会把属主修正为 hermes）。代码约 15 分钟有效，过期重跑命令。
+- **authorization-code**：打开打印的 URL；若容器收不到回调，把浏览器最终跳转的地址交给 `ortie auth resume -a <account> <redirect-uri>`。
 
 验证：
 
