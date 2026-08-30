@@ -10,7 +10,7 @@ docker-compose.yml 启动四个服务（myopenclaw-net 桥接网络）：
 hermes            :8642   自定义镜像，AI agent gateway
 hermes-dashboard  :9119   只读 dashboard，监控 hermes（depends_on hermes）
 openclaw-gateway  :18789  OpenClaw gateway（含 /healthz 健康检查）
-backup-cron       -       定时快照备份（默认每周日凌晨 2:00）
+backup-cron       -       定时快照备份（默认每天凌晨 2:00）
 ```
 
 ---
