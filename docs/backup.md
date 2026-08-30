@@ -1,6 +1,6 @@
 # 备份系统
 
-backup-cron 容器定时对所有持久化数据做快照备份到云盘。
+backup-cron 容器每天凌晨 2:00 对所有持久化数据做快照备份到云盘（`BACKUP_CRON` 可改）。频率与 AgentOps 备份过期阈值（24h）对齐。
 
 ## 备份管线
 
@@ -59,8 +59,10 @@ docker compose exec backup-cron /scripts/backup-all-docker.sh
 在 `.env` 中调整：
 
 ```bash
-BACKUP_CRON="0 2 * * 0"    # cron 表达式（默认每周日凌晨 2:00）
+BACKUP_CRON="0 2 * * *"    # cron 表达式（默认每天凌晨 2:00）
 BACKUP_KEEP_DAYS=30        # 快照保留天数
 ```
 
 `.cloud.conf` 中的 `BACKUP_ROOT` 指定云盘路径（Google Drive / OneDrive / 自定义）。
+
+已有部署若 `.env` 仍是 `BACKUP_CRON=0 2 * * 0`（每周日），改成 `0 2 * * *` 后需要 `docker compose up -d backup-cron` 才会换上新 crontab。
