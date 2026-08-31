@@ -11,6 +11,7 @@ set -euo pipefail
 JOBS_FILE="${HOME}/.hermes/cron/jobs.json"
 JOB_NAME="yuque-daily-digest"
 EXPECTED_SCHEDULE="10 0 * * *"
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 PASS=0
 FAIL=0
 
@@ -73,14 +74,25 @@ job = next(j for j in data['jobs'] if j.get('name') == '$JOB_NAME')
 assert 'yuque-daily-digest' in job.get('prompt', ''), 'prompt does not reference the skill'
 \" 2>&1"
 
-# 6. Deliver target is a Feishu private chat
-check "Deliver target is feishu:*" \
+# 6. Deliver target matches the .env push target (private chat ou_* preferred,
+#    falls back to FEISHU_HOME_CHANNEL oc_*). Read repo .env like start.sh does.
+check "Deliver target matches .env push target" \
     "python3 -c \"
 import json
 data = json.load(open('$JOBS_FILE'))
 job = next(j for j in data['jobs'] if j.get('name') == '$JOB_NAME')
-deliver = job.get('deliver') or job.get('delivery') or ''
-assert str(deliver).startswith('feishu:'), f'deliver is {deliver!r}'
+deliver = str(job.get('deliver') or job.get('delivery') or '')
+assert deliver.startswith('feishu:'), f'deliver is {deliver!r}'
+env = {}
+with open('$REPO_ROOT/.env') as f:
+    for line in f:
+        line = line.strip()
+        if line and not line.startswith('#') and '=' in line:
+            k, _, v = line.partition('=')
+            env[k.strip()] = v.strip()
+expected_id = env.get('LARK_USER_OPEN_ID') or env.get('FEISHU_HOME_CHANNEL') or ''
+assert expected_id, 'LARK_USER_OPEN_ID / FEISHU_HOME_CHANNEL not set in .env'
+assert deliver == 'feishu:' + expected_id, f'deliver {deliver!r} != feishu:{expected_id}'
 \" 2>&1"
 
 echo ""

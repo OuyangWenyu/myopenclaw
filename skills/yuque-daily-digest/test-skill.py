@@ -95,11 +95,15 @@ def main():
     # ── [SILENT] protocol ─────────────────────────────────────
     check("[SILENT]" in content, "Missing [SILENT] protocol")
     check(
+        re.search(r"仅限|只能|仅.*无变更", content) and "[SILENT]" in content,
+        "[SILENT] must be limited to clean no-change case"
+    )
+    check(
         re.search(r"无变更|没有任何变更|没有变更", content) and "[SILENT]" in content,
         "No-change case must map to [SILENT]"
     )
     # Failure cases must NOT be silent — they must produce a warning push
-    failure_markers = ["not_available", "initialized", "401"]
+    failure_markers = ["not_available", "initialized", "401", "未纳入监控"]
     for marker in failure_markers:
         check(
             marker in content,
@@ -108,6 +112,10 @@ def main():
     check(
         re.search(r"(不许静默|不得静默|不能静默|必须推|必须输出)", content),
         "Failure cases must explicitly forbid silence"
+    )
+    check(
+        re.search(r"(未知|无法识别).{0,10}状态", content),
+        "Unknown/unrecognized status must be treated as failure warning"
     )
 
     # ── Output format ─────────────────────────────────────────
@@ -132,6 +140,10 @@ def main():
     check(
         re.search(r"(不伪装|如实)", content),
         "Must report errors honestly (no fake empty results)"
+    )
+    check(
+        re.search(r"send_message", content),
+        "Must forbid send_message (cron delivers the final reply)"
     )
     check(
         re.search(r"YUQUE_TOKEN", content),

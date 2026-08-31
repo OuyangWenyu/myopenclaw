@@ -92,7 +92,7 @@ git clone https://github.com/OuyangWenyu/zhixun-agent.git ../zhixun-agent
 
 ### 启动后：安装宿主机定时任务
 
-Docker 容器内的定时任务（备份、晨间三签、AI News 周报）由 `start.sh` 自动注册。宿主机 launchd 定时任务需要手动安装：
+Docker 容器内的定时任务（备份、晨间四签、语雀日报、AI News 周报）由 `start.sh` 自动注册。宿主机 launchd 定时任务需要手动安装：
 
 ```bash
 # 一键安装所有宿主机定时任务（幂等）

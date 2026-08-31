@@ -37,7 +37,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 08:10 ──────── yuque-daily-digest ← 读 yuque-mcp（服务端 07:00 已生成变更报告）
 ```
 
-四个早间推送在 40 分钟内完成，数据采集在推送前完成，保证数据新鲜。
+四个早间推送在 07:30–08:10 窗口内完成（含语雀日报 08:10），数据采集在推送前完成，保证数据新鲜。
 
 **AgentOps 数据流**：`collect-agentops (launchd) → inbox.md → Daily Command Center (morning-triage-v2)`。系统健康信号由宿主机采集脚本确定性生成，Hermes skill 直接读取结构化文件，不再依赖 TDAI 记忆搜索。
 
@@ -98,7 +98,7 @@ docker compose exec claude-code bash -c 'echo "cron list" | nc -U /root/.cc-conn
 - [ ] `docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list` 包含 "Daily Command Center"
 - [ ] 若配置了 `YUQUE_DAILY_PUSH_REPOS`，cron list 还应包含 "yuque-daily-digest"
 - [ ] Healthchecks.io Dashboard 显示 "Last Ping: just now"（等 60s 后刷新）
-- [ ] 次日 07:50 检查飞书是否收到晨间三签推送
+- [ ] 次日 07:50–08:10 检查飞书是否收到晨间四签推送（含 08:10 语雀日报）
 
 ## 卸载
 

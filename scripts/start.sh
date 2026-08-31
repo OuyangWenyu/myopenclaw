@@ -543,23 +543,61 @@ if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 
       fi
 
       # ── yuque-daily-digest（语雀每日变更日报，可选）────────────────
-      # 需 .env 配置 YUQUE_DAILY_PUSH_REPOS（要跟踪的知识库显示名，逗号分隔）
-      YUQUE_DAILY_PUSH_REPOS="$(grep '^YUQUE_DAILY_PUSH_REPOS=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)"
-      if [[ -n "${YUQUE_DAILY_PUSH_REPOS}" ]]; then
+      # 需 .env 配置：YUQUE_DAILY_PUSH_REPOS（跟踪的知识库显示名，逗号分隔）
+      #             + YUQUE_MCP_URL + MCP_YUQUE_MCP_API_KEY（语雀 MCP 前置）
+      # 注意：MCP key 必须放仓库根 .env 并经 compose 注入容器环境；
+      #       ~/.hermes/.env 里的同名变量不参与 Hermes MCP 客户端 ${VAR} 展开。
+      YUQUE_DAILY_PUSH_REPOS="$(grep '^YUQUE_DAILY_PUSH_REPOS=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true)"
+      YUQUE_MCP_URL_SET="$(grep -c '^YUQUE_MCP_URL=' "${REPO_ROOT}/.env" 2>/dev/null || true)"
+      YUQUE_MCP_KEY_SET="$(grep -c '^MCP_YUQUE_MCP_API_KEY=' "${REPO_ROOT}/.env" 2>/dev/null || true)"
+      if [[ -n "${YUQUE_DAILY_PUSH_REPOS}" && "${YUQUE_MCP_URL_SET:-0}" -gt 0 && "${YUQUE_MCP_KEY_SET:-0}" -gt 0 ]]; then
+        # 模板前缀作为 prompt 版本签名：改动模板后重跑 start.sh 会触发 job 更新
+        YUQUE_PROMPT_PREFIX="执行 yuque-daily-digest 技能：先用 MCP list_repos 解析知识库显示名对应的 namespace"
+        YUQUE_PROMPT="${YUQUE_PROMPT_PREFIX}，再对知识库（${YUQUE_DAILY_PUSH_REPOS}）逐一调用 MCP get_change_summary 获取服务端最新变更报告，对重点变更文档读取正文做中文摘要，生成语雀变更日报输出到最终回复。若所有知识库均无变更则按技能规则静默。"
         EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "yuque-daily-digest" || true)
         if [ "${EXISTING:-0}" -lt 1 ]; then
           docker compose exec -T hermes "${HERMES_BIN}" cron create \
             "10 0 * * *" \
-            "执行 yuque-daily-digest 技能：对知识库（${YUQUE_DAILY_PUSH_REPOS}）逐一调用 MCP get_change_summary 获取服务端最新变更报告，对重点变更文档读取正文做中文摘要，生成语雀变更日报输出到最终回复。若所有知识库均无变更则按技能规则静默。" \
+            "${YUQUE_PROMPT}" \
             --deliver "${DELIVER}" \
             --name "yuque-daily-digest" 2>/dev/null && \
             echo "   📋 yuque-daily-digest cron job 已注册 (每日 8:10 北京)" || \
-            echo "   ⚠️  yuque-daily-digest cron job 注册失败"
+            echo "   ⚠️  yuque-daily-digest cron job 注册失败（可去掉 2>/dev/null 重试查看原因）"
         else
-          echo "   📋 yuque-daily-digest cron job 已存在，跳过"
+          # 已存在：比对 prompt 模板版本 + 知识库列表，任一变更则更新 job
+          PROMPT_MATCHES=$(python3 -c "
+import json, sys
+try:
+    data = json.load(open('${HOME}/.hermes/cron/jobs.json'))
+except Exception:
+    sys.exit(1)
+job = next((j for j in data.get('jobs', []) if j.get('name') == 'yuque-daily-digest'), None)
+p = job.get('prompt', '') if job else ''
+print('ok' if p.startswith('${YUQUE_PROMPT_PREFIX}') and '${YUQUE_DAILY_PUSH_REPOS}' in p else 'stale')
+" 2>/dev/null || echo stale)
+          if [ "${PROMPT_MATCHES}" = "ok" ]; then
+            echo "   📋 yuque-daily-digest cron job 已存在且配置一致，跳过"
+          else
+            JOB_ID=$(python3 -c "
+import json
+data = json.load(open('${HOME}/.hermes/cron/jobs.json'))
+job = next((j for j in data.get('jobs', []) if j.get('name') == 'yuque-daily-digest'), None)
+print(job.get('id', '') if job else '')
+" 2>/dev/null || true)
+            if [[ -n "${JOB_ID}" ]]; then
+              docker compose exec -T hermes "${HERMES_BIN}" cron edit "${JOB_ID}" \
+                --prompt "${YUQUE_PROMPT}" 2>/dev/null && \
+                echo "   🔄 yuque-daily-digest cron job 已更新（知识库列表变更）" || \
+                echo "   ⚠️  yuque-daily-digest cron job 更新失败"
+            else
+              echo "   ⚠️  找不到 yuque-daily-digest job id，跳过更新"
+            fi
+          fi
         fi
-      else
+      elif [[ -z "${YUQUE_DAILY_PUSH_REPOS}" ]]; then
         echo "   ⚠️  YUQUE_DAILY_PUSH_REPOS 未设置，跳过语雀每日变更 cron job 注册（见 .env.example）"
+      else
+        echo "   ⚠️  YUQUE_MCP_URL 或 MCP_YUQUE_MCP_API_KEY 未在仓库根 .env 配置，跳过 yuque-daily-digest 注册（语雀 MCP 未就绪）"
       fi
 
     else

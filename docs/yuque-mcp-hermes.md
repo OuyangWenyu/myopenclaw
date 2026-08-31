@@ -67,7 +67,7 @@ docker compose exec hermes sh -c 'if [ -n "$MCP_YUQUE_MCP_API_KEY" ]; then echo 
 | 现象 | 处理 |
 |------|------|
 | `Hermes config not found` | 本机 Hermes 未初始化，先启动一次 Hermes 生成 `~/.hermes/config.yaml` |
-| 注册成功但 MCP 调用 401 | `~/.hermes/.env` 中的 key 与服务端 `MCP_API_KEY` 不一致，或重启后未加载 |
+| 注册成功但 MCP 调用 401 | key 必须放在仓库根 `.env`（`MCP_YUQUE_MCP_API_KEY`）并经 compose 注入容器环境（4 个 hermes 服务已注入）；`~/.hermes/.env` 里的同名变量**不参与** Hermes MCP 客户端 `${VAR}` 展开。仍 401 则核对与服务端 `MCP_API_KEY` 是否一致 |
 | `PyYAML is required` | 用 `PYTHON_BIN=/path/to/python` 指定带 PyYAML 的解释器 |
 | skill 未生效 | 确认 `docker compose config` 中有 `./skills/yuque-knowledge` 挂载，且容器已重启 |
 
@@ -85,14 +85,14 @@ docker compose exec hermes sh -c 'if [ -n "$MCP_YUQUE_MCP_API_KEY" ]; then echo 
 
 ### 启用
 
-1. 完成上面的 MCP 注册（`YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY`）
+1. 完成上面的 MCP 注册（`YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY`），**key 必须放在仓库根 `.env`**（`bootstrap_hermes.sh` 写入 `~/.hermes/.env` 的那份不参与 MCP 客户端展开）
 2. 在 `.env` 中填写要跟踪的知识库显示名（逗号分隔，可先在容器内用 `list_repos` 确认名称）：
 
    ```env
-   YUQUE_DAILY_PUSH_REPOS=技术交流,建设方案
+   YUQUE_DAILY_PUSH_REPOS=知识库显示名A,知识库显示名B
    ```
 
-3. `./scripts/start.sh` —— 检测到该变量即自动注册 cron（`10 0 * * *` UTC = 08:10 北京；未设置该变量则跳过注册）
+3. `./scripts/start.sh` —— 检测到三个变量（`YUQUE_DAILY_PUSH_REPOS` / `YUQUE_MCP_URL` / `MCP_YUQUE_MCP_API_KEY`）即自动注册 cron（`10 0 * * *` UTC = 08:10 北京）；任一缺失则警告并跳过。已注册后修改知识库列表，重跑 `start.sh` 会自动更新 job prompt
 
 ### 验证
 
