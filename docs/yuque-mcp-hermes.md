@@ -1,6 +1,6 @@
 # 语雀 MCP 接入（Hermes）
 
-> 最后更新：2026-08-29
+> 最后更新：2026-08-31
 
 本机通过远程 SSE 接入语雀 MCP 服务（服务端为 `yuque_mcp_server` 的 `RUN_MODE=cloud` 部署），读取、搜索、备份语雀知识库并查询服务端生成的变更报告。
 
@@ -70,3 +70,46 @@ docker compose exec hermes sh -c 'if [ -n "$MCP_YUQUE_MCP_API_KEY" ]; then echo 
 | 注册成功但 MCP 调用 401 | `~/.hermes/.env` 中的 key 与服务端 `MCP_API_KEY` 不一致，或重启后未加载 |
 | `PyYAML is required` | 用 `PYTHON_BIN=/path/to/python` 指定带 PyYAML 的解释器 |
 | skill 未生效 | 确认 `docker compose config` 中有 `./skills/yuque-knowledge` 挂载，且容器已重启 |
+
+## 每日变更推送（yuque-daily-digest）
+
+在查询能力之上，Hermes 还可通过 cron 每日早间把语雀知识库变更日报推送到飞书私聊（issue #65）：
+
+```
+服务端 07:00 生成变更报告 → Hermes cron 08:10（北京）触发 yuque-daily-digest skill
+  → agent 逐库调用 get_change_summary（纯只读）→ 重点变更文档 get_doc_content 做中文摘要
+  → cron --deliver 自动推送飞书私聊
+```
+
+行为约定：有变更 → 变更清单 + 摘要日报；全部无变更 → 静默；`not_available` / `initialized` / 401 / 连接失败 → 推送简短警告（不静默）。
+
+### 启用
+
+1. 完成上面的 MCP 注册（`YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY`）
+2. 在 `.env` 中填写要跟踪的知识库显示名（逗号分隔，可先在容器内用 `list_repos` 确认名称）：
+
+   ```env
+   YUQUE_DAILY_PUSH_REPOS=技术交流,建设方案
+   ```
+
+3. `./scripts/start.sh` —— 检测到该变量即自动注册 cron（`10 0 * * *` UTC = 08:10 北京；未设置该变量则跳过注册）
+
+### 验证
+
+```bash
+# cron job 已注册（每日 8:10 北京）
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep yuque-daily-digest
+
+# 手动触发一次，飞书私聊应收到日报（或按行为约定静默/警告）
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>
+
+# 配置静态断言
+bash skills/yuque-daily-digest/test-cron-config.sh
+```
+
+### 说明
+
+- 仅推送**飞书私聊**（复用 `LARK_USER_OPEN_ID` / `FEISHU_HOME_CHANNEL`）；群推送不在本期范围（见 issue #60 三Agent群推送定调）
+- 摘要由 Hermes agent 主模型生成，skill 不指定模型
+- skill 挂载于 `hermes` / `hermes-coder`（`./skills/yuque-daily-digest` → `/opt/hermes-skills/yuque-daily-digest`），cron 注册在 `hermes` 容器
+- 天一复用此能力延后至 issue #60 统一处理

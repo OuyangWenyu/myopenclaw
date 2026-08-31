@@ -23,6 +23,7 @@ services:
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
+      - ./skills/yuque-daily-digest:/opt/hermes-skills/yuque-daily-digest:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
@@ -97,6 +98,7 @@ services:
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
+      - ./skills/yuque-daily-digest:/opt/hermes-skills/yuque-daily-digest:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
       - email-config-none:/opt/data/.config/himalaya

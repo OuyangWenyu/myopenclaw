@@ -542,6 +542,26 @@ if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 
         echo "   📋 daily-dev-report cron job 已存在，跳过"
       fi
 
+      # ── yuque-daily-digest（语雀每日变更日报，可选）────────────────
+      # 需 .env 配置 YUQUE_DAILY_PUSH_REPOS（要跟踪的知识库显示名，逗号分隔）
+      YUQUE_DAILY_PUSH_REPOS="$(grep '^YUQUE_DAILY_PUSH_REPOS=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)"
+      if [[ -n "${YUQUE_DAILY_PUSH_REPOS}" ]]; then
+        EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "yuque-daily-digest" || true)
+        if [ "${EXISTING:-0}" -lt 1 ]; then
+          docker compose exec -T hermes "${HERMES_BIN}" cron create \
+            "10 0 * * *" \
+            "执行 yuque-daily-digest 技能：对知识库（${YUQUE_DAILY_PUSH_REPOS}）逐一调用 MCP get_change_summary 获取服务端最新变更报告，对重点变更文档读取正文做中文摘要，生成语雀变更日报输出到最终回复。若所有知识库均无变更则按技能规则静默。" \
+            --deliver "${DELIVER}" \
+            --name "yuque-daily-digest" 2>/dev/null && \
+            echo "   📋 yuque-daily-digest cron job 已注册 (每日 8:10 北京)" || \
+            echo "   ⚠️  yuque-daily-digest cron job 注册失败"
+        else
+          echo "   📋 yuque-daily-digest cron job 已存在，跳过"
+        fi
+      else
+        echo "   ⚠️  YUQUE_DAILY_PUSH_REPOS 未设置，跳过语雀每日变更 cron job 注册（见 .env.example）"
+      fi
+
     else
       echo "   ⚠️  LARK_USER_OPEN_ID 和 FEISHU_HOME_CHANNEL 都未设置，跳过 cron job 注册"
       echo "   在 .env 中至少设置一个（推荐 FEISHU_HOME_CHANNEL）"

@@ -110,6 +110,11 @@ docker compose logs -f hermes-daoyuan                                           
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep "Daily Command"  # 查看 cron 状态
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>                 # 手动触发
 
+# 语雀每日变更推送 — Hermes cron skill (yuque-daily-digest, 需 .env 配置 YUQUE_DAILY_PUSH_REPOS)
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep yuque-daily-digest  # 查看 cron 状态（每日 8:10 北京推送）
+docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>                    # 手动触发，飞书私聊收日报
+bash skills/yuque-daily-digest/test-cron-config.sh                                           # cron 配置静态断言
+
 # Gateway error loop detection（检测 OpenClaw 配置兼容性导致的日志刷屏）
 ./scripts/check-gateway-errors.sh            # 人类可读
 ./scripts/check-gateway-errors.sh --json     # JSON 输出（适合 cron/监控）
