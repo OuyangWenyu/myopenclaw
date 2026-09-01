@@ -1,6 +1,6 @@
 # myopenclaw
 
-个人多 Agent 协作平台 —— Docker Compose 一键部署，整合 Hermes、Claude Code、OpenClaw 三个 AI Agent 框架，配合长期记忆、飞书/Discord 桥接、晨间三签、论文管线、水文智能问答等能力。数据留在本机，配置用 Git 管理，定期快照备份到云盘。
+个人多 Agent 协作平台 —— Docker Compose 一键部署，整合 Hermes、Claude Code、OpenClaw 三个 AI Agent 框架，配合长期记忆、飞书/Discord 桥接、晨间四签、论文管线、水文智能问答等能力。数据留在本机，配置用 Git 管理，定期快照备份到云盘。
 
 ## 能力地图
 
@@ -11,7 +11,7 @@
 | Zotero 文献系统 | zotero-mcp 12 tools（mylibrary 提供）+ paper pipeline（爱码士写入，道元只读） | [mylibrary](https://github.com/OuyangWenyu/mylibrary) |
 | 飞书直连 | cc-connect（CC飞总）+ lark-cli（Hermes CLI）+ 道元 bot + zhixun 知汛 bot + tianyi 天一 bot | — |
 | Discord 桥接 | Hermes coder（爱码士）+ OpenClaw 虾酱 | — |
-| 晨间三签 | Hermes cron skill → TDAI + AgentOps 信号 → 飞书推送 | — |
+| 晨间四签 | Hermes cron skill → TDAI/AgentOps/语雀 MCP 等信号 → 飞书推送 | — |
 | AI 情报聚合 | dailyinfo 多源抓取 + AI 摘要 → 飞书 / Discord 推送 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) |
 | 研发日报 | repo-scanner MCP 采集 27 仓库 → Hermes skill → 飞书推送；天一 bot 复用同源读能力 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
 | 水文智能问答 | zhixun 知汛助手 — OpenClaw + zhixun-water-mcp → 飞书 bot（独立栈） | [zhixun-agent](https://github.com/OuyangWenyu/zhixun-agent) |

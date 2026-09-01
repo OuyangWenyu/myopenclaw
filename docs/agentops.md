@@ -2,7 +2,7 @@
 
 > 本文是 AgentOps 健康采集的详细说明。全部 14 个定时任务的总览见 [调度系统](scheduling.md)。
 
-每天 07:45 自动采集 5 种系统健康信号，写入 ledger 供晨间三签（morning-triage-v2）消费。
+每天 07:45 自动采集 5 种系统健康信号，写入 ledger 供晨间四签（morning-triage-v2）消费。
 
 ## 采集的信号
 
@@ -16,7 +16,7 @@
 
 ## 调度
 
-通过宿主机 launchd 每天 07:45（Asia/Shanghai）自动触发，早于晨间三签（07:50）：
+通过宿主机 launchd 每天 07:45（Asia/Shanghai）自动触发，早于晨间四签（07:50）：
 
 ```bash
 # 安装定时任务
@@ -45,9 +45,9 @@ tail -f logs/collect-agentops.log
 - needs_human_decision: no
 ```
 
-### 在晨间三签中的使用
+### 在晨间四签中的使用
 
-morning-triage-v2 通过关键词搜索 TDAI 记忆来消费 AgentOps 信号。当采集到异常信号时，晨间三签报告会包含系统健康小结。
+morning-triage-v2 通过关键词搜索 TDAI 记忆来消费 AgentOps 信号。当采集到异常信号时，晨间四签报告会包含系统健康小结。
 
 ## 配置
 

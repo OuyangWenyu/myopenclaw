@@ -290,4 +290,4 @@ OpenClaw 配置兼容性问题可能导致日志刷屏（历史事故：3 个月
 ./scripts/check-gateway-errors.sh --json
 ```
 
-此检测已纳入 [AgentOps 健康采集](agentops.md)，每天自动运行。如果检测到错误循环，晨间三签报告会包含告警。
+此检测已纳入 [AgentOps 健康采集](agentops.md)，每天自动运行。如果检测到错误循环，晨间四签报告会包含告警。
