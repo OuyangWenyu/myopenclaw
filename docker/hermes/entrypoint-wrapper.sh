@@ -148,6 +148,13 @@ if [ -d /opt/hermes-skills/daily-dev-report ] && [ ! -L /opt/data/skills/daily-d
   ln -sf /opt/hermes-skills/daily-dev-report /opt/data/skills/daily-dev-report
   echo "   📋 daily-dev-report skill 已安装"
 fi
+
+# ── yuque-daily-digest skill → Hermes skills ─────────────────────
+if [ -d /opt/hermes-skills/yuque-daily-digest ] && [ ! -L /opt/data/skills/yuque-daily-digest ]; then
+  mkdir -p /opt/data/skills
+  ln -sf /opt/hermes-skills/yuque-daily-digest /opt/data/skills/yuque-daily-digest
+  echo "   📋 yuque-daily-digest skill 已安装"
+fi
 # Auto-configure lark-cli if credentials are available via env vars
 # LARK_CLI_APP_ID / LARK_CLI_APP_SECRET — primary app (Hermes)
 # LARK_CLI_IDM_APP_ID / LARK_CLI_IDM_APP_SECRET — secondary app (爱码士)

@@ -121,7 +121,7 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 
 | 服务 | 接入方式 | 说明 |
 |------|----------|------|
-| yuque-mcp | 远程 SSE（Hermes 经 `scripts/bootstrap_hermes.sh` 注册；天一经 `docker/tianyi-bot/openclaw.json.template` 注册） | 语雀知识库 MCP，服务端部署在服务器，通过 Bearer key 访问，skill 由 `skills/yuque-knowledge/` 挂载 |
+| yuque-mcp | 远程 SSE（Hermes 经 `scripts/bootstrap_hermes.sh` 注册；天一经 `docker/tianyi-bot/openclaw.json.template` 注册） | 语雀知识库 MCP，服务端部署在服务器，通过 Bearer key 访问，skill 由 `skills/yuque-knowledge/` 挂载；每日变更日报由 `skills/yuque-daily-digest/` + Hermes cron 推送飞书私聊 |
 
 ## 目录结构
 
@@ -165,7 +165,7 @@ myopenclaw/
 - [运维](https://ouyangwenyu.github.io/myopenclaw/scheduling/) — 调度、备份、监控、AgentOps、DNS
 - [可移植性](https://ouyangwenyu.github.io/myopenclaw/portability/) — 换电脑需要准备什么
 - [备份系统](https://ouyangwenyu.github.io/myopenclaw/backup/) — 备份内容、恢复流程
-- [语雀知识库接入](https://ouyangwenyu.github.io/myopenclaw/yuque-mcp-hermes/) — Hermes 接入远程语雀 MCP 服务
+- [语雀知识库接入](https://ouyangwenyu.github.io/myopenclaw/yuque-mcp-hermes/) — Hermes 接入远程语雀 MCP 服务（含每日变更推送 yuque-daily-digest）
 
 本地预览文档：
 

@@ -1,6 +1,6 @@
 # 调度系统
 
-myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 17 个定时任务的 single source of truth（个人 cron 不在此列）。
+myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 18 个定时任务的 single source of truth（个人 cron 不在此列）。
 
 ## 总览
 
@@ -22,6 +22,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 07:45 | 宿主机 | launchd | **AgentOps 健康信号采集** | `install-all-schedulers.sh` |
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
+| 08:10 | Docker | Hermes cron | **yuque-daily-digest**（语雀知识库变更日报，需配置 `YUQUE_DAILY_PUSH_REPOS`） | `start.sh` 自动注册 |
 | 每周日 02:00 | Docker | crond (backup-cron) | 快照备份到云盘 | entrypoint 自动 |
 | 每周日 08:00 | Docker | cc-connect cron | AI News 周报生成 | entrypoint 自动 |
 | 每周日 08:10 | Docker | cc-connect cron | AI News 周报润色 + 飞书推送 | entrypoint 自动 |
@@ -33,9 +34,10 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 07:45 ──────── git-contribution-stats + AgentOps 采集 ← 并行
 07:50 ──────── Daily Command Center ← 读 inbox.md + TDAI 记忆
 07:55 ──────── daily-dev-report ← 读 repo-scanner MCP (SQLite)
+08:10 ──────── yuque-daily-digest ← 读 yuque-mcp（服务端 07:00 已生成变更报告）
 ```
 
-三个早间推送在 25 分钟内完成，数据采集在推送前完成，保证数据新鲜。
+四个早间推送在 07:30–08:10 窗口内完成（含语雀日报 08:10），数据采集在推送前完成，保证数据新鲜。
 
 **AgentOps 数据流**：`collect-agentops (launchd) → inbox.md → Daily Command Center (morning-triage-v2)`。系统健康信号由宿主机采集脚本确定性生成，Hermes skill 直接读取结构化文件，不再依赖 TDAI 记忆搜索。
 
@@ -55,7 +57,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 bash ${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh  # Git 数据采集
 ```
 
-Docker 容器内的定时任务（3 个 Hermes cron + backup + AI News）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。
+Docker 容器内的定时任务（4 个 Hermes cron + backup + AI News）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。其中 yuque-daily-digest 需在 `.env` 配置 `YUQUE_DAILY_PUSH_REPOS` 后才会注册。
 
 ## 验证
 
@@ -94,8 +96,9 @@ docker compose exec claude-code bash -c 'echo "cron list" | nc -U /root/.cc-conn
 - [ ] `launchctl list | grep ai.` 输出包含全部已安装任务
 - [ ] `docker compose ps` 所有服务 Up
 - [ ] `docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list` 包含 "Daily Command Center"
+- [ ] 若配置了 `YUQUE_DAILY_PUSH_REPOS`，cron list 还应包含 "yuque-daily-digest"
 - [ ] Healthchecks.io Dashboard 显示 "Last Ping: just now"（等 60s 后刷新）
-- [ ] 次日 07:50 检查飞书是否收到晨间三签推送
+- [ ] 次日 07:50–08:10 检查飞书是否收到晨间四签推送（含 08:10 语雀日报）
 
 ## 卸载
 

@@ -23,6 +23,7 @@ services:
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
+      - ./skills/yuque-daily-digest:/opt/hermes-skills/yuque-daily-digest:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
@@ -60,6 +61,10 @@ services:
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
+      # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
+      # ~/.hermes/.env 里的同名变量不参与 MCP 客户端展开。
+      - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
@@ -97,6 +102,7 @@ services:
       - ${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
+      - ./skills/yuque-daily-digest:/opt/hermes-skills/yuque-daily-digest:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
       - email-config-none:/opt/data/.config/himalaya
@@ -133,6 +139,9 @@ services:
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
+      # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
+      - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
@@ -188,6 +197,10 @@ services:
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
+      # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
+      # ~/.hermes/.env 里的同名变量不参与 MCP 客户端展开。
+      - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
@@ -240,6 +253,9 @@ services:
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - HERMES_PROFILE=daoyuan
+      # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
+      # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
+      - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
       # 道元不共享 TDAI memory — memory_enabled: false，独立记忆体系
       # Feishu (道元·文献学者 — 开放给群内所有人)
       - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}

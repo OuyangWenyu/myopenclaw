@@ -26,7 +26,7 @@ myopenclaw 用 Docker 运行三个 AI Agent 框架 — [Hermes Agent](https://gi
 - [OpenClaw 渠道](openclaw-channels.md) — Discord/飞书渠道配置
 - [TDAI 长期记忆](tdai-memory.md) — Agent 跨会话记忆系统
 - [zhixun 知汛助手](zhixun-feishu-bot.md) — 水文智能问答飞书机器人
-- [语雀知识库](yuque-mcp-hermes.md) — Hermes 接入远程语雀 MCP 服务
+- [语雀知识库](yuque-mcp-hermes.md) — Hermes 接入远程语雀 MCP 服务（含每日变更推送 yuque-daily-digest）
 - [调度系统](scheduling.md) — 全部 14 个定时任务总览与安装
 - [备份系统](backup.md) — 快照备份与恢复
 - [服务监控](monitoring.md) — Uptime Kuma + Healthchecks.io
