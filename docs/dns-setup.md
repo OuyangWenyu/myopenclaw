@@ -20,7 +20,9 @@
 
 ## 解决方案
 
-macOS 支持 `/etc/resolver/` 机制，可以按域名指定 DNS 服务器。本项目涉及的中国域名统一使用阿里云公共 DNS (223.5.5.5) 解析，Docker 容器通过宿主 DNS 转发自动受益，无需额外配置。
+macOS 支持 `/etc/resolver/` 机制，可以按域名指定 DNS 服务器。脚本会**自动探测**一个可用的国内 DNS：优先沿用现有 `/etc/resolver/` 配置，其次 223.5.5.5 → 119.29.29.29 → 180.76.76.76，最后回退到本机默认网关（路由器 DNS）。全部不可用时**报错退出**，绝不把不可用的 DNS 写进 `/etc/resolver/`。Docker 容器通过宿主 DNS 转发自动受益，无需额外配置。
+
+> ⚠️ **不要写死 DNS 地址**：223.5.5.5 在部分网络（校园网、部分运营商）会被拦截 53 端口，写死后解析会整体失效。2026-08-14 与 2026-09-10 两次事故都源于此。
 
 ## 一键配置
 
@@ -29,9 +31,10 @@ macOS 支持 `/etc/resolver/` 机制，可以按域名指定 DNS 服务器。本
 ```
 
 脚本会自动：
-1. 在 `/etc/resolver/` 创建域名级别的 DNS 路由规则（需 sudo）
-2. 在 `/etc/hosts` 写入备份条目（IP 过期时可再次运行刷新）
-3. 验证所有域名解析正常
+1. 探测可用 DNS（`--dry-run` 只演练选择过程，不写文件、不需要 sudo）
+2. 在 `/etc/resolver/` 创建域名级别的 DNS 路由规则（需 sudo，写入前自动备份到 `~/resolver-backup-<时间戳>.tgz`）
+3. 在 `/etc/hosts` 写入备份条目（IP 过期时可再次运行刷新）
+4. 验证所有域名解析正常
 
 ## 手动配置
 
@@ -43,8 +46,12 @@ macOS 支持 `/etc/resolver/` 机制，可以按域名指定 DNS 服务器。本
 
 DOMAINS="alibabadns.com aliyunddos1022.com bigmodel.cn bytedns1.com cdngslb.com deepseek.com dingtalk.com eo.dnse1.com eo.dnse5.com feishu.cn gitcode.com gtm-a4b8.com moonshot.cn open.bigmodel.cn qq.com queniuyk.com queniuck.com xiaomimimo.com xiaomi.com workbuddy.cn yundunwaf3.com zhipu.ai"
 
+# 先确认该 DNS 在当前网络可用（校园网/部分运营商会拦 53 端口）
+DNS=223.5.5.5          # 或路由器地址，如 192.168.3.1
+dig +short +time=2 @$DNS www.qq.com    # 有输出才可用
+
 for domain in $DOMAINS; do
-  echo "nameserver 223.5.5.5" | sudo tee /etc/resolver/$domain
+  echo "nameserver $DNS" | sudo tee /etc/resolver/$domain
 done
 
 # 刷新 DNS 缓存
@@ -84,6 +91,13 @@ CNAME 链经过了 `gds.alibabadns.com`（阿里云 GSLB 内部域），它不�
 
 `/etc/hosts` 中的条目优先级高于 DNS 查询，作为额外的安全网。但其中的 IP 来自 CDN，会随时间变化，需要定期更新。运行 `./scripts/setup-dns.sh` 即可刷新。
 
+> ⚠️ **死 IP 会「遮蔽」可用 DNS**：hosts 优先级高于 DNS，一旦其中的 IP 失效（换网络、CDN 轮换），
+> 即使 `/etc/resolver/` 解析完全正常，应用也只会连到那个死 IP 上 —— 而且症状具有迷惑性
+> （2026-09-10：`open.feishu.cn` 被 hosts 里的旧 IP 挡住，飞书推送全挂，但同一台机器上
+> `msg-frontier.feishu.cn` 收发正常）。
+> 排查：`dscacheutil -q host -a name <域名>`（看是不是 hosts 抢答）对比 `dig @<DNS> <域名>`。
+> 因此 hosts 只保留少数确实需要兜底的域名，**不要往里加 CDN 域名**。
+
 当前写入的备份条目（共 8 条，与 `scripts/setup-dns.sh` 的 `HOSTS_DOMAINS` 一致）：
 
 ```
@@ -98,7 +112,7 @@ workbuddy.cn / www.workbuddy.cn     # WorkBuddy
 ### Docker 容器 DNS 链路
 
 ```
-容器应用 → Docker DNS (127.0.0.11) → 宿主 DNS → /etc/resolver/ → 223.5.5.5
+容器应用 → Docker DNS (127.0.0.11) → 宿主 DNS → /etc/resolver/ → <选定的可用 DNS>
 ```
 
 Docker Desktop for Mac 的内嵌 DNS 服务器会将查询转发到宿主，宿主按 `/etc/resolver/` 规则路由到指定 DNS。因此只需在宿主配置 resolver，所有容器自动生效，不需要在 `docker-compose.yml` 中用 `extra_hosts` 硬编码 IP。
