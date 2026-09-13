@@ -2,6 +2,25 @@
 
 backup-cron 容器每天凌晨 2:00 对所有持久化数据做快照备份到云盘（`BACKUP_CRON` 可改）。频率与 AgentOps 备份过期阈值（24h）对齐。
 
+## ⚠️ 备份根目录与守卫
+
+备份往哪写由**宿主机环境变量 `BACKUP_ROOT`** 决定，而它是 `scripts/start.sh` 解析 `.cloud.conf` 后 `export` 的。`docker-compose.yml` 里写的是：
+
+```yaml
+- ${BACKUP_ROOT:-/tmp/myopenclaw-backups}:/backup:rw
+```
+
+也就是说，**不经 `start.sh` 直接跑 `docker compose up -d backup-cron`，compose 会静默回退到 `/tmp/myopenclaw-backups`** —— 而 macOS 每天清理 `/tmp` 里 3 天以上未访问的文件，备份会被系统删掉且毫无报错。（2026-09-13 实测踩中。）
+
+因此容器启动时会校验备份根目录里的标记文件 `.myopenclaw-backup-root`（由 `start.sh` 写入，内容为解析出的宿主机路径）：
+
+- **有标记** → 打印 `☁️ 备份根目录已配置: /backup → <宿主机路径>` 后正常启动
+- **无标记** → **拒绝启动并退出**，日志给出修复命令
+
+标记校验的是「该目录经过配置」，**与是否云盘无关** —— 本地目录（`.cloud.conf` 的 `CLOUD_PROVIDER=custom`）同样合法。
+
+**容器重启不会删除快照**：启动时的初始备份带 `BACKUP_SKIP_PRUNE=1`，保留策略只由 02:00 的定时任务执行，重启这一运维动作不携带删除副作用。
+
 ## 备份管线
 
 ```
@@ -65,4 +84,12 @@ BACKUP_KEEP_DAYS=30        # 快照保留天数
 
 `.cloud.conf` 中的 `BACKUP_ROOT` 指定云盘路径（Google Drive / OneDrive / 自定义）。
 
-已有部署若 `.env` 仍是 `BACKUP_CRON=0 2 * * 0`（每周日），改成 `0 2 * * *` 后需要 `docker compose up -d backup-cron` 才会换上新 crontab。
+已有部署若 `.env` 仍是 `BACKUP_CRON=0 2 * * 0`（每周日），改完需要重建容器才会换上新 crontab：
+
+```bash
+./scripts/start.sh                     # 推荐：会一并导出 BACKUP_ROOT
+```
+
+> ⚠️ **不要**用裸的 `docker compose up -d backup-cron` —— 它拿不到 `BACKUP_ROOT`，
+> 会静默回退到 `/tmp/myopenclaw-backups`（见文首「备份根目录与守卫」）。容器现在
+> 会拒绝在这种状态下启动，但直接用 `start.sh` 更省事。
