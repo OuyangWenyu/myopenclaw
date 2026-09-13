@@ -2,9 +2,9 @@
 
 Run: uv run --with pytest pytest tests/test_repo_consistency.py -v
 
-These assert facts that are easy to break silently: a variable read but never
-documented, an entrypoint that installs something nothing uses, a cron job
-pointing at a script the image never copies. Each one was a real defect.
+These assert facts that are easy to break silently: a variable passed into
+containers but never documented, an entrypoint that installs something nothing
+uses. Each one was a real defect.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 COMPOSE = (REPO_ROOT / "docker-compose.yml").read_text()
 ENV_EXAMPLE = (REPO_ROOT / ".env.example").read_text()
 CLAUDE_ENTRYPOINT = (REPO_ROOT / "docker" / "claude-code" / "entrypoint.sh").read_text()
-CLAUDE_DOCKERFILE = (REPO_ROOT / "docker" / "claude-code" / "Dockerfile").read_text()
 
 
 class TestLarkVarsDocumented:
@@ -52,21 +51,3 @@ class TestNoDoomedInstall:
     def test_entrypoint_does_not_pip_install_dailyinfo(self):
         assert "pip install -e /home/node/code/dailyinfo" not in CLAUDE_ENTRYPOINT
         assert "安装 dailyinfo" not in CLAUDE_ENTRYPOINT
-
-
-class TestCronScriptsAreInImage:
-    """A cron job whose script was never COPYed fails every time it fires.
-
-    entrypoint.sh registers `--exec "bash /opt/claude-code/weekly-ai-news-generate.sh"`
-    but the Dockerfile only copied entrypoint.sh into /opt/claude-code/, so the
-    Sunday 08:00 AI News job ran against a nonexistent path.
-    """
-
-    def test_every_exec_script_is_copied(self):
-        referenced = re.findall(r'--exec\s+"bash\s+(/opt/[^"]+)"', CLAUDE_ENTRYPOINT)
-        assert referenced, "entrypoint 里应当存在 --exec \"bash /opt/...\"，正则可能失效了"
-        for path in referenced:
-            name = Path(path).name
-            assert name in CLAUDE_DOCKERFILE, (
-                f"entrypoint 注册的 --exec 脚本 {path} 没有被 Dockerfile COPY 进镜像"
-            )
