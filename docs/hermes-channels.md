@@ -76,7 +76,7 @@ Discord 网关 (`gateway.discord.gg`) 在国内可能间歇性 DNS 解析失败�
 四个 Hermes profile 共用同一镜像。`web_search` 默认走 **ddgs**（DuckDuckGo 抓取，免 API key）：
 
 1. 镜像安装 `ddgs` 包（`docker/hermes/Dockerfile`）
-2. `start.sh` 幂等写入 `~/.hermes/config.yaml`：
+2. `start.sh` 调用 `scripts/ensure_hermes_web_search.py`，幂等写入 `~/.hermes/config.yaml`（该脚本用文本手术改写，不依赖宿主机 PyYAML，也不会动你的注释和 key 顺序）：
 
 ```yaml
 web:

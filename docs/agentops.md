@@ -1,6 +1,6 @@
 # AgentOps 健康采集
 
-> 本文是 AgentOps 健康采集的详细说明。全部 14 个定时任务的总览见 [调度系统](scheduling.md)。
+> 本文是 AgentOps 健康采集的详细说明。全部定时任务的总览见 [调度系统](scheduling.md)。
 
 每天 07:45 自动采集 5 种系统健康信号，写入 ledger 供晨间四签（morning-triage-v2）消费。
 
@@ -85,7 +85,7 @@ tail -50 logs/collect-agentops.log
 
 ### inbox.md 不存在 / Daily Command Center 报 AgentOps 未部署
 
-`start.sh` 会创建 `~/.myagentdata/agentops/`。若宿主机 launchd 未安装，目录在但 `inbox.md` 不会自动生成：
+`start.sh` 会创建 `~/.myagentdata/agentops/`。若宿主机 launchd 未安装，目录在但 `inbox.md` 不会自动生成 —— macOS 上 `start.sh` 会检测 `ai.myopenclaw.collect-agentops.plist` 缺失并主动打印警告，按提示安装即可：
 
 ```bash
 ./scripts/launchd/install-collect-agentops.sh

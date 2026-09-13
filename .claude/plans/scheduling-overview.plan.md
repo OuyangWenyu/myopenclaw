@@ -28,10 +28,8 @@
 
 | 时间 | 容器 | 调度器 | 任务 | 注册方式 |
 |------|------|--------|------|----------|
-| 每周日 02:00 | backup-cron | crond | `backup-all-docker.sh` | entrypoint 自动 |
+| 每天 02:00 | backup-cron | crond | `backup-all-docker.sh` | entrypoint 自动 |
 | 每天 07:50 | hermes | Hermes cron | morning-triage-v2 | start.sh 自动注册 |
-| 每周日 08:00 | claude-code | cc-connect cron | AI News 周报生成 | entrypoint 自动 |
-| 每周日 08:10 | claude-code | cc-connect cron | AI News 周报润色 | entrypoint 自动 |
 
 ### 关键时序依赖
 

@@ -12,7 +12,7 @@ backup-cron 容器每天凌晨 2:00 对所有持久化数据做快照备份到�
 
 也就是说，**不经 `start.sh` 直接跑 `docker compose up -d backup-cron`，compose 会静默回退到 `/tmp/myopenclaw-backups`** —— 而 macOS 每天清理 `/tmp` 里 3 天以上未访问的文件，备份会被系统删掉且毫无报错。（2026-09-13 实测踩中。）
 
-因此容器启动时会校验备份根目录里的标记文件 `.myopenclaw-backup-root`（由 `start.sh` 写入，内容为解析出的宿主机路径）：
+因此容器启动时由 `docker/backup-cron/check-cloud-root.sh` 校验备份根目录里的标记文件 `.myopenclaw-backup-root`（由 `start.sh` 写入，内容为解析出的宿主机路径）：
 
 - **有标记** → 打印 `☁️ 备份根目录已配置: /backup → <宿主机路径>` 后正常启动
 - **无标记** → **拒绝启动并退出**，日志给出修复命令

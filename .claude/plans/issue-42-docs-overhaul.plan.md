@@ -30,7 +30,7 @@ myopenclaw (this repo)
   ├─ docker-compose mounts FROM:
   │   ├─ ~/code:/home/node/code      ← all sibling repos live here
   │   ├─ ~/code/myloop               ← skills symlink for CC飞总
-  │   ├─ ~/code/dailyinfo            ← launchd scheduling + ai-news-weekly-polish skill
+  │   ├─ ~/code/dailyinfo            ← 宿主机 launchd 调度（每日论文/资讯抓取推送）
   │   └─ ~/code/aisecretary          ← skills mount for Hermes
   │
   ├─ Data persisted on host:
@@ -191,8 +191,7 @@ nav:
 | Dependency | Expected Path | Used By | Behavior if Missing |
 |------------|---------------|---------|---------------------|
 | myloop | `~/code/myloop` | Claude Code entrypoint → skills symlink | Warning: "myloop 未挂载，跳过 skill 安装" |
-| dailyinfo | `~/code/dailyinfo` | launchd scheduling + ai-news-weekly-polish skill | Daily cron jobs fail; skill not loaded |
-| ai-news-weekly-polish | `~/code/dailyinfo/skills/ai-news-weekly-polish` | Docker volume mount (line 214) | Empty mount or Docker warning |
+| dailyinfo | `~/code/dailyinfo` | 宿主机 launchd 调度 | Daily cron jobs fail |
 | aisecretary skills | `~/code/aisecretary/skills` | Docker volume mount (lines 21, 79) | Empty mount or Docker warning |
 
 ### macOS-specific (won't work on Linux)

@@ -36,6 +36,13 @@ backup-cron       -       定时快照备份（默认每天凌晨 2:00）
 
 ### backup-cron 容器挂载
 
+> ⚠️ **必须用 `./scripts/start.sh` 启动。** `docker-compose.yml` 的挂载写的是
+> `${BACKUP_ROOT:-/tmp/myopenclaw-backups}:/backup`，而 `BACKUP_ROOT` 由 `start.sh`
+> 从 `.cloud.conf` 解析后 export —— 裸跑 `docker compose up -d backup-cron` 会静默
+> 回退到 `/tmp`（macOS 每天清理该目录，备份会被系统删掉）。
+> 为此容器启动时会校验备份根目录里的哨兵文件 `.myopenclaw-backup-root`：
+> **缺失即拒绝启动**（不会静默写错地方）。详见 [备份系统](backup.md)。
+
 | 宿主机路径 | 容器内路径 | 说明 |
 |-----------|-----------|------|
 | `/home/gaoyu/.hermes` | `/root/.hermes`（只读） | Hermes 数据快照源 |

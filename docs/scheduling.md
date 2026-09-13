@@ -1,6 +1,6 @@
 # 调度系统
 
-myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 18 个定时任务的 single source of truth（个人 cron 不在此列）。
+myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 16 个定时任务的 single source of truth（个人 cron 不在此列）。
 
 ## 总览
 
@@ -23,7 +23,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
 | 08:10 | Docker | Hermes cron | **yuque-daily-digest**（语雀知识库变更日报，需配置 `YUQUE_DAILY_PUSH_REPOS`） | `start.sh` 自动注册 |
-| 每天 02:00 | Docker | crond (backup-cron) | 快照备份到云盘 | entrypoint 自动 |
+| 每天 02:00 | Docker | crond (backup-cron) | 快照备份到云盘（清理过期快照仅在此执行） | entrypoint 自动 |
 
 ## 时序依赖
 
@@ -55,7 +55,9 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 bash ${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh  # Git 数据采集
 ```
 
-Docker 容器内的定时任务（4 个 Hermes cron + backup + AI News）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。其中 yuque-daily-digest 需在 `.env` 配置 `YUQUE_DAILY_PUSH_REPOS` 后才会注册。
+Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。其中 yuque-daily-digest 需在 `.env` 配置 `YUQUE_DAILY_PUSH_REPOS` 后才会注册。
+
+> backup-cron 的保留策略（删除超过 `BACKUP_KEEP_DAYS` 的快照）**只在 02:00 这个定时任务里执行**；容器启动时的初始备份带 `BACKUP_SKIP_PRUNE=1`，重启不会删任何快照。详见 [备份系统](backup.md)。
 
 ## 验证
 
@@ -81,9 +83,6 @@ docker compose exec backup-cron crontab -l
 
 # 3. 检查 Hermes cron
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list
-
-# 4. 检查 cc-connect cron
-docker compose exec claude-code bash -c 'echo "cron list" | nc -U /root/.cc-connect/run/api.sock' 2>/dev/null | grep "AI News"
 ```
 
 ## 新机器检查清单
