@@ -31,7 +31,7 @@ tail -f logs/collect-agentops.log
 
 ## 输出
 
-采集结果写入 `~/.myagentdata/agentops/inbox.md`。自动采集项（`source: auto`）每次覆盖刷新，手动添加的条目保留不变。
+采集结果写入 `~/.myagentdata/agentops/inbox.md`。`start.sh` 启动时会创建该目录，避免 Docker 只读挂载缺少 `agentops/` 子目录。自动采集项（`source: auto`）每次覆盖刷新，手动添加的条目保留不变。
 
 ```markdown
 ## 容器 hermes 近期重启
@@ -82,6 +82,16 @@ launchctl list | grep collect-agentops
 # 查看上次运行日志
 tail -50 logs/collect-agentops.log
 ```
+
+### inbox.md 不存在 / Daily Command Center 报 AgentOps 未部署
+
+`start.sh` 会创建 `~/.myagentdata/agentops/`。若宿主机 launchd 未安装，目录在但 `inbox.md` 不会自动生成：
+
+```bash
+./scripts/launchd/install-collect-agentops.sh
+```
+
+morning-triage-v2 在 `inbox.md` 缺失时视为系统正常（不再当作「未部署」）。
 
 ### 输出文件为空
 

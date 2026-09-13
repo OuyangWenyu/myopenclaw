@@ -23,7 +23,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
 | 08:10 | Docker | Hermes cron | **yuque-daily-digest**（语雀知识库变更日报，需配置 `YUQUE_DAILY_PUSH_REPOS`） | `start.sh` 自动注册 |
-| 每周日 02:00 | Docker | crond (backup-cron) | 快照备份到云盘 | entrypoint 自动 |
+| 每天 02:00 | Docker | crond (backup-cron) | 快照备份到云盘 | entrypoint 自动 |
 | 每周日 08:00 | Docker | cc-connect cron | AI News 周报生成 | entrypoint 自动 |
 | 每周日 08:10 | Docker | cc-connect cron | AI News 周报润色 + 飞书推送 | entrypoint 自动 |
 

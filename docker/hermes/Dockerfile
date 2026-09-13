@@ -131,6 +131,11 @@ RUN if [ -f /tmp/mylibrary-src/pyproject.toml ]; then \
     rm -rf /tmp/mylibrary-src /tmp/mylibrary-git && \
     chown -R hermes:hermes /opt/mylibrary-skills
 
+# DuckDuckGo web search backend for Hermes web_search (no API key).
+# Shared by all four profiles that use this image. If DDG is unreachable
+# from the host network, switch config.yaml web.search_backend to brave_free.
+RUN uv pip install --python /opt/hermes/.venv/bin/python3 ddgs
+
 # ── Config directories for host-side persistence ────────────
 # Mounted from host via docker-compose volumes:
 #   ~/.config/gh          → /opt/gh-config        (gh auth + settings)

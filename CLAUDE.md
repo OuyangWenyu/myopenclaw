@@ -115,6 +115,10 @@ docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep yuque-d
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>                    # 手动触发，飞书私聊收日报
 bash skills/yuque-daily-digest/test-cron-config.sh                                           # cron 配置静态断言
 
+# Hermes web_search (ddgs, no API key)
+docker compose exec hermes /opt/hermes/.venv/bin/python3 -c "import ddgs; print('ok')"
+docker compose exec hermes /opt/hermes/.venv/bin/hermes tools | grep -i search
+
 # Gateway error loop detection（检测 OpenClaw 配置兼容性导致的日志刷屏）
 ./scripts/check-gateway-errors.sh            # 人类可读
 ./scripts/check-gateway-errors.sh --json     # JSON 输出（适合 cron/监控）
@@ -238,7 +242,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 12. **openclaw-tianyi** (天一研发助手) — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.7.1` image with custom entrypoint. Port 18792 (loopback only, not exposed). Connected to Feishu via independent bot (`TIANYI_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-v4-flash with independent API key. **Coding profile** (terminal + MCP): reads repo activity via shared `repo-scanner-mcp`, creates GitHub/GitCode issues via `gh` and `gc` CLI (installed at startup in entrypoint). No code execution sandbox. Data dir: `~/.openclaw-tianyi`. Requires main stack running (repo-scanner-mcp). Resource limits: 2G/1 CPU.
 
-**Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
+**Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS`. Default schedule is daily 02:00 (`BACKUP_CRON=0 2 * * *`), matching the AgentOps 24h stale-backup threshold. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
 **dailyinfo scheduling**: Managed via host launchd (not Docker). `scripts/launchd/` contains plist templates and install/uninstall scripts. dailyinfo is a sibling repo (`../dailyinfo`) with its own Docker services (FreshRSS).
 
@@ -280,19 +284,21 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 - **Daily R&D Report (repo-scanner MCP + Hermes skill)**: git-contribution-stats collects 27 repos daily (GitHub + GitCode) into SQLite (`~/.myagentdata/repo-scanner/repos.sqlite`). A streamable HTTP MCP server (`repo-scanner-mcp`, port 8001) exposes `get_daily_report` / `query_commits` / `query_authors`. Hermes `daily-dev-report` skill calls MCP → DeepSeek LLM polish → Feishu private chat push. Cron: 07:45 launchd collection → 07:55 Hermes cron push. MCP config: `~/.hermes/config.yaml` (`mcp_servers.repo-scanner` + `platform_toolsets.cli`). Skill at `skills/daily-dev-report/SKILL.md`. Full design in `.claude/prds/daily-dev-report.prd.md`.
 
+- **Hermes web_search**: Hermes image installs the `ddgs` package (DuckDuckGo, no API key). `start.sh` idempotently writes `web.search_backend: ddgs` into `~/.hermes/config.yaml` without overwriting an operator-chosen backend (`brave_free`). Four profiles share the image and default config. See `docs/hermes-channels.md`.
+
 - **Hermes image rebuild**: ✅ Fixed 2026-07-20 — cardamum pin updated to `771879c` (2026-07-18). OSError patch removed (fixed upstream in v0.18.2). Entrypoint now hands off to s6-overlay `/init` instead of deprecated `entrypoint.sh`. Image rebuilds clean with `docker compose build hermes`.
 
 ## Network & DNS
 
 When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains, services fail with `ENOTFOUND` / `NameResolutionError`. The fix is per-domain DNS routing via macOS `/etc/resolver/`.
 
-**DNS resolution chain**: Container app → Docker DNS (127.0.0.11) → Host DNS → `/etc/resolver/<domain>` → 223.5.5.5 (Alibaba public DNS). Docker containers benefit automatically; no `extra_hosts` hardcoding needed in `docker-compose.yml`.
+**DNS resolution chain**: Container app → Docker DNS (127.0.0.11) → Host DNS → `/etc/resolver/<domain>` → 自动探测到的可用 DNS（`scripts/setup-dns.sh` 按 现有配置 → 223.5.5.5 → 119.29.29.29 → 180.76.76.76 → 默认网关 的顺序探测，**不要写死** —— 223.5.5.5 在校园网/部分运营商被拦 53 端口）。Docker containers benefit automatically; no `extra_hosts` hardcoding needed in `docker-compose.yml`.
 
 **Critical CNAME chain issue**: `api.dingtalk.com` resolves through a CNAME chain that passes through `gds.alibabadns.com` (Alibaba Cloud GSLB internal domain). This domain is outside `dingtalk.com`, so it needs its own `/etc/resolver/alibabadns.com` entry. Without it, `api.dingtalk.com` resolution fails even when `dingtalk.com` resolver is correct.
 
-**Resolver domains** (all → 223.5.5.5): Service domains: `bigmodel.cn`, `deepseek.com`, `dingtalk.com`, `feishu.cn`, `gitcode.com`, `moonshot.cn`, `open.bigmodel.cn`, `qq.com` (QQ mail), `xiaomimimo.com` (Xiaomi MiMo API), `xiaomi.com` (Xiaomi MiMo CNAME chain), `workbuddy.cn` (WorkBuddy portal), `zhipu.ai`. CDN/GSLB external domains (required for CNAME chain resolution): `alibabadns.com` (DingTalk), `eo.dnse1.com` (DeepSeek/Volcengine CDN), `eo.dnse5.com` (WorkBuddy/Tencent EdgeOne CDN — a separate chain from dnse1), `bytedns1.com` (Feishu/ByteDance CDN), `aliyunddos1022.com` (Moonshot/Alibaba DDoS), `yundunwaf3.com` (Zhipu/Alibaba WAF), `cdngslb.com` (CDN GSLB), `gtm-a4b8.com` (Zhipu GTM), `queniuyk.com` (Feishu `open.feishu.cn` CNAME terminal, Kingsoft CDN), `queniuck.com` (Feishu `msg-frontier.feishu.cn` CNAME terminal).
+**Resolver domains** (all → 同一个自动探测到的可用 DNS): Service domains: `bigmodel.cn`, `deepseek.com`, `dingtalk.com`, `feishu.cn`, `gitcode.com`, `moonshot.cn`, `open.bigmodel.cn`, `qq.com` (QQ mail), `xiaomimimo.com` (Xiaomi MiMo API), `xiaomi.com` (Xiaomi MiMo CNAME chain), `workbuddy.cn` (WorkBuddy portal), `zhipu.ai`. CDN/GSLB external domains (required for CNAME chain resolution): `alibabadns.com` (DingTalk), `eo.dnse1.com` (DeepSeek/Volcengine CDN), `eo.dnse5.com` (WorkBuddy/Tencent EdgeOne CDN — a separate chain from dnse1), `bytedns1.com` (Feishu/ByteDance CDN), `aliyunddos1022.com` (Moonshot/Alibaba DDoS), `yundunwaf3.com` (Zhipu/Alibaba WAF), `cdngslb.com` (CDN GSLB), `gtm-a4b8.com` (Zhipu GTM), `queniuyk.com` (Feishu `open.feishu.cn` CNAME terminal, Kingsoft CDN), `queniuck.com` (Feishu `msg-frontier.feishu.cn` CNAME terminal).
 
-**`/etc/hosts` backup entries**: `open.bigmodel.cn`, `mcp.dingtalk.com`, `wss-open-connection.dingtalk.com`, `imap.qq.com`, `smtp.qq.com`, `api.xiaomimimo.com`, `workbuddy.cn`, `www.workbuddy.cn`. These provide a safety net but IPs go stale (CDN rotation). Run `./scripts/setup-dns.sh` to refresh. Use python3 (not sed) to edit `openclaw.json` — sed with token special characters can corrupt the file.
+**`/etc/hosts` backup entries**: `open.bigmodel.cn`, `mcp.dingtalk.com`, `wss-open-connection.dingtalk.com`, `imap.qq.com`, `smtp.qq.com`, `api.xiaomimimo.com`, `workbuddy.cn`, `www.workbuddy.cn`. These provide a safety net but IPs go stale (CDN rotation). Run `./scripts/setup-dns.sh` to refresh. **它们优先级高于 DNS，死 IP 会遮蔽正常解析**（2026-09-10：hosts 里旧 `open.feishu.cn` IP 导致飞书推送全挂）—— 排查用 `dscacheutil -q host -a name <域名>` 对比 `dig @<DNS> <域名>`，且**不要往里加 CDN 域名**。 Use python3 (not sed) to edit `openclaw.json` — sed with token special characters can corrupt the file.
 
 **Setup script**: `./scripts/setup-dns.sh` — creates/updates `/etc/resolver/` entries and `/etc/hosts` backup IPs, then validates resolution. See `docs/dns-setup.md` for full documentation.
 

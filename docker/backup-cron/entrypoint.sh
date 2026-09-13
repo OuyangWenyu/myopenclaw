@@ -2,13 +2,13 @@
 # =============================================================
 # backup-cron/entrypoint.sh — 写入 crontab 并启动 crond
 # 环境变量:
-#   BACKUP_CRON      cron 表达式（默认 "0 2 * * 0"，每周日凌晨 2:00）
+#   BACKUP_CRON      cron 表达式（默认 "0 2 * * *"，每天凌晨 2:00）
 #   BACKUP_KEEP_DAYS 快照保留天数（默认 30）
 #   BACKUP_ROOT      /backup（由 docker-compose volumes 挂载提供）
 # =============================================================
 set -euo pipefail
 
-CRON_EXPR="${BACKUP_CRON:-0 2 * * 0}"
+CRON_EXPR="${BACKUP_CRON:-0 2 * * *}"
 export BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 export BACKUP_ROOT="/backup"
 
