@@ -38,9 +38,31 @@ rsync -a --delete "${DEST}/" "${LATEST}/"
 echo "   ✅ latest/ 已更新"
 
 # ── 清理超过保留天数的旧快照 ─────────────────────────────────
-find "${BACKUP_ROOT}/data" -mindepth 1 -maxdepth 1 -type d \
-  ! -name "latest" -mtime "+${BACKUP_KEEP_DAYS}" \
-  -exec echo "   🗑  删除旧快照: {}" \; \
-  -exec rm -rf {} \;
+# 按目录名里的时间戳判定，不按文件系统 mtime。本脚本尤其致命：
+# `rsync -a --delete "${DATA_ROOT}/" "${DEST}/"` 会把 DEST 自身的 mtime
+# 覆盖成 DATA_ROOT 的 mtime，源目录顶层长期不变时新快照会继承陈旧 mtime，
+# 被 `find -mtime +KEEP_DAYS` 误判为过期而当场删掉自己。
+_cut=$(( $(date +%s) - BACKUP_KEEP_DAYS * 86400 ))
+CUTOFF="$(date -d "@${_cut}" +%Y-%m-%d 2>/dev/null || true)"     # GNU / busybox
+if [[ -z "${CUTOFF}" ]]; then
+  CUTOFF="$(date -r "${_cut}" +%Y-%m-%d 2>/dev/null || true)"    # macOS / BSD
+fi
+if [[ -z "${CUTOFF}" ]]; then
+  echo "   ⚠️  无法计算保留截止日期，跳过本次旧快照清理（不猜、不删）" >&2
+else
+  for d in "${BACKUP_ROOT}/data"/*/; do
+    [[ -d "${d}" ]] || continue
+    name="$(basename "${d}")"
+    case "${name}" in
+      latest | "${TIMESTAMP}") continue ;;          # 永不删除本次快照
+      [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_*) ;;  # 形如 2026-09-13_020000
+      *) continue ;;                                # 非快照目录，不碰
+    esac
+    if [[ "${name%%_*}" < "${CUTOFF}" ]]; then
+      echo "   🗑  删除旧快照: ${d%/}"
+      rm -rf "${d}"
+    fi
+  done
+fi
 
 echo "   备份完成 (data)"
