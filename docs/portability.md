@@ -14,7 +14,7 @@ myopenclaw (本仓库)
 │   └── ~/code/git-contribution-stats/ ← build context for repo-scanner-mcp
 │
 ├── [可选·软依赖·运行时 graceful skip]
-│   └── ~/code/dailyinfo/            ← launchd 调度 + ai-news-weekly-polish skill
+│   └── ~/code/dailyinfo/            ← 宿主机 launchd 调度（每日论文/资讯抓取推送）
 │
 ├── [配置文件·需要手动创建]
 │   ├── .env          (从 .env.example)

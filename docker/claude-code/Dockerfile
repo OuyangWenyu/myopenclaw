@@ -68,9 +68,6 @@ COPY docker/tdai-memory/mcp-server/server.py /opt/tdai-mcp-server.py
 
 # ── Entrypoint wrapper ────────────────────────────────────────────
 COPY docker/claude-code/entrypoint.sh /opt/claude-code/entrypoint.sh
-# weekly-ai-news-generate.sh 由 entrypoint 注册的 cc-connect cron 调用
-# （每周日 08:00）。不 COPY 进镜像的话任务每次都因「文件不存在」失败。
-COPY docker/claude-code/weekly-ai-news-generate.sh /opt/claude-code/weekly-ai-news-generate.sh
-RUN chmod +x /opt/claude-code/entrypoint.sh /opt/claude-code/weekly-ai-news-generate.sh
+RUN chmod +x /opt/claude-code/entrypoint.sh
 
 ENTRYPOINT ["/opt/claude-code/entrypoint.sh"]
