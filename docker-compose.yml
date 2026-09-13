@@ -52,7 +52,6 @@ services:
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
       - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
-      - LARK_CHAT_ID=${LARK_CHAT_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
@@ -122,7 +121,6 @@ services:
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
       - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
-      - LARK_CHAT_ID=${LARK_CHAT_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
@@ -187,7 +185,6 @@ services:
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
       - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
-      - LARK_CHAT_ID=${LARK_CHAT_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
@@ -248,7 +245,6 @@ services:
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
       - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
       - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
-      - LARK_CHAT_ID=${LARK_CHAT_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf

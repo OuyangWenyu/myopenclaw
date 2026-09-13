@@ -115,15 +115,6 @@ cp -r /usr/local/lib/node_modules/gitcode-cli/skills/gitcode-cli/* /opt/claude-c
 # ── uv self-update ───────────────────────────────────────────
 uv self update --quiet 2>/dev/null || true
 
-# ── dailyinfo install（后台 pip install -e，deps 已在镜像中）─────
-(
-    if [ -d "/home/node/code/dailyinfo" ] && ! python3 -c "import dailyinfo" 2>/dev/null; then
-        echo "📦 安装 dailyinfo..."
-        timeout 30 python3 -m pip install -e /home/node/code/dailyinfo --quiet 2>/dev/null && \
-            echo "✅ dailyinfo 安装完成" || true
-    fi
-) &
-
 # ── Code 目录骨架（卷挂载后创建）─────────────────────────────
 mkdir -p /home/node/code/opensource /home/node/code/OuyangWenyu /home/node/code/iHeadWater 2>/dev/null || true
 
