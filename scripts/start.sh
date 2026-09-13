@@ -80,6 +80,12 @@ else
     mkdir -p "${BACKUP_ROOT}/hermes" "${BACKUP_ROOT}/openclaw" "${BACKUP_ROOT}/claude"
     HAS_CLOUD_CONF=true
 
+    # ── 写入备份根目录标记（哨兵）────────────────────────────
+    # backup-cron 启动时校验此文件；缺失即拒绝启动。没有它的话，直接用
+    # `docker compose up -d backup-cron`（不经本脚本）会让 compose 静默回退到
+    # /tmp/myopenclaw-backups —— 备份写进会被系统清理的目录且毫无报错。
+    printf '%s\n' "${BACKUP_ROOT}" > "${BACKUP_ROOT}/.myopenclaw-backup-root"
+
     # ── 自动推导 GDRIVE_PAPERS_LOCAL_PATH（若 .env 未设置）────
     if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
       export GDRIVE_PAPERS_LOCAL_PATH="${CLOUD_ROOT}/Papers/Zotero_Papers"

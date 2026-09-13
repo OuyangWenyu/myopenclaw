@@ -67,6 +67,14 @@ run_backup() {
     return $?
 }
 
+# 容器启动时的初始备份路径：不得执行保留策略
+run_backup_initial() {
+    local ts="$1"
+    HOME="${FAKE}" BACKUP_ROOT="${BACKUP_ROOT}" BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}" \
+        BACKUP_SKIP_PRUNE=1 bash "${SCRIPT}" "${ts}" >"${FAKE}/out.log" 2>&1
+    return $?
+}
+
 # ══ 场景 1：嵌套目录必须被完整备份 ═══════════════════════════════════
 echo "── 场景 1: 嵌套目录 .config/ 备份 ──"
 
@@ -133,6 +141,22 @@ for f in hermes/scripts/backup.sh openclaw/scripts/backup.sh claude/scripts/back
     check "${f} 排除本次快照不被删除" \
           "grep -q \"latest | \\\"\\\${TIMESTAMP}\\\"\" '${REPO_ROOT}/${f}'"
 done
+
+# ══ 场景 5：初始备份（容器启动）不得执行 prune ═══════════════════════
+echo "── 场景 5: BACKUP_SKIP_PRUNE=1 时保留策略不执行 ──"
+setup_fixture
+mkdir -p "${BACKUP_ROOT}/hermes/2020-01-01_000000"   # 远超保留期，正常应被删
+mkdir -p "${BACKUP_ROOT}/hermes/latest"
+run_backup_initial "2026-09-13_120000"
+RC=$?
+check "初始备份退出码为 0" "[[ ${RC} -eq 0 ]]"
+check "过期快照仍然存在（重启无删除副作用）" \
+      "[[ -d '${BACKUP_ROOT}/hermes/2020-01-01_000000' ]]"
+check "本次快照已正常创建" \
+      "[[ -d '${BACKUP_ROOT}/hermes/2026-09-13_120000' ]]"
+check "日志标注了跳过清理" "grep -q '跳过' '${FAKE}/out.log'"
+teardown_fixture
+echo
 
 echo
 if [[ ${FAIL} -eq 0 ]]; then
