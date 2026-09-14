@@ -99,7 +99,9 @@
       "groupPolicy": "open",
       "requireMention": true,
       "groupSessionScope": "group",
-      "streaming": true,
+      "streaming": {
+        "mode": "partial"
+      },
       "typingIndicator": true,
       "resolveSenderNames": false,
       "configWrites": false,

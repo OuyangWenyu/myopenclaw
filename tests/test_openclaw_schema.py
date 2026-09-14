@@ -77,6 +77,21 @@ class TestNoRetiredOpenclawKeys:
             f"{label}: gateway.nodes.denyCommands 应改为 gateway.nodes.commands.deny"
         )
 
+    def test_feishu_streaming_is_object_not_bool(self, label):
+        """2.0 起 `channels.feishu.streaming` 是**对象** `{mode: partial|off}`，不是布尔。
+
+        实测：模板原样送 2026.9.1 的 `config validate` 会报
+        `× channels.feishu.streaming: invalid config: must be object`。
+        （渲染脚本会覆盖这个键，所以生产侧不可达 —— 但模板自身应当与目标 schema 对齐，
+        否则它是一份"看着能抄、抄了就 invalid"的样例。）
+        """
+        feishu = (_load(TEMPLATES[label]).get("channels") or {}).get("feishu") or {}
+        if "streaming" in feishu:
+            assert isinstance(feishu["streaming"], dict), (
+                f"{label}: channels.feishu.streaming 必须是对象（如 {{\"mode\": \"partial\"}}），"
+                "布尔是 2.0 已淘汰的写法"
+            )
+
     def test_agents_uses_keyed_entries_not_list(self, label):
         """2.0 把 `agents.list`（数组 + `default: true`）改为按 id 键控的 `agents.entries`。
 

@@ -58,6 +58,7 @@ stacks = {
     "tianyi": pathlib.Path.home() / ".openclaw-tianyi",
 }
 mismatched = 0
+scanned = 0
 for label, base in stacks.items():
     projects = base / "npm" / "projects"
     if not projects.is_dir():
@@ -69,16 +70,21 @@ for label, base in stacks.items():
         except Exception:
             continue
         name, ver = meta.get("name", "?"), meta.get("version", "?")
-        # 只比版本号主干（tag 可能带后缀），并跳过明确不随核心发的包
+        scanned += 1
         if ver != core:
             print(f"MISMATCH {label} {name} {ver}")
             mismatched += 1
+print(f"SCANNED {scanned}")
 print(f"MISMATCHED {mismatched}")
 PY
 )"
 
-echo "${report}" | grep -v '^MISMATCHED' | sed 's/^/  /'
+echo "${report}" | grep -vE '^MISMATCHED|^SCANNED' | sed 's/^/  /'
+scanned="$(grep '^SCANNED ' <<< "${report}" | cut -d' ' -f2)"
 mismatched="$(grep '^MISMATCHED ' <<< "${report}" | cut -d' ' -f2)"
+
+check "扫到了官方插件（${scanned} 个；为 0 说明落盘布局变了、本守卫已失去覆盖面）" \
+    "[[ '${scanned:-0}' -gt 0 ]]"
 
 check "所有官方插件都与核心 ${CORE} 同版本（不一致 ${mismatched} 个）" \
     "[[ '${mismatched}' == '0' ]]"
@@ -88,7 +94,9 @@ echo "结果: ${PASS} 通过, ${FAIL} 失败"
 if [[ ${FAIL} -ne 0 ]]; then
     echo "  修法（每个不一致的包，在对应栈的容器内）："
     echo "    docker compose exec <容器> node /app/openclaw.mjs plugins install <包名>@${CORE} --force --accept-capabilities"
-    echo "  注意：若配置当前被**旧插件**判为 invalid，install 会被拒绝 ——"
-    echo "        先临时移走该插件的配置段（如 channels.feishu），装完恢复。"
+    echo "  注意：① 若配置当前被**旧插件**判为 invalid，install 会被拒绝 ——"
+    echo "          先临时移走该插件的配置段（如 channels.feishu），装完恢复；"
+    echo "        ② 刚在运行中的容器里装完、**还没重启**时，旧 generation 目录仍在盘上，"
+    echo "          本守卫会报它的旧版本号（假红）—— 重启网关后再跑（启动时会清理残留）。"
     exit 1
 fi

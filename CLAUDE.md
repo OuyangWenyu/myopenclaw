@@ -233,7 +233,7 @@ docker compose up -d openclaw-gateway
     绕法是在**同一个容器里**先临时移走冲突的配置段（如 `delete c.channels.feishu`），装完让 entrypoint 重渲染恢复
 - **崩溃-重启会触发 crash-loop breaker**，之后通道**不再自动启动**（日志：`channel autostart suppressed by crash-loop breaker`）。补救：`gateway call channels.start --params '{"channel":"feishu"}'`，或等窗口（300s）过期后重启
 - **bot 的渲染产物必须带 `meta`，但不要声明版本**：2026.9.1 会把「没有 `meta` 的配置写入」判为可疑（`missing-meta-vs-last-good`）并回滚到上一份好配置 ⇒ **每次启动的渲染都被静默丢弃**，改模板、轮换 `.env.*-bot` 里的凭据都不会生效（实测：数据目录出现 `openclaw.json.clobbered.<ts>`）。用 `meta: {}` 即可 —— 判据只要求 `meta` 是对象。**但不要填 `lastTouchedVersion`**：那是「未来版本保护」的判据，比当前二进制新会让网关**拒绝启动**（服务模式 exit 78），于是「升级出问题 → 回滚镜像 tag」这最后一条退路会失效。
-- **渲染脚本会写模板之外的字段，只有目标版本的校验器说了算**：`render-config.mjs` 写 `channels.feishu.streaming`（模板里没有），静态守卫看不到 ⇒ 2026.9.1 把它从布尔改成对象后，**每次渲染都是 schema-invalid**。防这类「版本-形状漂移」的**唯一**可靠断言是真跑一次目标版本的 `config validate`：守卫 `tests/test-bot-rendered-config.sh`（渲染两种取值再送校验）。
+- **渲染脚本决定形状的字段，只有目标版本的校验器说了算**：`render-config.mjs` 写 `channels.feishu.streaming`，2026.9.1 把它从布尔改成对象后，**每次渲染都是 schema-invalid**（模板里当时也有一份布尔 `"streaming": true`，已一并修正 —— 静态守卫本该抓到，只是当时没有针对该键的断言）。可靠断言是真跑一次目标版本的 `config validate`：守卫 `tests/test-bot-rendered-config.sh`（渲染两种取值再送校验，按**退出码 + 文本**双条件判定）。
 - 2.0 的 schema 重命名（守卫 `tests/test_openclaw_schema.py`）：`messages.tts`→**顶层 `tts`**、`gateway.nodes.denyCommands`→`gateway.nodes.commands.deny`、`tools.exec{security,ask}`→`{mode}`（`ask` ≡ `allowlist`/`on-miss`，见镜像内 `docs/tools/permission-modes.md`）、`agents.list`→按 id 键控的 `agents.entries`、`channels.feishu.streaming` 布尔→`{mode: partial|off}`
 
 **zhixun bot 配置独立**：zhixun 飞书机器人使用独立的 `openclaw.json`（位于 `~/.openclaw-zhixun/`），不与虾酱主配置共享。配置由 `render-config.mjs` 从 `openclaw.json.template` 渲染生成，凭据从 `.env.zhixun-bot` 注入。修改 zhixun bot 配置需在容器内操作：
