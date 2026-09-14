@@ -7,11 +7,11 @@
 | 服务 | 域名 | 影响范围 |
 |------|------|----------|
 | DeepSeek API | api.deepseek.com | Hermes / OpenClaw 默认模型 |
-| 智谱 GLM API | open.bigmodel.cn | Claude Code 后端 |
+| 智谱 GLM API | open.bigmodel.cn | 爱码士备用模型（zai / glm-5.1） |
 | 钉钉 Stream | api.dingtalk.com, wss-open-connection.dingtalk.com | Hermes / OpenClaw 钉钉机器人 |
 | 飞书 WebSocket | open.feishu.cn, msg-frontier.feishu.cn | Hermes 飞书机器人 |
 | Moonshot API | api.moonshot.cn | OpenClaw 备用模型 |
-| 小米 MiMo API | api.xiaomimimo.com | 爱玛士/爱码士/虾酱 主模型 + 虾酱 TTS |
+| 小米 MiMo API | api.xiaomimimo.com | 虾酱 TTS 语音回复（各 agent 主模型已切 `deepseek-flash`） |
 | QQ 邮箱 | imap.qq.com, smtp.qq.com | himalaya 邮件客户端 |
 | WorkBuddy | workbuddy.cn | 外部服务依赖 |
 | GitCode | gitcode.com | 代码托管 |

@@ -57,7 +57,11 @@ const enableWriteTools =
 const feishuStreaming =
   (process.env.ZHIXUN_BOT_FEISHU_STREAMING ?? "false").toLowerCase() === "true";
 
-config.channels.feishu.streaming = feishuStreaming;
+// 2.0 起 `streaming` 是**对象**而非布尔。布尔是已被淘汰的旧写法（镜像内
+// docs/channels/feishu.md：Legacy boolean `streaming` … migrate to this nested
+// shape via `openclaw doctor --fix`），写布尔会让**每次启动渲染出的配置都
+// schema-invalid**。取值：partial=开启流式卡片（默认），off=只发完成后的整条回复。
+config.channels.feishu.streaming = { mode: feishuStreaming ? "partial" : "off" };
 
 if (enableWriteTools) {
   delete config.mcp.servers.water_unified.toolFilter;

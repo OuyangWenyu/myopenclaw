@@ -1,4 +1,5 @@
 {
+  "meta": {},
   "models": {
     "mode": "merge",
     "providers": {
@@ -31,10 +32,8 @@
         "primary": "deepseek/__MODEL_ID__"
       }
     },
-    "list": [
-      {
-        "id": "zhixun-water",
-        "default": true,
+    "entries": {
+      "zhixun-water": {
         "workspace": "/home/node/.openclaw/workspace",
         "sandbox": {
           "mode": "off"
@@ -43,7 +42,7 @@
           "allow": ["bundle-mcp"]
         }
       }
-    ]
+    }
   },
   "tools": {
     "profile": "messaging",
@@ -91,7 +90,9 @@
       "groupPolicy": "open",
       "requireMention": true,
       "groupSessionScope": "group",
-      "streaming": true,
+      "streaming": {
+        "mode": "partial"
+      },
       "typingIndicator": true,
       "resolveSenderNames": false,
       "configWrites": false,
@@ -131,8 +132,7 @@
       "mode": "token"
     },
     "tailscale": {
-      "mode": "off",
-      "resetOnExit": false
+      "mode": "off"
     }
   },
   "plugins": {

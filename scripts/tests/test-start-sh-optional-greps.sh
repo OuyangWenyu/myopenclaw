@@ -25,6 +25,16 @@ else
 fi
 
 # ── 测试 2：行为级 — 逐行放入「缺键 .env」沙箱执行，脚本不得中断 ──────────────
+# 覆盖两类从 .env 读键的写法：
+#   A. grep|cut 式（需要 || true）
+#   B. sed -n 's/^KEY=…' 式（无匹配时退出码仍是 0，天然安全，但仍须验证）
+# B 类是后加的（OpenClaw 镜像 pin 的日志行）—— 它不走 A 的模式，若不显式纳入
+# 就永远不被沙箱覆盖；而它同样是「缺键时可能中断脚本」的风险面。
+select_env_reads() {
+  grep -n "cut -d'=' -f2-" "${START_SH}" || true
+  grep -n "sed -n 's/\^[A-Z_]" "${START_SH}" || true
+}
+
 echo "🧪 测试 2（行为级）：空 .env 沙箱下逐行执行（应优雅降级为空值，而非中断）"
 sandbox="$(mktemp -d)"
 : > "${sandbox}/.env"
@@ -47,7 +57,7 @@ while IFS= read -r line; do
     FAILED=1
   fi
   rm -f "${tmp_script}"
-done < <(grep -n "cut -d'=' -f2-" "${START_SH}")
+done < <(select_env_reads)
 echo "   共沙箱执行 ${checked} 行"
 
 if [[ "${checked}" -eq 0 ]]; then

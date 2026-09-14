@@ -22,13 +22,13 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "deepseek-v4-flash",
-            "name": "DeepSeek V4 Flash",
+            "id": "deepseek-flash",
+            "name": "DeepSeek V4.1 Flash",
             "reasoning": false,
-            "input": ["text"],
+            "input": ["text", "image"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
-            "contextWindow": 128000,
-            "maxTokens": 8192
+            "contextWindow": 1000000,
+            "maxTokens": 384000
           },
           {
             "id": "deepseek-chat",
@@ -61,13 +61,13 @@
   "agents": {
     "defaults": {
       "model": {
-        "primary": "xiaomi/mimo-v2.5",
+        "primary": "deepseek/deepseek-flash",
         "fallbacks": ["moonshot/kimi-k2.5"]
       },
       "thinkingDefault": "off",
       "reasoningDefault": "off",
       "models": {
-        "deepseek/deepseek-v4-flash": { "alias": "DeepSeek" },
+        "deepseek/deepseek-flash": { "alias": "DeepSeek" },
         "moonshot/kimi-k2.5": { "alias": "Kimi" },
         "deepseek/deepseek-chat": {},
         "xiaomi/mimo-v2.5": { "alias": "MiMo" }
@@ -75,16 +75,14 @@
       "workspace": "/home/node/.openclaw/workspace"
     }
   },
-  "messages": {
-    "tts": {
-      "provider": "xiaomi",
-      "providers": {
-        "xiaomi": {
-          "apiKey": "${XIAOMI_API_KEY}",
-          "model": "mimo-v2.5-tts",
-          "speakerVoice": "mimo_default",
-          "format": "mp3"
-        }
+  "tts": {
+    "provider": "xiaomi",
+    "providers": {
+      "xiaomi": {
+        "apiKey": "${XIAOMI_API_KEY}",
+        "model": "mimo-v2.5-tts",
+        "speakerVoice": "mimo_default",
+        "format": "mp3"
       }
     }
   },
@@ -98,8 +96,7 @@
   "commands": {
     "native": "auto",
     "nativeSkills": "auto",
-    "restart": true,
-    "ownerDisplay": "raw"
+    "restart": true
   },
   "session": {
     "dmScope": "per-channel-peer"
@@ -115,19 +112,20 @@
       "mode": "token"
     },
     "tailscale": {
-      "mode": "off",
-      "resetOnExit": false
+      "mode": "off"
     },
     "nodes": {
-      "denyCommands": [
-        "camera.snap",
-        "camera.clip",
-        "screen.record",
-        "contacts.add",
-        "calendar.add",
-        "reminders.add",
-        "sms.send"
-      ]
+      "commands": {
+        "deny": [
+          "camera.snap",
+          "camera.clip",
+          "screen.record",
+          "contacts.add",
+          "calendar.add",
+          "reminders.add",
+          "sms.send"
+        ]
+      }
     }
   },
   "channels": {

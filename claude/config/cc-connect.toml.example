@@ -18,12 +18,14 @@ work_dir = "/home/node/code"
 mode = "auto"
 
 [projects.agent.options.env]
-ANTHROPIC_BASE_URL = "https://open.bigmodel.cn/api/anthropic"
+ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic"
+ANTHROPIC_MODEL = "deepseek-flash[1M]"
 API_TIMEOUT_MS = "3000000"
 CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = "1"
-ANTHROPIC_DEFAULT_HAIKU_MODEL = "glm-4.7"
-ANTHROPIC_DEFAULT_SONNET_MODEL = "glm-5.1"
-ANTHROPIC_DEFAULT_OPUS_MODEL = "glm-5.1"
+ANTHROPIC_DEFAULT_HAIKU_MODEL = "deepseek-flash"
+ANTHROPIC_DEFAULT_SONNET_MODEL = "deepseek-flash[1M]"
+ANTHROPIC_DEFAULT_OPUS_MODEL = "deepseek-flash[1M]"
+ANTHROPIC_DEFAULT_FABLE_MODEL = "deepseek-flash[1M]"
 
 # ── 飞书平台 ──────────────────────────────────────────────────
 [[projects.platforms]]
