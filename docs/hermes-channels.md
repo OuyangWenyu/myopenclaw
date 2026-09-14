@@ -71,6 +71,10 @@ Discord 网关 (`gateway.discord.gg`) 在国内可能间歇性 DNS 解析失败�
 
 首次启动时 `start.sh` 自动创建 `~/.hermes/profiles/coder/config.yaml`，默认模型 `deepseek-flash`（DeepSeek API，`DEEPSEEK_API_KEY`），备用模型 `glm-5.1`（z.ai）。
 
+**既有 profile 的模型迁移**：`start.sh` 每次启动都会调用 `scripts/ensure_hermes_model.py`，幂等地把历史遗留的模型名迁移到 canonical 的 `deepseek-flash` —— 只改已知历史取值（`mimo-v2.5` / `mimo-v2.5-pro`、以及非 canonical 的 `deepseek-v4-*`），**不覆盖**操作者手选的其他模型（与 `ensure_hermes_web_search.py` 同一原则）。脚本用文本手术改写，不依赖宿主机 PyYAML、不破坏注释与 key 顺序。
+
+> ⚠️ **底座版本敏感性**：旧底座的 `hermes_cli/model_normalize.py` 会把没有版本段的 `deepseek-flash` 改写掉（详见 `CLAUDE.md` 的 Key Design Decisions）。改完配置后跑 `bash tests/test-hermes-normalize.sh` 验证，回退到旧底座它会立刻变红。
+
 ## 网络搜索（web_search）
 
 四个 Hermes profile 共用同一镜像。`web_search` 默认走 **ddgs**（DuckDuckGo 抓取，免 API key）：

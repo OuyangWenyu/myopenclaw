@@ -38,7 +38,7 @@ git switch feat/zhixun-feishu-bot
 要求：
 
 - Docker Engine（启用 BuildKit）和 Docker Compose plugin 2.17+
-- OpenClaw 镜像版本不低于 `2026.5.29`
+- OpenClaw 镜像版本**必须与主栈同版本**（当前 `2026.9.1`）—— 2.0 的配置 schema 有 breaking change，混版本会让同一份模板在不同栈上有不同解释。三栈一致性由 `tests/test-openclaw-pins.sh` 守卫
 - 服务器能够访问飞书、模型 API、Waterism API 和容器镜像/插件仓库
 - 一个独立的飞书自建应用
 

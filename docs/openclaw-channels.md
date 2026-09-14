@@ -1,6 +1,6 @@
 # OpenClaw 渠道配置（Discord / 飞书 / 钉钉）
 
-OpenClaw 的渠道需要在 `~/.openclaw/openclaw.json` 中手动配置。`openclaw.json.example` 不含渠道配置，因为每个用户的 bot 凭证不同。
+OpenClaw 的渠道配置在 `~/.openclaw/openclaw.json` 的 `channels` 段。`openclaw.json.example` 里的渠道段默认 `enabled: false`、凭证为 `__OPENCLAW_*__` 占位符 —— 由 `start.sh` 首次启动时从 `.env` 注入实际值并启用。
 
 实际支持的渠道取决于已安装的扩展（extensions）。当前已安装 `dingtalk-connector` 插件支持钉钉，Discord / 飞书通过内置渠道配置。
 
@@ -50,7 +50,9 @@ OpenClaw 的渠道需要在 `~/.openclaw/openclaw.json` 中手动配置。`openc
 
 ## 钉钉
 
-通过 `dingtalk-connector` 扩展接入，配置在 `~/.openclaw/openclaw.json` 的 `extensions` 下。
+通过 `dingtalk-connector` 插件接入。配置在 `~/.openclaw/openclaw.json` 的 `channels.dingtalk-connector`，凭据放在其 `accounts.__default__`（`clientId` / `clientSecret`，由 `start.sh` 从 `.env` 注入）。
+
+> 注意区分：`extensions/` 是**数据目录下的插件安装目录**（见 `docs/backup.md`），不是配置键 —— 配置里没有 `extensions` 这一段。
 
 配置完成后重启 OpenClaw：
 
