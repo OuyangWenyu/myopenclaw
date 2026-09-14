@@ -62,8 +62,6 @@ services:
       - ./openclaw-zhixun/workspace:/opt/zhixun-workspace:ro
     environment:
       HOME: /home/node
-      # 渲染脚本用它填 meta.lastTouchedVersion（见 render-config.mjs 的 __OPENCLAW_VERSION__）
-      ZHIXUN_BOT_OPENCLAW_IMAGE: ${ZHIXUN_BOT_OPENCLAW_IMAGE:-docker.m.daocloud.io/openclaw/openclaw:2026.9.1}
       TZ: ${TZ:-Asia/Shanghai}
       # OpenClaw custom providers may resolve the legacy built-in key name;
       # keep both aliases while the displayed provider remains zhipu.

@@ -27,9 +27,6 @@ const replacements = new Map([
   ["__MODEL_ID__", process.env.TIANYI_BOT_MODEL_ID],
   ["__MODEL_BASE_URL__", process.env.TIANYI_BOT_MODEL_BASE_URL],
   ["__YUQUE_MCP_URL__", process.env.TIANYI_BOT_YUQUE_MCP_URL ?? ""],
-  // 渲染产物必须带 meta：2026.9.1 会用 `missing-meta-vs-last-good` 把「没有 meta 的
-  // 配置写入」判为异常并回滚到上一份好配置 —— 不带 meta 的话每次启动的渲染都会被丢弃。
-  ["__OPENCLAW_VERSION__", (process.env.TIANYI_BOT_OPENCLAW_IMAGE || "").split(":").pop() || "unknown"],
 ]);
 
 function replace(value) {
@@ -60,7 +57,11 @@ const config = replace(template);
 // Apply streaming toggle
 const feishuStreaming =
   (process.env.TIANYI_BOT_FEISHU_STREAMING ?? "false").toLowerCase() === "true";
-config.channels.feishu.streaming = feishuStreaming;
+// 2.0 起 `streaming` 是**对象**而非布尔。布尔是已被淘汰的旧写法（镜像内
+// docs/channels/feishu.md：Legacy boolean `streaming` … migrate to this nested
+// shape via `openclaw doctor --fix`），写布尔会让**每次启动渲染出的配置都
+// schema-invalid**。取值：partial=开启流式卡片（默认），off=只发完成后的整条回复。
+config.channels.feishu.streaming = { mode: feishuStreaming ? "partial" : "off" };
 
 // Drop yuque-mcp entry when no URL is configured (optional capability)
 const yuqueUrl = process.env.TIANYI_BOT_YUQUE_MCP_URL?.trim();

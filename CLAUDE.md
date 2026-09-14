@@ -224,9 +224,17 @@ docker compose up -d openclaw-gateway
 
 - ⚠️ 演练**必须复制整个数据目录**（含 `extensions/`、`npm/`）。只挂一个配置文件的隔离演练里，doctor 找不到磁盘上的插件，会把插件提供的通道（钉钉，连同 `clientId`/`clientSecret`）当孤儿配置清掉 —— 那是**演练假象**，用完整目录重跑就完好
 - **doctor 要跑两遍**：第一遍报 `Legacy session store requires migration` 并说 "could not complete maintenance"，第二遍才 `Doctor complete.`（会话 `sessions.json` → `agents/<n>/agent/*.sqlite`，**降级不自动转换**，升级前务必整目录备份）
-- **插件与核心版本配套**：官方插件（`@openclaw/discord` 等）与核心**同版本号**发布，要装 `@openclaw/<name>@<核心版本>`；第三方插件也要升到声明 `openclaw >= 2.0` 的版本（本次 `@dingtalk-real-ai/dingtalk-connector` 0.8.20 → 0.8.26），否则 `plugin-sdk` 导入失败、通道崩溃重启。装的时候 `--force --accept-capabilities`（2.0 新增插件能力同意）
+- **插件必须与核心同版本**（本次踩得最惨的一条，同类炸了两次）：官方插件（`@openclaw/*`）与核心**同版本号配套发布**，升核心时必须一并升插件：
+  - `@openclaw/discord` 2026.7.1 → 插件加载失败（`plugin-sdk/security-runtime` 无 `privateFileStore` 导出），**虾酱的 Discord 通道直接不可用**
+  - `@openclaw/feishu` 2026.7.1 → 插件要求 `channels.feishu.streaming` 是**布尔**、核心要求**对象**，**两个校验器要求相反**：写对象则通道崩溃重启，写布尔则 `config validate` 报 invalid
+  - 第三方插件同理（`@dingtalk-real-ai/dingtalk-connector` 0.8.20 → 0.8.26，后者声明 `openclaw >= 2026.8.1`）
+  - 守卫：`tests/test-openclaw-plugin-versions.sh`（三栈官方插件 vs 核心版本）
+  - ⚠️ **鸡生蛋陷阱**：若旧插件的 schema 校验与核心冲突，`plugins install` 会因「配置无效」被拒 ——
+    绕法是在**同一个容器里**先临时移走冲突的配置段（如 `delete c.channels.feishu`），装完让 entrypoint 重渲染恢复
 - **崩溃-重启会触发 crash-loop breaker**，之后通道**不再自动启动**（日志：`channel autostart suppressed by crash-loop breaker`）。补救：`gateway call channels.start --params '{"channel":"feishu"}'`，或等窗口（300s）过期后重启
-- 2.0 的 schema 重命名（守卫 `tests/test_openclaw_schema.py`）：`messages.tts`→**顶层 `tts`**、`gateway.nodes.denyCommands`→`gateway.nodes.commands.deny`、`tools.exec{security,ask}`→`{mode}`（`ask` ≡ `allowlist`/`on-miss`，见镜像内 `docs/tools/permission-modes.md`）
+- **bot 的渲染产物必须带 `meta`，但不要声明版本**：2026.9.1 会把「没有 `meta` 的配置写入」判为可疑（`missing-meta-vs-last-good`）并回滚到上一份好配置 ⇒ **每次启动的渲染都被静默丢弃**，改模板、轮换 `.env.*-bot` 里的凭据都不会生效（实测：数据目录出现 `openclaw.json.clobbered.<ts>`）。用 `meta: {}` 即可 —— 判据只要求 `meta` 是对象。**但不要填 `lastTouchedVersion`**：那是「未来版本保护」的判据，比当前二进制新会让网关**拒绝启动**（服务模式 exit 78），于是「升级出问题 → 回滚镜像 tag」这最后一条退路会失效。
+- **渲染脚本会写模板之外的字段，只有目标版本的校验器说了算**：`render-config.mjs` 写 `channels.feishu.streaming`（模板里没有），静态守卫看不到 ⇒ 2026.9.1 把它从布尔改成对象后，**每次渲染都是 schema-invalid**。防这类「版本-形状漂移」的**唯一**可靠断言是真跑一次目标版本的 `config validate`：守卫 `tests/test-bot-rendered-config.sh`（渲染两种取值再送校验）。
+- 2.0 的 schema 重命名（守卫 `tests/test_openclaw_schema.py`）：`messages.tts`→**顶层 `tts`**、`gateway.nodes.denyCommands`→`gateway.nodes.commands.deny`、`tools.exec{security,ask}`→`{mode}`（`ask` ≡ `allowlist`/`on-miss`，见镜像内 `docs/tools/permission-modes.md`）、`agents.list`→按 id 键控的 `agents.entries`、`channels.feishu.streaming` 布尔→`{mode: partial|off}`
 
 **zhixun bot 配置独立**：zhixun 飞书机器人使用独立的 `openclaw.json`（位于 `~/.openclaw-zhixun/`），不与虾酱主配置共享。配置由 `render-config.mjs` 从 `openclaw.json.template` 渲染生成，凭据从 `.env.zhixun-bot` 注入。修改 zhixun bot 配置需在容器内操作：
 ```bash

@@ -145,20 +145,25 @@ class TestBotTemplatesCarryMeta:
     """
 
     @pytest.mark.parametrize("label", sorted(BOT_TEMPLATES))
-    def test_bot_template_has_meta(self, label):
+    def test_bot_template_has_meta_object(self, label):
         cfg = _load(BOT_TEMPLATES[label])
         assert isinstance(cfg.get("meta"), dict), (
             f"{label}: 缺少 meta 段 —— 渲染产物会被 last-known-good 静默覆盖"
         )
-        assert cfg["meta"].get("lastTouchedVersion"), (
-            f"{label}: meta.lastTouchedVersion 为空（应填入渲染它的 OpenClaw 版本）"
-        )
 
     @pytest.mark.parametrize("label", sorted(BOT_TEMPLATES))
-    def test_render_script_fills_version_placeholder(self, label):
-        """占位符必须在 render-config.mjs 的替换表里有对应项，否则渲染出字面量。"""
-        script = REPO_ROOT / "docker" / ("zhixun-bot" if "zhixun" in label else "tianyi-bot") / "render-config.mjs"
-        text = script.read_text()
-        assert "__OPENCLAW_VERSION__" in text, (
-            f"{script.name}: 替换表缺少 __OPENCLAW_VERSION__"
+    def test_bot_template_does_not_claim_a_version(self, label):
+        """模板**不得**写 `meta.lastTouchedVersion`。
+
+        OpenClaw 用它做「未来版本保护」：若该值比当前二进制新，网关会**拒绝启动**
+        （实测服务模式 exit 78）。而模板是每次渲染都重写的 —— 一旦把它钉成镜像 tag，
+        「升级 → 出问题 → 回滚 tag」就会让 bot 起不来，且仓库里没有任何逃生口。
+
+        `hasConfigMeta` 只要求 `meta` 是对象（镜像内 `io.read-helpers-*.js`），
+        所以 `meta: {}` 既满足回滚判据，又不做不实的版本声明 —— OpenClaw 自己写配置时
+        会把它替换成真实版本。
+        """
+        meta = _load(BOT_TEMPLATES[label]).get("meta") or {}
+        assert "lastTouchedVersion" not in meta, (
+            f"{label}: 模板不应声明 meta.lastTouchedVersion（会变成降级闸门）"
         )

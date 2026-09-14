@@ -1,7 +1,5 @@
 {
-  "meta": {
-    "lastTouchedVersion": "__OPENCLAW_VERSION__"
-  },
+  "meta": {},
   "models": {
     "mode": "merge",
     "providers": {

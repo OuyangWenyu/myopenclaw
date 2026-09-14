@@ -480,7 +480,9 @@ assert feishu["groupPolicy"] == "open"
 assert feishu["allowFrom"] == ["*"]
 assert "groups" not in feishu
 assert feishu["requireMention"] is True
-assert feishu["streaming"] is False
+# 2.0 起 streaming 是对象（{mode: partial|off}）；布尔是已被淘汰的旧写法，
+# 写布尔会让渲染产物 schema-invalid —— 见 tests/test-bot-rendered-config.sh
+assert feishu["streaming"] == {"mode": "off"}
 assert all(enabled is False for enabled in feishu["tools"].values())
 
 binding = read_only["bindings"][0]
