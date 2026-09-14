@@ -397,8 +397,8 @@ for _ext_dir in "${HOME}/.openclaw/extensions"/*/; do
   fi
 done
 
-# ── 拉取最新 OpenClaw 镜像 ──────────────────────────────────
-echo "🦞 拉取最新 OpenClaw 镜像..."
+# ── 拉取 OpenClaw 镜像（.env 里钉住的 tag，不是 latest）────────
+echo "🦞 拉取 OpenClaw 镜像（pin: $(grep -m1 '^OPENCLAW_IMAGE=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d: -f3 || echo '未设置')）..."
 set +e
 PULL_OUTPUT=$(docker compose pull openclaw-gateway 2>&1)
 PULL_EXIT=$?

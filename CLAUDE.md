@@ -203,12 +203,21 @@ bash scripts/rehearse-openclaw-migration.sh
 #    .env / .env.zhixun-bot / .env.tianyi-bot + 两个 bot compose 的兜底默认值
 bash tests/test-openclaw-pins.sh          # 改的过程中它会红，全改完才绿
 
-# 3. 主网关：停 → doctor --fix（**可能需两遍**）→ validate → 起
+# 3. 主网关：停 → doctor --fix **连跑两遍** → validate → 起
+#    第一遍常报 "Legacy session store requires migration" 且 "could not complete
+#    maintenance"，第二遍才 "Doctor complete." —— 只跑一遍会留下未完成的迁移。
 docker compose stop openclaw-gateway
 docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs doctor --fix
+docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs doctor --fix
+docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs config validate
 docker compose up -d openclaw-gateway
 
-# 4. 两个 bot 栈同理（先 stop 再 doctor 再 up），最后各自确认飞书已连
+# 4. 两个 bot 栈同理（先 stop 再 doctor 再 up），最后各自确认飞书已连。
+#    ⚠️ tianyi 的 compose 带 `user: root`（zhixun 没有）—— 裸 `compose run` 会以 root
+#    写数据目录，与「tianyi exec 必须 --user node」的既有经验冲突。跑 doctor 时显式加
+#    `--user node`：
+#      docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml \
+#        run --rm --user node --entrypoint "node" openclaw-tianyi /app/openclaw.mjs doctor --fix
 ```
 
 **2.0 迁移实战踩过的坑（都已固化进脚本/守卫）**：

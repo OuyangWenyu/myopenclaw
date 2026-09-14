@@ -14,7 +14,7 @@ myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | hermes-finance | 同 hermes 镜像 | 8644 | 财经助手，finance profile |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板（只读） |
 | claude-code | 自建（基于 `ubuntu:24.04`） | 9090 | Claude Code + cc-connect 飞书直连（各 tier 均 `deepseek-flash`，1M 上下文） |
-| openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway，虾酱 Discord bot（`deepseek-flash` + TTS 语音回复走 xiaomi） |
+| openclaw-gateway | `ghcr.io/openclaw/openclaw:2026.9.1`（由 `.env` 的 `OPENCLAW_IMAGE` 钉住） | 18789 | OpenClaw gateway，虾酱 Discord bot（`deepseek-flash` + TTS 语音回复走 xiaomi） |
 
 ### 数据与支撑服务
 

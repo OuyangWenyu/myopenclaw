@@ -74,6 +74,44 @@ rsync -a --exclude 'workspace' --exclude 'media' --exclude 'logs' "${SRC_DIR}/" 
 cp "${WORK}/openclaw.json" "${WORK}/openclaw.before.json"
 chmod -R 777 "${WORK}" 2>/dev/null || true
 
+# 迁移前的基线：凭据指纹（只存哈希，不落明文）+ cron 任务数 + 插件集合。
+# 凭据若只断言"非空字符串"，doctor 把它换成任意 >8 字符串也会绿 —— 必须比哈希。
+python3 - "${WORK}/openclaw.before.json" "${WORK}/state/openclaw.sqlite" > "${WORK}/baseline.txt" <<'PY'
+import hashlib, json, sqlite3, sys, os
+
+cfg = json.load(open(sys.argv[1]))
+SECRET_HINT = ("secret", "token", "password", "apikey", "api_key", "clientid", "client_id", "appid", "app_id")
+
+def walk(node, path=""):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from walk(v, f"{path}.{k}" if path else k)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from walk(v, f"{path}[{i}]")
+    else:
+        yield path, node
+
+fingerprints = {}
+for path, val in walk(cfg):
+    leaf = path.rsplit(".", 1)[-1].lower()
+    if isinstance(val, str) and len(val) > 8 and any(h in leaf for h in SECRET_HINT):
+        fingerprints[path] = hashlib.sha256(val.encode()).hexdigest()[:16]
+print("CRED_COUNT " + str(len(fingerprints)))
+for path in sorted(fingerprints):
+    print(f"CRED {path} {fingerprints[path]}")
+
+count = "n/a"
+if os.path.exists(sys.argv[2]):
+    try:
+        c = sqlite3.connect(f"file:{sys.argv[2]}?mode=ro", uri=True)
+        count = c.execute("SELECT COUNT(*) FROM cron_jobs").fetchone()[0]
+        c.close()
+    except Exception:
+        pass
+print("CRON_COUNT " + str(count))
+PY
+
 run_oc() {
     docker run --rm -v "${WORK}:/home/node/.openclaw" \
         --entrypoint node "${IMAGE}" /app/openclaw.mjs "$@" 2>&1
@@ -146,6 +184,38 @@ def flat(d, p=""):
 fb, fa = dict(flat(before)), dict(flat(after))
 print("GONE " + ",".join(sorted(set(fb) - set(fa))[:14]))
 print("NEW " + ",".join(sorted(set(fa) - set(fb))[:8]))
+
+# 迁移后的凭据指纹与 cron 数（与 baseline.txt 比对；只输出哈希，不落明文）
+import hashlib, sqlite3
+SECRET_HINT = ("secret", "token", "password", "apikey", "api_key", "clientid", "client_id", "appid", "app_id")
+
+def walk(node, path=""):
+    if isinstance(node, dict):
+        for k, v in node.items():
+            yield from walk(v, f"{path}.{k}" if path else k)
+    elif isinstance(node, list):
+        for i, v in enumerate(node):
+            yield from walk(v, f"{path}[{i}]")
+    else:
+        yield path, node
+
+after_creds = {}
+for path, val in walk(after):
+    leaf = path.rsplit(".", 1)[-1].lower()
+    if isinstance(val, str) and len(val) > 8 and any(h in leaf for h in SECRET_HINT):
+        after_creds[path] = hashlib.sha256(val.encode()).hexdigest()[:16]
+print("CRED_COUNT " + str(len(after_creds)))
+for path in sorted(after_creds):
+    print(f"CRED {path} {after_creds[path]}")
+
+count = "n/a"
+try:
+    c = sqlite3.connect(f"file:{os.path.join(work, 'state', 'openclaw.sqlite')}?mode=ro", uri=True)
+    count = c.execute("SELECT COUNT(*) FROM cron_jobs").fetchone()[0]
+    c.close()
+except Exception:
+    pass
+print("CRON_COUNT " + str(count))
 PY
 sed 's/^/  | /' "${WORK}/assert.txt"
 echo
@@ -175,8 +245,23 @@ check "主模型仍是 canonical（$(g PRIMARY)）" \
 check "MCP server 集合前后一致（$(g MCP_BEFORE) → $(g MCP_AFTER)）" \
     "[[ \"\$(g MCP_BEFORE)\" == \"\$(g MCP_AFTER)\" ]]"
 
-check "五个已启用插件都在（$(g PLUGINS)）" \
-    "[[ \"\$(g PLUGINS | tr ',' '\n' | grep -cE '^(deepseek|discord|feishu|moonshot|dingtalk-connector)$')\" == '5' ]]"
+PLUGINS_AFTER="$(g PLUGINS)"
+PLUGINS_MISSING=""
+for _p in deepseek discord feishu moonshot dingtalk-connector; do
+    [[ ",${PLUGINS_AFTER}," == *",${_p},"* ]] || PLUGINS_MISSING="${PLUGINS_MISSING} ${_p}"
+done
+check "五个已启用插件都在（${PLUGINS_AFTER}${PLUGINS_MISSING:+ 缺:${PLUGINS_MISSING}}）" \
+    "[[ -z '${PLUGINS_MISSING}' ]]"
+
+# 凭据指纹逐条比对（只比哈希，明文不入输出）。只断言"非空字符串"会让
+# 「doctor 把凭据换成任意 >8 字符串」蒙混过关 —— 实测过。
+CRED_DIFF="$(diff <(grep '^CRED ' "${WORK}/baseline.txt") <(grep '^CRED ' "${WORK}/assert.txt") | head -4)"
+check "所有凭据指纹前后一致（共 $(g CRED_COUNT) 条）" "[[ -z \"\${CRED_DIFF}\" ]]"
+
+CRON_BEFORE="$(grep '^CRON_COUNT ' "${WORK}/baseline.txt" | cut -d' ' -f2-)"
+CRON_AFTER="$(g CRON_COUNT)"
+check "cron 任务数未减少（${CRON_BEFORE} → ${CRON_AFTER}）" \
+    "[[ '${CRON_BEFORE}' == 'n/a' || '${CRON_AFTER}' == 'n/a' || \${CRON_AFTER} -ge \${CRON_BEFORE} ]]"
 
 check "会话已迁移到 SQLite（$(g SESSION_SQLITE) 个）" \
     "[[ \"\$(g SESSION_SQLITE)\" -gt 0 ]]"

@@ -1,4 +1,7 @@
 {
+  "meta": {
+    "lastTouchedVersion": "__OPENCLAW_VERSION__"
+  },
   "models": {
     "mode": "merge",
     "providers": {
@@ -31,10 +34,8 @@
         "primary": "deepseek/__MODEL_ID__"
       }
     },
-    "list": [
-      {
-        "id": "zhixun-water",
-        "default": true,
+    "entries": {
+      "zhixun-water": {
         "workspace": "/home/node/.openclaw/workspace",
         "sandbox": {
           "mode": "off"
@@ -43,7 +44,7 @@
           "allow": ["bundle-mcp"]
         }
       }
-    ]
+    }
   },
   "tools": {
     "profile": "messaging",

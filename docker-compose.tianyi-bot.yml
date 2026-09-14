@@ -15,6 +15,8 @@ services:
       - ./openclaw-tianyi/workspace:/opt/tianyi-workspace:ro
     environment:
       HOME: /home/node
+      # 渲染脚本用它填 meta.lastTouchedVersion（见 render-config.mjs 的 __OPENCLAW_VERSION__）
+      TIANYI_BOT_OPENCLAW_IMAGE: ${TIANYI_BOT_OPENCLAW_IMAGE:-docker.m.daocloud.io/openclaw/openclaw:2026.9.1}
       TZ: ${TZ:-Asia/Shanghai}
       TIANYI_BOT_MODEL_API_KEY: ${TIANYI_BOT_MODEL_API_KEY:?Model API key required}
       TIANYI_BOT_FEISHU_APP_ID: ${TIANYI_BOT_FEISHU_APP_ID:?Feishu App ID required}

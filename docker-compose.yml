@@ -365,7 +365,7 @@ services:
 
   # ── OpenClaw gateway ─────────────────────────────────────────
   openclaw-gateway:
-    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:2026.9.1}
     container_name: openclaw-gateway
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c", "/fix-host-paths.sh && exec /usr/local/bin/docker-entrypoint.sh node openclaw.mjs gateway --allow-unconfigured"]
@@ -396,7 +396,7 @@ services:
 
   # ── OpenClaw CLI（按需运行，不常驻）─────────────────────────
   openclaw-cli:
-    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:2026.9.1}
     container_name: openclaw-cli
     profiles:
       - cli

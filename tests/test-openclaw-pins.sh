@@ -53,14 +53,30 @@ TAG_MAIN="$(extract_tag .env)"
 TAG_ZHIXUN="$(extract_tag .env.zhixun-bot)"
 TAG_TIANYI="$(extract_tag .env.tianyi-bot)"
 
-echo "pin 现状:"
-echo "  .env                 → ${TAG_MAIN:-（未设置）}"
-echo "  .env.zhixun-bot      → ${TAG_ZHIXUN:-（未设置）}"
-echo "  .env.tianyi-bot      → ${TAG_TIANYI:-（未设置）}"
+# `.example` 是**新部署的唯一来源**（`cp .env.zhixun-bot.example .env.zhixun-bot`），
+# 而实际的 `.env*` 是 gitignored 的 —— 只查后者会让「example 漏更新」永远绿，
+# 于是新部署装出来就是混版本（正是本守卫存在的理由）。
+TAG_MAIN_EX="$(extract_tag .env.example)"
+TAG_ZHIXUN_EX="$(extract_tag .env.zhixun-bot.example)"
+TAG_TIANYI_EX="$(extract_tag .env.tianyi-bot.example)"
+
+echo "pin 现状（实际部署 / 新部署模板）:"
+echo "  .env                  → ${TAG_MAIN:-（未设置）}   / example → ${TAG_MAIN_EX:-（未设置）}"
+echo "  .env.zhixun-bot       → ${TAG_ZHIXUN:-（未设置）}   / example → ${TAG_ZHIXUN_EX:-（未设置）}"
+echo "  .env.tianyi-bot       → ${TAG_TIANYI:-（未设置）}   / example → ${TAG_TIANYI_EX:-（未设置）}"
 echo
 
 check "三处 env 的 pin 都存在且完全一致" \
     "[[ -n '${TAG_MAIN}' && '${TAG_MAIN}' == '${TAG_ZHIXUN}' && '${TAG_MAIN}' == '${TAG_TIANYI}' ]]"
+
+check "三处 .example 的 pin 都存在且完全一致（新部署的来源）" \
+    "[[ -n '${TAG_MAIN_EX}' && '${TAG_MAIN_EX}' == '${TAG_ZHIXUN_EX}' && '${TAG_MAIN_EX}' == '${TAG_TIANYI_EX}' ]]"
+
+check ".example 与实际 .env 的 pin 逐对一致（模板没落后于部署）" \
+    "[[ '${TAG_MAIN_EX}' == '${TAG_MAIN}' && '${TAG_ZHIXUN_EX}' == '${TAG_ZHIXUN}' && '${TAG_TIANYI_EX}' == '${TAG_TIANYI}' ]]"
+
+check "主 compose 的兜底默认值与 .env 一致（缺失时不得静默回退 latest）" \
+    "[[ \"\$(extract_tag docker-compose.yml)\" == '${TAG_MAIN}' ]]"
 
 check "zhixun compose 的兜底默认值与 .env 一致" \
     "[[ \"\$(extract_tag docker-compose.zhixun-bot.yml)\" == '${TAG_MAIN}' ]]"
@@ -102,4 +118,8 @@ done
 
 echo
 echo "结果: ${PASS} 通过, ${FAIL} 失败, ${SKIP} 跳过"
+if [[ ${SKIP} -gt 0 ]]; then
+    echo "⚠️  有 ${SKIP} 项被跳过（容器未运行）——**部署实况未经验证**，"
+    echo "    上面的绿只代表「仓库里的 pin 自洽」。升级流程中途（stop 与 up 之间）属正常。"
+fi
 [[ ${FAIL} -eq 0 ]] || exit 1

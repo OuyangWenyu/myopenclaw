@@ -469,8 +469,8 @@ with open(sys.argv[1], encoding="utf-8") as stream:
 with open(sys.argv[2], encoding="utf-8") as stream:
     write_enabled = json.load(stream)
 
-agent = read_only["agents"]["list"][0]
-assert agent["id"] == "zhixun-water"
+# 2.0 把 agents.list（数组 + default: true）改为按 id 键控的 agents.entries
+agent = read_only["agents"]["entries"]["zhixun-water"]
 assert agent["tools"]["allow"] == ["bundle-mcp"]
 assert read_only["tools"]["profile"] == "messaging"
 
