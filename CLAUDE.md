@@ -286,6 +286,8 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 - **Hermes web_search**: Hermes image installs the `ddgs` package (DuckDuckGo, no API key). `start.sh` calls `scripts/ensure_hermes_web_search.py`, which idempotently writes `web.search_backend: ddgs` into `~/.hermes/config.yaml` without overwriting an operator-chosen backend (`brave_free`). The helper uses surgical text edits (preserves comments and key order) and does not require host PyYAML. Four profiles share the image and default config. See `docs/hermes-channels.md`.
 
+- **Hermes profile 隔离，以及 `s6-log: unable to lock` 这条噪音（看到不必排查）**: 每个 hermes 容器都会启动**全部** profile 的 s6 gateway 服务树（default / coder / daoyuan / finance），随后由 `entrypoint-wrapper.sh` 的后台逻辑杀掉与本容器 `HERMES_PROFILE` 不匹配的那些，只留自己的（日志里会看到 `🚫 停止多余 gateway: …`）。四个容器共享同一个 `/opt/data` 卷，而各 profile 的日志目录是 `$HERMES_HOME/logs/gateways/<profile>/` —— 被停掉那个 profile 的 `s6-log` 仍会去抢同一把锁，于是在**非属主容器**里打印 `s6-log: fatal: unable to lock …/lock: Resource busy`。**判据（2026-09-14 实测）**：报错所在容器里 `s6-svstat` 显示被锁的那个 `gateway-<profile>` 是 `down (exitcode 0)`（按设计停掉、本就不该有日志），而同容器内自己的 `gateway-<HERMES_PROFILE>` 是 `up`。**不丢日志、无需修复**。
+
 - **Hermes image rebuild**: ✅ Fixed 2026-07-20 — cardamum pin updated to `771879c` (2026-07-18). OSError patch removed (fixed upstream in v0.18.2). Entrypoint now hands off to s6-overlay `/init` instead of deprecated `entrypoint.sh`. Image rebuilds clean with `docker compose build hermes`.
 
 ## Network & DNS
