@@ -73,7 +73,9 @@ render_and_validate() {
     chmod 777 "${d}/data"
 
     if ! env ${envs} node "${renderer}" "${template}" "${d}/openclaw.json" >/dev/null 2>"${d}/render.err"; then
-        echo "FAILED 渲染脚本非零退出：$(tail -3 "${d}/render.err" | tr '\n' ' ')"
+        # head -8 而非 tail：Node 把根因（`Error: ENOENT …`）打在**堆栈之前**，
+        # 取尾部只会得到 "at Object.readFileSync… / Node.js v22.x" 这类无用信息。
+        echo "FAILED 渲染脚本非零退出：$(head -8 "${d}/render.err" | tr '\n' ' ')"
         return 1
     fi
     if [[ ! -s "${d}/openclaw.json" ]]; then
