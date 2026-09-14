@@ -193,12 +193,31 @@ docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs config
 
 **原因**：2026.3.31 因为 host 上运行的 `openclaw doctor --fix` 写出了 Docker 不认识的 streaming 配置格式，导致 gateway.err.log 在 3 个月内增长到 762MB（2380 万行重复错误），无人察觉。
 
-**升级流程**：
+**升级流程**（当前 pin **`2026.9.1`**；三栈版本必须一致，守卫 `tests/test-openclaw-pins.sh` 钉着 5 处 pin + 实际部署版本）：
+
 ```bash
-# 1. 更新 .env 中的 OPENCLAW_IMAGE（默认 latest 自动跟随最新 stable）
-# 2. start.sh 启动前会自动 docker compose pull 拉取最新镜像
-./scripts/start.sh
+# 1. 先在数据目录副本上演练迁移 —— 不过就不升
+bash scripts/rehearse-openclaw-migration.sh
+
+# 2. 一次性更新全部 5 处 pin（漏改不会报错，只会静默跑旧版本）：
+#    .env / .env.zhixun-bot / .env.tianyi-bot + 两个 bot compose 的兜底默认值
+bash tests/test-openclaw-pins.sh          # 改的过程中它会红，全改完才绿
+
+# 3. 主网关：停 → doctor --fix（**可能需两遍**）→ validate → 起
+docker compose stop openclaw-gateway
+docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs doctor --fix
+docker compose up -d openclaw-gateway
+
+# 4. 两个 bot 栈同理（先 stop 再 doctor 再 up），最后各自确认飞书已连
 ```
+
+**2.0 迁移实战踩过的坑（都已固化进脚本/守卫）**：
+
+- ⚠️ 演练**必须复制整个数据目录**（含 `extensions/`、`npm/`）。只挂一个配置文件的隔离演练里，doctor 找不到磁盘上的插件，会把插件提供的通道（钉钉，连同 `clientId`/`clientSecret`）当孤儿配置清掉 —— 那是**演练假象**，用完整目录重跑就完好
+- **doctor 要跑两遍**：第一遍报 `Legacy session store requires migration` 并说 "could not complete maintenance"，第二遍才 `Doctor complete.`（会话 `sessions.json` → `agents/<n>/agent/*.sqlite`，**降级不自动转换**，升级前务必整目录备份）
+- **插件与核心版本配套**：官方插件（`@openclaw/discord` 等）与核心**同版本号**发布，要装 `@openclaw/<name>@<核心版本>`；第三方插件也要升到声明 `openclaw >= 2.0` 的版本（本次 `@dingtalk-real-ai/dingtalk-connector` 0.8.20 → 0.8.26），否则 `plugin-sdk` 导入失败、通道崩溃重启。装的时候 `--force --accept-capabilities`（2.0 新增插件能力同意）
+- **崩溃-重启会触发 crash-loop breaker**，之后通道**不再自动启动**（日志：`channel autostart suppressed by crash-loop breaker`）。补救：`gateway call channels.start --params '{"channel":"feishu"}'`，或等窗口（300s）过期后重启
+- 2.0 的 schema 重命名（守卫 `tests/test_openclaw_schema.py`）：`messages.tts`→**顶层 `tts`**、`gateway.nodes.denyCommands`→`gateway.nodes.commands.deny`、`tools.exec{security,ask}`→`{mode}`（`ask` ≡ `allowlist`/`on-miss`，见镜像内 `docs/tools/permission-modes.md`）
 
 **zhixun bot 配置独立**：zhixun 飞书机器人使用独立的 `openclaw.json`（位于 `~/.openclaw-zhixun/`），不与虾酱主配置共享。配置由 `render-config.mjs` 从 `openclaw.json.template` 渲染生成，凭据从 `.env.zhixun-bot` 注入。修改 zhixun bot 配置需在容器内操作：
 ```bash
@@ -215,7 +234,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-flash` as the default model; all tiers (Haiku/Sonnet/Opus/Fable) map to it via `ANTHROPIC_DEFAULT_*_MODEL` (see entrypoint). Port 9090 (cc-connect web admin).
 
-3. **openclaw-gateway** — Stock `ghcr.io/openclaw/openclaw:latest` image. Port 18789. Has healthcheck via `/healthz`.
+3. **openclaw-gateway** — Stock `ghcr.io/openclaw/openclaw:2026.9.1` image（版本由 `.env` 的 `OPENCLAW_IMAGE` 钉住，勿用 `latest` —— 2.0 的配置 schema 有 breaking change，混版本会让同一份模板在不同栈上有不同解释）。Port 18789. Has healthcheck via `/healthz`. 三栈版本一致性由 `tests/test-openclaw-pins.sh` 守卫。
 
 4. **backup-cron** — Alpine image (`docker/backup-cron/Dockerfile`) with rsync + sqlite3. Runs crond with a single job calling `backup-all-docker.sh`. Also executes an initial backup on container startup.
 
@@ -236,11 +255,11 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 10. **zhixun-water-mcp** — Custom image (`docker/zhixun-bot/Dockerfile.mcp`) using `python:3.12-slim` + MCP + httpx + pypinyin. SSE MCP server on port 18201. Wraps the upstream Water MCP from zhixun-agent with 3 compatibility layers: `zhixun_core_v2_compat.py` (station name index, v2 response parsing), `related_page_compat.py` (auto-attaches frontend page links to query results), `briefing_compat.py` (hydromodel routing). 43 MCP tools total, 15 write tools filtered by default. Build uses BuildKit multi-context to copy `mcp_servers/water/` from `../zhixun-agent`. Resource limits: 1G/1 CPU.
 
-11. **openclaw-zhixun** — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.7.1` image with custom entrypoint. Port 18791 (loopback only, not exposed). Connected to Feishu via independent bot (`ZHIXUN_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-flash with independent API key. Only MCP tools allowed (no code execution, browser, or file access). Uses `render-config.mjs` to inject credentials into `openclaw.json.template` at startup. Resource limits: 2G/1 CPU.
+11. **openclaw-zhixun** — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.9.1` image with custom entrypoint. Port 18791 (loopback only, not exposed). Connected to Feishu via independent bot (`ZHIXUN_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-flash with independent API key. Only MCP tools allowed (no code execution, browser, or file access). Uses `render-config.mjs` to inject credentials into `openclaw.json.template` at startup. Resource limits: 2G/1 CPU.
 
 **tianyi bot stack** (`docker-compose.tianyi-bot.yml`, shares `myopenclaw-net` network with main stack, managed separately):
 
-12. **openclaw-tianyi** (天一研发助手) — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.7.1` image with custom entrypoint. Port 18792 (loopback only, not exposed). Connected to Feishu via independent bot (`TIANYI_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-flash with independent API key. **Coding profile** (terminal + MCP): reads repo activity via shared `repo-scanner-mcp`, creates GitHub/GitCode issues via `gh` and `gc` CLI (installed at startup in entrypoint). No code execution sandbox. Data dir: `~/.openclaw-tianyi`. Requires main stack running (repo-scanner-mcp). Resource limits: 2G/1 CPU.
+12. **openclaw-tianyi** (天一研发助手) — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.9.1` image with custom entrypoint. Port 18792 (loopback only, not exposed). Connected to Feishu via independent bot (`TIANYI_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-flash with independent API key. **Coding profile** (terminal + MCP): reads repo activity via shared `repo-scanner-mcp`, creates GitHub/GitCode issues via `gh` and `gc` CLI (installed at startup in entrypoint). No code execution sandbox. Data dir: `~/.openclaw-tianyi`. Requires main stack running (repo-scanner-mcp). Resource limits: 2G/1 CPU.
 
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS` — by the **snapshot directory name**, not filesystem mtime (`rsync -a` overwrites the destination dir's mtime with the source's, which made `find -mtime` delete freshly-created snapshots). Retention runs only on the 02:00 cron job; the container-startup initial backup passes `BACKUP_SKIP_PRUNE=1` so a restart never deletes anything. Default schedule is daily 02:00 (`BACKUP_CRON=0 2 * * *`), matching the AgentOps 24h stale-backup threshold. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 

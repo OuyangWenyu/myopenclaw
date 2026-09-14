@@ -75,16 +75,14 @@
       "workspace": "/home/node/.openclaw/workspace"
     }
   },
-  "messages": {
-    "tts": {
-      "provider": "xiaomi",
-      "providers": {
-        "xiaomi": {
-          "apiKey": "${XIAOMI_API_KEY}",
-          "model": "mimo-v2.5-tts",
-          "speakerVoice": "mimo_default",
-          "format": "mp3"
-        }
+  "tts": {
+    "provider": "xiaomi",
+    "providers": {
+      "xiaomi": {
+        "apiKey": "${XIAOMI_API_KEY}",
+        "model": "mimo-v2.5-tts",
+        "speakerVoice": "mimo_default",
+        "format": "mp3"
       }
     }
   },
@@ -98,8 +96,7 @@
   "commands": {
     "native": "auto",
     "nativeSkills": "auto",
-    "restart": true,
-    "ownerDisplay": "raw"
+    "restart": true
   },
   "session": {
     "dmScope": "per-channel-peer"
@@ -115,19 +112,20 @@
       "mode": "token"
     },
     "tailscale": {
-      "mode": "off",
-      "resetOnExit": false
+      "mode": "off"
     },
     "nodes": {
-      "denyCommands": [
-        "camera.snap",
-        "camera.clip",
-        "screen.record",
-        "contacts.add",
-        "calendar.add",
-        "reminders.add",
-        "sms.send"
-      ]
+      "commands": {
+        "deny": [
+          "camera.snap",
+          "camera.clip",
+          "screen.record",
+          "contacts.add",
+          "calendar.add",
+          "reminders.add",
+          "sms.send"
+        ]
+      }
     }
   },
   "channels": {

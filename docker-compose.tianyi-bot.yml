@@ -2,7 +2,7 @@ name: myopenclaw-tianyi-bot
 
 services:
   openclaw-tianyi:
-    image: ${TIANYI_BOT_OPENCLAW_IMAGE:-docker.m.daocloud.io/openclaw/openclaw:2026.7.1}
+    image: ${TIANYI_BOT_OPENCLAW_IMAGE:-docker.m.daocloud.io/openclaw/openclaw:2026.9.1}
     container_name: openclaw-tianyi
     restart: unless-stopped
     user: root

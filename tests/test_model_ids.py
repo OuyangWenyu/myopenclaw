@@ -13,7 +13,8 @@ DeepSeek 于 2026-09-10 发布 V4.1 Flash，canonical id 为 ``deepseek-flash``�
 的 provider 列表仍在有意使用，批量替换时不要误伤（见 TestDeepseekChatUntouched）。
 
 另外守两条改造中容易误删的东西：虾酱的 TTS 仍走 xiaomi，而它的端点定义藏在
-``models.providers.xiaomi`` 里（``messages.tts.providers.xiaomi`` 块内没有 baseUrl）。
+``models.providers.xiaomi`` 里（``tts.providers.xiaomi`` 块内没有 baseUrl；该块在
+2.0 里从 ``messages.tts`` 迁到了顶层 ``tts``）。
 """
 
 from __future__ import annotations
@@ -205,8 +206,10 @@ class TestXiaomiTtsRetained:
     """虾酱的语音回复仍走 xiaomi —— 切主模型不得顺手删掉小米。"""
 
     def test_tts_still_uses_xiaomi(self):
+        # 2.0 把 `messages.tts` 重命名为**顶层** `tts`（旧写法在新版判为 invalid）。
         cfg = json.loads(OPENCLAW_EXAMPLE.read_text())
-        tts = cfg["messages"]["tts"]
+        assert "messages" not in cfg, "messages 段已被 2.0 废弃"
+        tts = cfg["tts"]
         assert tts["provider"] == "xiaomi"
         assert tts["providers"]["xiaomi"]["model"] == "mimo-v2.5-tts"
 

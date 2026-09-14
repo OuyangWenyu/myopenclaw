@@ -131,8 +131,7 @@
       "mode": "token"
     },
     "tailscale": {
-      "mode": "off",
-      "resetOnExit": false
+      "mode": "off"
     }
   },
   "plugins": {
