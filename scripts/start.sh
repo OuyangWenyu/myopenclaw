@@ -152,22 +152,22 @@ if [[ ! -f "${HOME}/.openclaw/openclaw.json" ]]; then
   echo "   📝 已创建 OpenClaw 配置: ~/.openclaw/openclaw.json"
 fi
 
-# ── 确保 Hermes coder profile 使用 xiaomi mimo-v2.5-pro ────────
+# ── 确保 Hermes coder profile 使用 deepseek-flash ──────────────
 CODER_CONFIG="${HOME}/.hermes/profiles/coder/config.yaml"
 mkdir -p "$(dirname "${CODER_CONFIG}")"
 if [[ ! -f "${CODER_CONFIG}" ]]; then
   cat > "${CODER_CONFIG}" << 'YAML'
 model:
-  default: mimo-v2.5-pro
-  provider: xiaomi
-  base_url: https://api.xiaomimimo.com/v1
+  default: deepseek-flash
+  provider: deepseek
+  base_url: https://api.deepseek.com
 fallback_providers:
 - zai
 fallback_model:
   provider: zai
   model: glm-5.1
 YAML
-  echo "   📝 已创建 Hermes coder profile 配置（模型: mimo-v2.5-pro）"
+  echo "   📝 已创建 Hermes coder profile 配置（模型: deepseek-flash）"
 fi
 
 # ── 确保 Hermes daoyuan profile（道元·文献学者）──────────────
@@ -176,7 +176,7 @@ mkdir -p "$(dirname "${DAOYUAN_CONFIG}")"
 if [[ ! -f "${DAOYUAN_CONFIG}" ]]; then
   cat > "${DAOYUAN_CONFIG}" << 'YAML'
 model:
-  default: deepseek-v4-flash
+  default: deepseek-flash
   provider: deepseek
   base_url: https://api.deepseek.com
 fallback_providers:
@@ -191,8 +191,24 @@ mcp_servers:
 memory:
   memory_enabled: true
 YAML
-  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-v4-flash + zotero-mcp + memory 隔离）"
+  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-flash + zotero-mcp + memory 隔离）"
 fi
+
+# ── 迁移既有 profile 的主模型到 deepseek-flash（幂等）───────────
+# 上面两个 heredoc 只在文件**不存在**时生效：已在运行的机器、以及从快照
+# `restore.sh` 恢复出来的机器都不会被自动迁移，会静默留在旧模型上，而
+# 文档已经宣称三个 agent 统一是 deepseek-flash。
+# 这一步只改「已知的历史取值」（mimo-v2.5(-pro) / 非 canonical 的 deepseek-v*），
+# 不覆盖操作者主动选的其它模型 —— 见 scripts/ensure_hermes_model.py。
+for _cfg in \
+  "${HOME}/.hermes/config.yaml" \
+  "${CODER_CONFIG}" \
+  "${DAOYUAN_CONFIG}" \
+  "${HOME}/.hermes/profiles/finance/config.yaml"; do
+  [[ -f "${_cfg}" ]] || continue
+  _st="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_model.py" "${_cfg}" || true)"
+  echo "   🎛️  ${_cfg/#${HOME}/\~} → ${_st##*→ }"
+done
 
 # ── 确保 zotero-mcp 在默认配置的 mcp_servers 中 ─────────────────
 # Hermes profile 不支持覆盖 mcp_servers，必须在默认配置中注入。

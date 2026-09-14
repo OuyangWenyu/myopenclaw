@@ -34,7 +34,7 @@ set -euo pipefail
 #   gtm-a4b8.com    — 智谱 GTM 跳转
 #   queniuyk.com    — 飞书 open.feishu.cn CNAME 终端（金山云 CDN）
 #   queniuck.com    — 飞书 msg-frontier.feishu.cn CNAME 终端
-#   xiaomimimo.com  — 小米 MiMo api.xiaomimimo.com 主域（mimo-v2.5 多模态模型）
+#   xiaomimimo.com  — 小米 MiMo api.xiaomimimo.com（虾酱 TTS 语音回复依赖此域）
 #   xiaomi.com      — 小米 MiMo CNAME 链 (mimo-pri-alisgp.alb.xiaomi.com)
 #   workbuddy.cn    — WorkBuddy 主域（www.workbuddy.cn 官网）
 RESOLVER_DOMAINS=(

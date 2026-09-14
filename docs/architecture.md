@@ -8,13 +8,13 @@ myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 
 | 服务 | 镜像 | 端口 | 说明 |
 |------|------|------|------|
-| hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile（爱玛士，`mimo-v2.5` 多模态） |
-| hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道（`mimo-v2.5-pro`） |
+| hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile（爱玛士，`deepseek-flash` 多模态） |
+| hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道（`deepseek-flash`） |
 | hermes-daoyuan | 同 hermes 镜像 | 8645 | 道元·文献学者，daoyuan profile，飞书群开放访问 |
 | hermes-finance | 同 hermes 镜像 | 8644 | 财经助手，finance profile |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板（只读） |
-| claude-code | 自建（基于 `ubuntu:24.04`） | 9090 | Claude Code + cc-connect 飞书直连（默认 `deepseek-v4-flash`，Opus 层 `deepseek-v4-pro`） |
-| openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway，虾酱 Discord bot（`mimo-v2.5` + TTS 语音回复） |
+| claude-code | 自建（基于 `ubuntu:24.04`） | 9090 | Claude Code + cc-connect 飞书直连（各 tier 均 `deepseek-flash`，1M 上下文） |
+| openclaw-gateway | `ghcr.io/openclaw/openclaw:latest` | 18789 | OpenClaw gateway，虾酱 Discord bot（`deepseek-flash` + TTS 语音回复走 xiaomi） |
 
 ### 数据与支撑服务
 
@@ -39,7 +39,7 @@ myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| openclaw-tianyi | 18792 | OpenClaw gateway（天一·研发助手），飞书 bot（`deepseek-v4-flash`），terminal + MCP profile：读走共享 repo-scanner-mcp，写走 `gh`/`gc` CLI 创建 GitHub/GitCode issue，另接远程语雀 MCP |
+| openclaw-tianyi | 18792 | OpenClaw gateway（天一·研发助手），飞书 bot（`deepseek-flash`），terminal + MCP profile：读走共享 repo-scanner-mcp，写走 `gh`/`gc` CLI 创建 GitHub/GitCode issue，另接远程语雀 MCP |
 
 ## 数据目录映射
 

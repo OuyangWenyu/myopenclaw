@@ -67,4 +67,4 @@ docker compose logs --tail=20 openclaw-gateway
 
 ## 默认模型
 
-deepseek-v4-flash（主）→ kimi-k2.5（备份）。可在 `~/.openclaw/openclaw.json` 的 `agents.defaults.model` 中修改。
+deepseek-flash（主）→ kimi-k2.5（备份）。可在 `~/.openclaw/openclaw.json` 的 `agents.defaults.model` 中修改。
