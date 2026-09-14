@@ -398,7 +398,11 @@ for _ext_dir in "${HOME}/.openclaw/extensions"/*/; do
 done
 
 # ── 拉取 OpenClaw 镜像（.env 里钉住的 tag，不是 latest）────────
-echo "🦞 拉取 OpenClaw 镜像（pin: $(grep -m1 '^OPENCLAW_IMAGE=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d: -f3 || echo '未设置')）..."
+# 用 sed 而非 grep|cut：① 取「最后一个冒号之后」才对（registry 可能带端口，
+# 且正常只有一个冒号，cut -f3 会取到空串）；② sed 无匹配时退出码仍是 0，
+# 不会在 `set -o pipefail` 下把管道判成失败。
+OPENCLAW_PIN="$(sed -n 's/^OPENCLAW_IMAGE=.*:\(.*\)$/\1/p' "${REPO_ROOT}/.env" 2>/dev/null | head -1)"
+echo "🦞 拉取 OpenClaw 镜像（pin: ${OPENCLAW_PIN:-未设置}）..."
 set +e
 PULL_OUTPUT=$(docker compose pull openclaw-gateway 2>&1)
 PULL_EXIT=$?
