@@ -650,5 +650,62 @@ class TestParseRunningTime:
         assert result is None
 
 
+class TestCheckTirithBinary:
+    """tirith 的失效是静默的（去重一条 WARNING → 熔断 → 全放行），必须有信号能发现它。
+
+    没有这组断言时，唯一能发现的方式是有人**恰好手动**跑 `tests/test-tirith-binary.sh`
+    —— 而本仓库的守卫测试都没有自动执行。AgentOps 每日采集是这条静默路径上的兜底。
+    """
+
+    @staticmethod
+    def _write(dir_path, name, magic):
+        (dir_path / name).write_bytes(magic + b"\x00" * 16)
+
+    def test_elf_binary_is_healthy(self, tmp_path):
+        from scripts.collect_agentops import check_tirith_binary
+
+        self._write(tmp_path, "tirith", b"\x7fELF")
+        with patch("scripts.collect_agentops.TIRITH_BIN_DIR", tmp_path):
+            assert check_tirith_binary() == []
+
+    def test_macho_binary_is_reported(self, tmp_path):
+        """实测过的真实形态：宿主侧按 Darwin 下载的 apple-darwin 包。"""
+        from scripts.collect_agentops import check_tirith_binary
+
+        self._write(tmp_path, "tirith", b"\xcf\xfa\xed\xfe")  # Mach-O 64
+        with patch("scripts.collect_agentops.TIRITH_BIN_DIR", tmp_path):
+            items = check_tirith_binary()
+
+        assert len(items) == 1, "错平台二进制必须被报出来（它会让扫描器静默 fail-open）"
+        assert "tirith" in items[0]["title"]
+        assert items[0]["needs_human_decision"] is True
+
+    def test_stray_tirith_named_file_is_also_reported(self, tmp_path):
+        """解析只看可执行位、不看平台：任何 tirith* 都会被拿去 spawn，不只是主文件名。"""
+        from scripts.collect_agentops import check_tirith_binary
+
+        self._write(tmp_path, "tirith", b"\x7fELF")
+        self._write(tmp_path, "tirith.macos-arm64.original", b"\xcf\xfa\xed\xfe")
+        with patch("scripts.collect_agentops.TIRITH_BIN_DIR", tmp_path):
+            items = check_tirith_binary()
+
+        assert len(items) == 1
+        assert "tirith.macos-arm64.original" in items[0]["evidence"]
+
+    def test_non_tirith_files_are_ignored(self, tmp_path):
+        from scripts.collect_agentops import check_tirith_binary
+
+        self._write(tmp_path, "gc", b"\xcf\xfa\xed\xfe")  # 别的二进制平台不对与本信号无关
+        with patch("scripts.collect_agentops.TIRITH_BIN_DIR", tmp_path):
+            assert check_tirith_binary() == []
+
+    def test_missing_dir_is_not_a_signal(self, tmp_path):
+        """目录不存在不是缺陷：二进制缺失时会自动重装（且可自愈）。"""
+        from scripts.collect_agentops import check_tirith_binary
+
+        with patch("scripts.collect_agentops.TIRITH_BIN_DIR", tmp_path / "absent"):
+            assert check_tirith_binary() == []
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

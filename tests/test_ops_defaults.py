@@ -14,6 +14,7 @@ COMPOSE = (REPO_ROOT / "docker-compose.yml").read_text()
 ENV_EXAMPLE = (REPO_ROOT / ".env.example").read_text()
 BACKUP_ENTRYPOINT = (REPO_ROOT / "docker" / "backup-cron" / "entrypoint.sh").read_text()
 OPENCLAW_EXAMPLE = REPO_ROOT / "openclaw" / "config" / "openclaw.json.example"
+TIANYI_TEMPLATE = REPO_ROOT / "docker" / "tianyi-bot" / "openclaw.json.template"
 
 # Daily 02:00 (not weekly Sunday). Aligns with AgentOps 24h stale threshold.
 DAILY_CRON = "0 2 * * *"
@@ -47,20 +48,42 @@ class TestDailyBackupDefault:
 
 
 class TestOpenclawExecDefault:
-    """OpenClaw 模板的 exec 策略不得比线上更松。
+    """exec 策略不得比线上更松 —— 模板是新建部署的唯一来源。
 
-    线上 `~/.openclaw/openclaw.json` 早已被手工加固为 `allowlist` / `on-miss`，而模板
-    长期停留在 `full` / `off` —— 于是**新部署照模板落地就会默认拿到无确认的全量 shell
-    执行**，而那个容器 env 里有 3 个 provider key + GH token。模板与新建机器之间没有
-    任何其它校验环节（`start.sh` 只做 `cp`），所以这条只能靠守卫钉住。
+    线上 `~/.openclaw/openclaw.json` 早已被手工加固为 `allowlist` / `on-miss`，而主模板
+    长期停留在 `full` / `off`；tianyi 模板则**连 exec 段都没有** —— 而 OpenClaw 对
+    coding profile 的内置默认恰恰是最松的一档（镜像内 `DEFAULT_SECURITY = "full"`、
+    `DEFAULT_ASK = "off"`，实测于 `dist/exec-approvals-*.js`）。tianyi 又同时是
+    coding profile + 无 agent 级 tools.allow 收窄 + `sandbox.mode: "off"` +
+    飞书 `allowFrom: ["*"]` / `dmPolicy: "open"` —— 等于对新部署默认放开无确认的全量 shell，
+    而那个容器 env 里有 GH_TOKEN 与 provider key。
+
+    模板与新建机器之间没有任何其它校验环节（`start.sh` 只做 `cp`，`config validate`
+    也不检查 exec 策略），所以只能靠这条守卫钉住。
+
+    **zhixun 不需要 exec 段**（故不在此测试内）：它是 `messaging` profile，`exec` 工具
+    不属于该 profile；且 agent 级 `tools.allow` 只有 `["bundle-mcp"]` —— exec 根本不可达。
     """
 
-    def test_exec_security_matches_hardened_value(self):
-        exec_cfg = json.loads(OPENCLAW_EXAMPLE.read_text())["tools"]["exec"]
+    @staticmethod
+    def _exec_of(path):
+        return json.loads(path.read_text())["tools"].get("exec")
+
+    def _assert_hardened(self, exec_cfg, label):
+        assert exec_cfg is not None, (
+            f"{label} 没有 exec 段 —— OpenClaw 对 coding profile 的内置默认是 "
+            "full/off，等于默认放开无确认的全量 shell"
+        )
         assert exec_cfg["security"] == "allowlist", (
-            f"模板 exec.security 是 {exec_cfg['security']!r}，"
-            "而线上加固值是 'allowlist' —— full 意味着新部署默认放开全量 shell"
+            f"{label} exec.security 是 {exec_cfg['security']!r}，应为 'allowlist'；"
+            "full 意味着新部署默认放开全量 shell"
         )
         assert exec_cfg["ask"] == "on-miss", (
-            f"模板 exec.ask 是 {exec_cfg['ask']!r}，不得默认跳过确认"
+            f"{label} exec.ask 是 {exec_cfg['ask']!r}，不得默认跳过确认"
         )
+
+    def test_main_template_exec_matches_hardened_value(self):
+        self._assert_hardened(self._exec_of(OPENCLAW_EXAMPLE), "主模板 openclaw.json.example")
+
+    def test_tianyi_template_exec_matches_hardened_value(self):
+        self._assert_hardened(self._exec_of(TIANYI_TEMPLATE), "tianyi 模板")
