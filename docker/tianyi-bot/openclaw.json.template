@@ -64,7 +64,11 @@
     }
   },
   "tools": {
-    "profile": "coding"
+    "profile": "coding",
+    "exec": {
+      "security": "allowlist",
+      "ask": "on-miss"
+    }
   },
   "mcp": {
     "servers": {

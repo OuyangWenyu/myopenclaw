@@ -8,6 +8,7 @@ Detects:
   - High disk usage
   - Gateway error loops
   - Unhealthy containers
+  - Unusable tirith security scanner (fails open silently)
 
 Output: ~/.myagentdata/agentops/inbox.md (auto items merged with manual)
 
@@ -44,6 +45,12 @@ BACKUP_ROOT = os.environ.get(
 )
 GATEWAY_ERROR_SCRIPT = str(REPO_ROOT / "scripts" / "check-gateway-errors.sh")
 GATEWAY_ERR_LOG = os.path.expanduser("~/.openclaw/logs/gateway.err.log")
+
+# Hermes 的预执行安全扫描器 tirith 装在 $HERMES_HOME/bin/，而 $HERMES_HOME(=
+# ~/.hermes) 同时是容器挂载的 /opt/data —— 宿主与容器共用同一路径，所以宿主机上
+# 就能读到容器实际会 spawn 的那个文件。
+TIRITH_BIN_DIR = Path(os.path.expanduser("~/.hermes/bin"))
+ELF_MAGIC = b"\x7fELF"
 
 
 # =============================================================
@@ -394,6 +401,64 @@ def check_gateway_errors():
     return []
 
 
+def check_tirith_binary():
+    """Hermes 的预执行安全扫描器 tirith 必须能在容器里跑起来。
+
+    它拦的是同形字 URL、管道直通解释器、混淆载荷这类东西 —— 而 agent 的输入来自
+    飞书/Discord/网页内容，一次 prompt injection 就能让它执行恶意命令。
+
+    它失效的方式是**安静**的：spawn 失败只按 (异常类, errno) 去重报一条 WARNING，
+    连续 3 次后熔断器打开，该进程余下时间直接放行 —— 所以它能在
+    `tirith_enabled: true` 的前提下从未真正评估过任何命令而无人察觉。
+
+    最现实的失效形态是平台不对：二进制装在 `$HERMES_HOME/bin/`，而 `$HERMES_HOME`
+    (= ~/.hermes) 同时是容器挂载的 /opt/data —— 宿主侧按 `platform.system()` 判定
+    平台时下载的 apple-darwin 包会一直躺在那儿，容器里每次 spawn 都
+    `Exec format error`；且解析只看可执行位、不做平台校验，所以任何叫 tirith* 的
+    文件都会被拿去 spawn。
+
+    Returns:
+        list of ledger item dicts
+    """
+    if not TIRITH_BIN_DIR.is_dir():
+        return []
+
+    bad = []
+    for path in sorted(TIRITH_BIN_DIR.glob("tirith*")):
+        try:
+            with path.open("rb") as fh:
+                magic = fh.read(4)
+        except OSError as exc:
+            bad.append(f"{path.name}（无法读取: {exc}）")
+            continue
+        if magic != ELF_MAGIC:
+            bad.append(f"{path.name}（魔数 {magic!r}，非 Linux ELF）")
+
+    if not bad:
+        return []
+
+    detail = "；".join(bad)
+    return [{
+        "title": f"Hermes tirith 安全扫描器不可用: {detail[:60]}",
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "source": "auto | collect_agentops.py",
+        "status": "new",
+        "owner": "owen",
+        "evidence": f"{detail}（宿主 {TIRITH_BIN_DIR}，容器内 /opt/data/bin/）",
+        "why_it_matters": (
+            "tirith 失效是静默的：spawn 失败去重后只报一条 WARNING，连续 3 次后熔断器"
+            "打开、该进程余下时间直接放行 —— 表面 tirith_enabled: true，实际命令从未被扫描"
+        ),
+        "suggested_next_action": (
+            "移走错平台二进制并触发容器内重装：docker compose exec -T -w /opt/hermes hermes "
+            "/opt/hermes/.venv/bin/python3 -c \"from tools.tirith_security import _install_tirith; "
+            "print(_install_tirith())\"；随后重启 hermes 系容器清掉熔断器；"
+            "验证 bash tests/test-tirith-binary.sh"
+        ),
+        "needs_human_decision": True,
+    }]
+
+
 # =============================================================
 # 7. Ledger formatting
 # =============================================================
@@ -517,6 +582,9 @@ def collect_all_signals():
 
     # Gateway errors
     items.extend(check_gateway_errors())
+
+    # Hermes tirith 安全扫描器可用性（静默失效，无其它信号能发现）
+    items.extend(check_tirith_binary())
 
     return items
 
