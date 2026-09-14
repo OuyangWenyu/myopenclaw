@@ -36,7 +36,7 @@ services:
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       # Blocked by Hermes env blacklist, materialized to secrets files by entrypoint
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo provider (mimo-v2.5 多模态秘书模型)
+      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo — 主模型已切 deepseek-flash，此注入当前无消费方（待清理）
       # Outlook OAuth（非机密配置，repo .env 单一来源；token 由 ortie 管理，不经环境传递）
       - EMAIL_OUTLOOK_ADDRESS=${EMAIL_OUTLOOK_ADDRESS:-}
       - EMAIL_OUTLOOK_ACCOUNT_NAME=${EMAIL_OUTLOOK_ACCOUNT_NAME:-}
@@ -115,7 +115,7 @@ services:
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo provider (爱码士 mimo-v2.5-pro)
+      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo — 主模型已切 deepseek-flash，此注入当前无消费方（待清理）
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
@@ -365,7 +365,7 @@ services:
 
   # ── OpenClaw gateway ─────────────────────────────────────────
   openclaw-gateway:
-    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:2026.9.1}
     container_name: openclaw-gateway
     restart: unless-stopped
     entrypoint: ["/bin/sh", "-c", "/fix-host-paths.sh && exec /usr/local/bin/docker-entrypoint.sh node openclaw.mjs gateway --allow-unconfigured"]
@@ -377,7 +377,7 @@ services:
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
-      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo provider (虾酱 mimo-v2.5 多模态)
+      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo — 虾酱 TTS 语音回复（mimo-v2.5-tts）
       - UNPAYWALL_EMAIL=${UNPAYWALL_EMAIL:-}
       - PAPER_FETCH_NO_SCIHUB=${PAPER_FETCH_NO_SCIHUB:-}
       - GITHUB_PERSONAL_ACCESS_TOKEN=${OPENCLAW_GH_TOKEN:-}
@@ -396,7 +396,7 @@ services:
 
   # ── OpenClaw CLI（按需运行，不常驻）─────────────────────────
   openclaw-cli:
-    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:latest}
+    image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:2026.9.1}
     container_name: openclaw-cli
     profiles:
       - cli

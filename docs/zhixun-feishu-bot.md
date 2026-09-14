@@ -48,7 +48,7 @@ git switch feat/zhixun-feishu-bot
 ```dotenv
 ZHIXUN_BOT_PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim
 ZHIXUN_BOT_PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
-ZHIXUN_BOT_OPENCLAW_IMAGE=docker.m.daocloud.io/openclaw/openclaw:2026.7.1
+ZHIXUN_BOT_OPENCLAW_IMAGE=docker.m.daocloud.io/openclaw/openclaw:2026.9.1
 ```
 
 zhixun-agent 使用纯 MCP 目录结构，必须包含：
@@ -118,14 +118,14 @@ ZHIXUN_BOT_FEISHU_APP_SECRET=xxx
 ZHIXUN_BOT_MODEL_API_KEY=xxx
 ```
 
-### 模型：DeepSeek V4 Pro
+### 模型：DeepSeek V4.1 Flash
 
 将 DeepSeek 平台 API Key 填入 `.env.zhixun-bot` 的
 `ZHIXUN_BOT_MODEL_API_KEY`，并配置模型 ID 和 API 地址：
 
 ```dotenv
 ZHIXUN_BOT_MODEL_API_KEY=你的 DeepSeek API Key
-ZHIXUN_BOT_MODEL_ID=deepseek-v4-flash
+ZHIXUN_BOT_MODEL_ID=deepseek-flash
 ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com
 ```
 

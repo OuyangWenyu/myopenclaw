@@ -57,7 +57,11 @@ const config = replace(template);
 // Apply streaming toggle
 const feishuStreaming =
   (process.env.TIANYI_BOT_FEISHU_STREAMING ?? "false").toLowerCase() === "true";
-config.channels.feishu.streaming = feishuStreaming;
+// 2.0 起 `streaming` 是**对象**而非布尔。布尔是已被淘汰的旧写法（镜像内
+// docs/channels/feishu.md：Legacy boolean `streaming` … migrate to this nested
+// shape via `openclaw doctor --fix`），写布尔会让**每次启动渲染出的配置都
+// schema-invalid**。取值：partial=开启流式卡片（默认），off=只发完成后的整条回复。
+config.channels.feishu.streaming = { mode: feishuStreaming ? "partial" : "off" };
 
 // Drop yuque-mcp entry when no URL is configured (optional capability)
 const yuqueUrl = process.env.TIANYI_BOT_YUQUE_MCP_URL?.trim();

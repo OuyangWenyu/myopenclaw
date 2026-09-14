@@ -217,7 +217,7 @@ if (!settings.permissions.allow.includes("mcp__playwright__*")) {
     changed = true;
 }
 
-// Model defaults (deepseek-v4-flash 主模型，防止 cc-connect 重写后丢失)
+// Model defaults (deepseek-flash 主模型，防止 cc-connect 重写后丢失)
 if (!settings.env) {
     settings.env = {};
 }
@@ -225,25 +225,37 @@ if (!settings.env.ANTHROPIC_BASE_URL || settings.env.ANTHROPIC_BASE_URL.includes
     settings.env.ANTHROPIC_BASE_URL = "https://api.deepseek.com/anthropic";
     changed = true;
 }
-if (!settings.env.ANTHROPIC_MODEL || settings.env.ANTHROPIC_MODEL.includes("glm")) {
-    settings.env.ANTHROPIC_MODEL = "deepseek-v4-flash[1M]";
-    changed = true;
+// 需要改写的 model 值：为空、早期 glm 默认值、或任何**非 canonical 的 DeepSeek V 系列 id**。
+// 只看"为空 or 含 glm"是不够的 —— cc-connect 与历史配置留下的旧 V 系列 id 两者都不满足，
+// 会永久绕过重写，重建容器也修不好（线上 Opus tier 曾长期停在一个已下线的 id 上，
+// 守卫见 tests/test-cc-model-migration.sh）。
+// 用模式而非名单：下线名单会过期，而 `deepseek-v<数字>…` 这个形状天然覆盖各代
+// 已下线 id 及其后续版本（canonical 的 deepseek-flash 无版本段，不匹配）。
+function shouldSetModel(current) {
+    if (!current) return true;                                  // 未设置
+    const s = String(current);
+    if (s.includes("glm")) return true;                         // 早期默认值
+    return /^deepseek-v\d/.test(s.replace(/\[1M\]$/i, ""));      // 非 canonical 的 V 系列
 }
-if (!settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL.includes("glm")) {
-    settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "deepseek-v4-flash";
-    changed = true;
-}
-if (!settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL || settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL.includes("glm")) {
-    settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL = "deepseek-v4-flash[1M]";
-    changed = true;
-}
-if (!settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL || settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL.includes("glm")) {
-    settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL = "deepseek-v4-pro[1M]";
-    changed = true;
-}
-if (!settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL || settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL.includes("glm")) {
-    settings.env.ANTHROPIC_DEFAULT_FABLE_MODEL = "deepseek-v4-flash-vision-exp[1M]";
-    changed = true;
+const TIER_MODELS = {
+    ANTHROPIC_MODEL: "deepseek-flash[1M]",
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: "deepseek-flash",
+    ANTHROPIC_DEFAULT_SONNET_MODEL: "deepseek-flash[1M]",
+    ANTHROPIC_DEFAULT_OPUS_MODEL: "deepseek-flash[1M]",
+    ANTHROPIC_DEFAULT_FABLE_MODEL: "deepseek-flash[1M]"
+};
+for (const [key, value] of Object.entries(TIER_MODELS)) {
+    if (shouldSetModel(settings.env[key])) {
+        settings.env[key] = value;
+        changed = true;
+    }
+    // cc-connect 会写入配套的 *_MODEL_NAME 作展示名；只改 *_MODEL 会留下
+    // 一个仍然指向旧 id 的显示名，所以既有的一并纠正（不存在则不新建）。
+    const nameKey = key + "_NAME";
+    if (settings.env[nameKey] !== undefined && shouldSetModel(settings.env[nameKey])) {
+        settings.env[nameKey] = value.replace("[1M]", "");
+        changed = true;
+    }
 }
 if (!settings.env.API_TIMEOUT_MS) {
     settings.env.API_TIMEOUT_MS = "3000000";
@@ -302,7 +314,7 @@ if (!settings.mcpServers.codegraph) {
 
 if (changed) {
     fs.writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
-    console.log("🔧 settings.json 已恢复: deepseek-v4-flash 主模型 + ECC/pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
+    console.log("🔧 settings.json 已恢复: deepseek-flash 主模型 + ECC/pm-skills marketplace + 9 plugins + permissions + codegraph MCP");
 }
 
 } catch(e) {

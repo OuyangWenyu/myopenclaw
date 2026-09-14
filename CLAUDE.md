@@ -193,12 +193,48 @@ docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs config
 
 **原因**：2026.3.31 因为 host 上运行的 `openclaw doctor --fix` 写出了 Docker 不认识的 streaming 配置格式，导致 gateway.err.log 在 3 个月内增长到 762MB（2380 万行重复错误），无人察觉。
 
-**升级流程**：
+**升级流程**（当前 pin **`2026.9.1`**；三栈版本必须一致，守卫 `tests/test-openclaw-pins.sh` 钉着 5 处 pin + 实际部署版本）：
+
 ```bash
-# 1. 更新 .env 中的 OPENCLAW_IMAGE（默认 latest 自动跟随最新 stable）
-# 2. start.sh 启动前会自动 docker compose pull 拉取最新镜像
-./scripts/start.sh
+# 1. 先在数据目录副本上演练迁移 —— 不过就不升
+bash scripts/rehearse-openclaw-migration.sh
+
+# 2. 一次性更新全部 5 处 pin（漏改不会报错，只会静默跑旧版本）：
+#    .env / .env.zhixun-bot / .env.tianyi-bot + 两个 bot compose 的兜底默认值
+bash tests/test-openclaw-pins.sh          # 改的过程中它会红，全改完才绿
+
+# 3. 主网关：停 → doctor --fix **连跑两遍** → validate → 起
+#    第一遍常报 "Legacy session store requires migration" 且 "could not complete
+#    maintenance"，第二遍才 "Doctor complete." —— 只跑一遍会留下未完成的迁移。
+docker compose stop openclaw-gateway
+docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs doctor --fix
+docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs doctor --fix
+docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs config validate
+docker compose up -d openclaw-gateway
+
+# 4. 两个 bot 栈同理（先 stop 再 doctor 再 up），最后各自确认飞书已连。
+#    ⚠️ tianyi 的 compose 带 `user: root`（zhixun 没有）—— 裸 `compose run` 会以 root
+#    写数据目录，与「tianyi exec 必须 --user node」的既有经验冲突。跑 doctor 时显式加
+#    `--user node`：
+#      docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml \
+#        run --rm --user node --entrypoint "node" openclaw-tianyi /app/openclaw.mjs doctor --fix
 ```
+
+**2.0 迁移实战踩过的坑（都已固化进脚本/守卫）**：
+
+- ⚠️ 演练**必须复制整个数据目录**（含 `extensions/`、`npm/`）。只挂一个配置文件的隔离演练里，doctor 找不到磁盘上的插件，会把插件提供的通道（钉钉，连同 `clientId`/`clientSecret`）当孤儿配置清掉 —— 那是**演练假象**，用完整目录重跑就完好
+- **doctor 要跑两遍**：第一遍报 `Legacy session store requires migration` 并说 "could not complete maintenance"，第二遍才 `Doctor complete.`（会话 `sessions.json` → `agents/<n>/agent/*.sqlite`，**降级不自动转换**，升级前务必整目录备份）
+- **插件必须与核心同版本**（本次踩得最惨的一条，同类炸了两次）：官方插件（`@openclaw/*`）与核心**同版本号配套发布**，升核心时必须一并升插件：
+  - `@openclaw/discord` 2026.7.1 → 插件加载失败（`plugin-sdk/security-runtime` 无 `privateFileStore` 导出），**虾酱的 Discord 通道直接不可用**
+  - `@openclaw/feishu` 2026.7.1 → 插件要求 `channels.feishu.streaming` 是**布尔**、核心要求**对象**，**两个校验器要求相反**：写对象则通道崩溃重启，写布尔则 `config validate` 报 invalid
+  - 第三方插件同理（`@dingtalk-real-ai/dingtalk-connector` 0.8.20 → 0.8.26，后者声明 `openclaw >= 2026.8.1`）
+  - 守卫：`tests/test-openclaw-plugin-versions.sh`（三栈官方插件 vs 核心版本）
+  - ⚠️ **鸡生蛋陷阱**：若旧插件的 schema 校验与核心冲突，`plugins install` 会因「配置无效」被拒 ——
+    绕法是在**同一个容器里**先临时移走冲突的配置段（如 `delete c.channels.feishu`），装完让 entrypoint 重渲染恢复
+- **崩溃-重启会触发 crash-loop breaker**，之后通道**不再自动启动**（日志：`channel autostart suppressed by crash-loop breaker`）。补救：`gateway call channels.start --params '{"channel":"feishu"}'`，或等窗口（300s）过期后重启
+- **bot 的渲染产物必须带 `meta`，但不要声明版本**：2026.9.1 会把「没有 `meta` 的配置写入」判为可疑（`missing-meta-vs-last-good`）并回滚到上一份好配置 ⇒ **每次启动的渲染都被静默丢弃**，改模板、轮换 `.env.*-bot` 里的凭据都不会生效（实测：数据目录出现 `openclaw.json.clobbered.<ts>`）。用 `meta: {}` 即可 —— 判据只要求 `meta` 是对象。**但不要填 `lastTouchedVersion`**：那是「未来版本保护」的判据，比当前二进制新会让网关**拒绝启动**（服务模式 exit 78），于是「升级出问题 → 回滚镜像 tag」这最后一条退路会失效。
+- **渲染脚本决定形状的字段，只有目标版本的校验器说了算**：`render-config.mjs` 写 `channels.feishu.streaming`，2026.9.1 把它从布尔改成对象后，**每次渲染都是 schema-invalid**（模板里当时也有一份布尔 `"streaming": true`，已一并修正 —— 静态守卫本该抓到，只是当时没有针对该键的断言）。可靠断言是真跑一次目标版本的 `config validate`：守卫 `tests/test-bot-rendered-config.sh`（渲染两种取值再送校验，按**退出码 + 文本**双条件判定）。
+- 2.0 的 schema 重命名（守卫 `tests/test_openclaw_schema.py`）：`messages.tts`→**顶层 `tts`**、`gateway.nodes.denyCommands`→`gateway.nodes.commands.deny`、`tools.exec{security,ask}`→`{mode}`（`ask` ≡ `allowlist`/`on-miss`，见镜像内 `docs/tools/permission-modes.md`）、`agents.list`→按 id 键控的 `agents.entries`、`channels.feishu.streaming` 布尔→`{mode: partial|off}`
 
 **zhixun bot 配置独立**：zhixun 飞书机器人使用独立的 `openclaw.json`（位于 `~/.openclaw-zhixun/`），不与虾酱主配置共享。配置由 `render-config.mjs` 从 `openclaw.json.template` 渲染生成，凭据从 `.env.zhixun-bot` 注入。修改 zhixun bot 配置需在容器内操作：
 ```bash
@@ -213,9 +249,9 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 1. **hermes** — Custom image (`docker/hermes/Dockerfile`) extending `nousresearch/hermes-agent:latest` with gh CLI, opencode-ai, himalaya (CLI email client), ortie (OAuth token broker for Outlook), cardamum (CLI contact manager), lark-cli (Feishu CLI), rclone (Google Drive), and mylibrary (hydrolitagent, build-time install). Entry point is `entrypoint-wrapper.sh` which symlinks gh/himalaya/ortie/cardamum/lark-cli config dirs, auto-initializes lark-cli/himalaya/ortie/cardamum/zot configs from env vars, and sets `OPENCODE_CONFIG_DIR` before handing off to the original Hermes entrypoint. Profiles: default (爱玛士, port 8642, Feishu), coder (爱码士, 8643, Discord, paper injection), finance (8644, Feishu).
 
-2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-v4-flash` as the default model; the Opus tier maps to `deepseek-v4-pro` via `ANTHROPIC_DEFAULT_OPUS_MODEL` (see entrypoint). Port 9090 (cc-connect web admin).
+2. **claude-code** — Custom image (`docker/claude-code/Dockerfile`) based on `ubuntu:24.04` with Python 3.12, uv, build-essential, Node.js 22 (tarball), Claude Code CLI, cc-connect, git, and gh CLI (direct binary). Creates a `node` user for volume mount compatibility. cc-connect bridges Claude Code to Feishu via WebSocket (no public IP needed). Entry point is `entrypoint.sh` which symlinks config dirs, sets up git credential helper (GITHUB_TOKEN for private repo access), creates code directory skeleton (`~/code/opensource/`, `~/code/OuyangWenyu/`, `~/code/iHeadWater/`), maps `DEEPSEEK_API_KEY → ANTHROPIC_API_KEY`, sets `ANTHROPIC_BASE_URL` (DeepSeek Anthropic-compatible endpoint), bootstraps ECC on first run, then runs `cc-connect` as the main process. Claude Code uses `deepseek-flash` as the default model; all tiers (Haiku/Sonnet/Opus/Fable) map to it via `ANTHROPIC_DEFAULT_*_MODEL` (see entrypoint). Port 9090 (cc-connect web admin).
 
-3. **openclaw-gateway** — Stock `ghcr.io/openclaw/openclaw:latest` image. Port 18789. Has healthcheck via `/healthz`.
+3. **openclaw-gateway** — Stock `ghcr.io/openclaw/openclaw:2026.9.1` image（版本由 `.env` 的 `OPENCLAW_IMAGE` 钉住，勿用 `latest` —— 2.0 的配置 schema 有 breaking change，混版本会让同一份模板在不同栈上有不同解释）。Port 18789. Has healthcheck via `/healthz`. 三栈版本一致性由 `tests/test-openclaw-pins.sh` 守卫。
 
 4. **backup-cron** — Alpine image (`docker/backup-cron/Dockerfile`) with rsync + sqlite3. Runs crond with a single job calling `backup-all-docker.sh`. Also executes an initial backup on container startup.
 
@@ -236,11 +272,11 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 10. **zhixun-water-mcp** — Custom image (`docker/zhixun-bot/Dockerfile.mcp`) using `python:3.12-slim` + MCP + httpx + pypinyin. SSE MCP server on port 18201. Wraps the upstream Water MCP from zhixun-agent with 3 compatibility layers: `zhixun_core_v2_compat.py` (station name index, v2 response parsing), `related_page_compat.py` (auto-attaches frontend page links to query results), `briefing_compat.py` (hydromodel routing). 43 MCP tools total, 15 write tools filtered by default. Build uses BuildKit multi-context to copy `mcp_servers/water/` from `../zhixun-agent`. Resource limits: 1G/1 CPU.
 
-11. **openclaw-zhixun** — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.7.1` image with custom entrypoint. Port 18791 (loopback only, not exposed). Connected to Feishu via independent bot (`ZHIXUN_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-v4-flash with independent API key. Only MCP tools allowed (no code execution, browser, or file access). Uses `render-config.mjs` to inject credentials into `openclaw.json.template` at startup. Resource limits: 2G/1 CPU.
+11. **openclaw-zhixun** — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.9.1` image with custom entrypoint. Port 18791 (loopback only, not exposed). Connected to Feishu via independent bot (`ZHIXUN_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-flash with independent API key. Only MCP tools allowed (no code execution, browser, or file access). Uses `render-config.mjs` to inject credentials into `openclaw.json.template` at startup. Resource limits: 2G/1 CPU.
 
 **tianyi bot stack** (`docker-compose.tianyi-bot.yml`, shares `myopenclaw-net` network with main stack, managed separately):
 
-12. **openclaw-tianyi** (天一研发助手) — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.7.1` image with custom entrypoint. Port 18792 (loopback only, not exposed). Connected to Feishu via independent bot (`TIANYI_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-v4-flash with independent API key. **Coding profile** (terminal + MCP): reads repo activity via shared `repo-scanner-mcp`, creates GitHub/GitCode issues via `gh` and `gc` CLI (installed at startup in entrypoint). No code execution sandbox. Data dir: `~/.openclaw-tianyi`. Requires main stack running (repo-scanner-mcp). Resource limits: 2G/1 CPU.
+12. **openclaw-tianyi** (天一研发助手) — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.9.1` image with custom entrypoint. Port 18792 (loopback only, not exposed). Connected to Feishu via independent bot (`TIANYI_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-flash with independent API key. **Coding profile** (terminal + MCP): reads repo activity via shared `repo-scanner-mcp`, creates GitHub/GitCode issues via `gh` and `gc` CLI (installed at startup in entrypoint). No code execution sandbox. Data dir: `~/.openclaw-tianyi`. Requires main stack running (repo-scanner-mcp). Resource limits: 2G/1 CPU.
 
 **Backup pipeline**: `backup-all-docker.sh` → calls individual `hermes/scripts/backup.sh`, `openclaw/scripts/backup.sh`, `claude/scripts/backup.sh`, `scripts/backup-data.sh`, and `tdai-memory/scripts/backup.sh` in sequence, tracking per-step failures and exiting non-zero if any fail. Each script does selective rsync to timestamped snapshots under `BACKUP_ROOT`, maintains a `latest/` symlink, and prunes snapshots older than `BACKUP_KEEP_DAYS` — by the **snapshot directory name**, not filesystem mtime (`rsync -a` overwrites the destination dir's mtime with the source's, which made `find -mtime` delete freshly-created snapshots). Retention runs only on the 02:00 cron job; the container-startup initial backup passes `BACKUP_SKIP_PRUNE=1` so a restart never deletes anything. Default schedule is daily 02:00 (`BACKUP_CRON=0 2 * * *`), matching the AgentOps 24h stale-backup threshold. OpenClaw's SQLite DBs (`memory/main.sqlite` + 虾酱 `memory-tdai/memories.sqlite`) and TDAI's `memories.sqlite` use `sqlite3 .backup` for hot backup (no `cp` fallback — fails loud if sqlite3 missing). Claude Code backup covers `settings.json`, `projects/`, `skills/`, `plans/`, `tasks/` and cc-connect config.
 
@@ -250,7 +286,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 ## Key Design Decisions
 
-- **Secret isolation**: Hermes holds its own keys; Claude Code holds its own keys; OpenClaw holds none of the personal key domains — the single exception is `XIAOMI_API_KEY`. All keys are configured in `.env`. Hermes keys blocked by its env blacklist (DEEPSEEK, OPENROUTER, OPENAI) are passed into the container via docker-compose, then materialized into `/opt/data/secrets/` files by the entrypoint wrapper (before Hermes starts), so opencode.json can reference them via `{file:}`. Keys not on the blacklist (GH_TOKEN→GITHUB_TOKEN, OPENCODE_API_KEY, LARK_CLI_APP_ID/SECRET, LARK_CLI_IDM_APP_ID/SECRET) pass through `.env` + `env_passthrough`. Claude Code keys (DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, GITHUB_TOKEN, CC_CONNECT_FEISHU_APP_ID/SECRET) are passed directly to the claude-code container. `ANTHROPIC_API_KEY` is set from `DEEPSEEK_API_KEY` by the entrypoint; `ANTHROPIC_BASE_URL` defaults to DeepSeek's Anthropic-compatible endpoint (`https://api.deepseek.com/anthropic`). `XIAOMI_API_KEY` (小米 MiMo) is injected into hermes / hermes-coder (爱玛士/爱码士 `mimo-v2.5`(-pro) 主模型) and openclaw-gateway (虾酱 `mimo-v2.5` 主模型 + `mimo-v2.5-tts` 语音回复, see `openclaw/config/openclaw.json.example` messages.tts).
+- **Secret isolation**: Hermes holds its own keys; Claude Code holds its own keys; OpenClaw holds none of the personal key domains — the single exception is `XIAOMI_API_KEY`. All keys are configured in `.env`. Hermes keys blocked by its env blacklist (DEEPSEEK, OPENROUTER, OPENAI) are passed into the container via docker-compose, then materialized into `/opt/data/secrets/` files by the entrypoint wrapper (before Hermes starts), so opencode.json can reference them via `{file:}`. Keys not on the blacklist (GH_TOKEN→GITHUB_TOKEN, OPENCODE_API_KEY, LARK_CLI_APP_ID/SECRET, LARK_CLI_IDM_APP_ID/SECRET) pass through `.env` + `env_passthrough`. Claude Code keys (DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, GITHUB_TOKEN, CC_CONNECT_FEISHU_APP_ID/SECRET) are passed directly to the claude-code container. `ANTHROPIC_API_KEY` is set from `DEEPSEEK_API_KEY` by the entrypoint; `ANTHROPIC_BASE_URL` defaults to DeepSeek's Anthropic-compatible endpoint (`https://api.deepseek.com/anthropic`). `XIAOMI_API_KEY` (小米 MiMo) 唯一的消费方是 openclaw-gateway 的 **虾酱 TTS 语音回复**（`mimo-v2.5-tts`，见 `openclaw/config/openclaw.json.example` messages.tts）—— 三个 agent 的主模型已切至 `deepseek-flash`，hermes / hermes-coder 上的该注入目前无消费方（保留以防回滚）。
 
 - **Tool config persistence**: Host-side config persistence via volume mounts + symlinks: gh (`~/.config/gh` → `/opt/gh-config`, symlinked in both Hermes and claude-code), opencode (`~/.config/opencode` → `/opt/opencode-config`, via `OPENCODE_CONFIG_DIR`), Claude Code (`~/.claude` → `/opt/claude-config`, symlinked), cc-connect (`~/.cc-connect` → `/opt/cc-config`, symlinked), lark-cli (`~/.lark-cli` → `/opt/lark-config`, symlinked), himalaya (`~/.hermes/.config/himalaya/` on `/opt/data` volume, auto-generated by entrypoint wrapper from `EMAIL_*` vars in `~/.hermes/.env`, symlinked to `/root/.config/himalaya` and `/opt/data/home/.config/himalaya`), ortie (`~/.hermes/.config/ortie/` on `/opt/data` volume, Outlook OAuth tokens + config from `EMAIL_OUTLOOK_*`, same symlink pattern), cardamum (`~/.hermes/.contacts/` on `/opt/data` volume, auto-generated by entrypoint wrapper with vdir backend, symlinked for root access). First-run initialization in `start.sh` seeds config from `.example` templates. cc-connect config uses `${VAR_NAME}` for env var substitution, filled at runtime by cc-connect itself. lark-cli profiles are auto-initialized by `entrypoint-wrapper.sh` from `LARK_CLI_APP_ID/SECRET` and `LARK_CLI_IDM_APP_ID/SECRET` env vars; OAuth authorization (`lark-cli auth login`) must be done manually after first deploy.
 
@@ -266,7 +302,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 - **Google Drive (rclone)**: rclone v1.69.2 is installed in the hermes image for direct Google Drive API uploads. OAuth token stored in `~/.hermes/rclone/rclone.conf` (chmod 600, not in git). Remote `gdrive:` is scoped to a target folder via `root_folder_id`. Hermes uses `rclone copy <pdf> gdrive:` to upload papers. Full setup guide: `docs/google-drive-rclone.md`.
 
-- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model mimo-v2.5-pro via xiaomi provider) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. Has full Zotero write access — paper-to-zotero pipeline downloads PDFs, uploads to Google Drive, and creates Zotero entries with linked_file attachments. Zotero query is via the shared zotero-mcp service (port 8002).
+- **Hermes coder Discord + Zotero**: hermes-coder (爱码士, port 8643, model deepseek-flash via deepseek provider) is connected to Discord via `DISCORD_BOT_TOKEN` env var. Access restricted to a single user via `DISCORD_ALLOWED_USERS`. This is a separate Discord Bot from OpenClaw's 虾酱. Has full Zotero write access — paper-to-zotero pipeline downloads PDFs, uploads to Google Drive, and creates Zotero entries with linked_file attachments. Zotero query is via the shared zotero-mcp service (port 8002).
 
 - **Zotero access model — write vs read-only**: 爱码士 (coder) has full write access via `ZOTERO_API_KEY` for paper injection. 道元 (daoyuan) has **read-only** access via `DAOYUAN_ZOTERO_API_KEY` — can query the library but cannot create/modify items. This separation is enforced at the Zotero API key level (read-only key only has "Allow library access", no write permission).
 
@@ -285,6 +321,8 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 - **Daily R&D Report (repo-scanner MCP + Hermes skill)**: git-contribution-stats collects 27 repos daily (GitHub + GitCode) into SQLite (`~/.myagentdata/repo-scanner/repos.sqlite`). A streamable HTTP MCP server (`repo-scanner-mcp`, port 8001) exposes `get_daily_report` / `query_commits` / `query_authors`. Hermes `daily-dev-report` skill calls MCP → DeepSeek LLM polish → Feishu private chat push. Cron: 07:45 launchd collection → 07:55 Hermes cron push. MCP config: `~/.hermes/config.yaml` (`mcp_servers.repo-scanner` + `platform_toolsets.cli`). Skill at `skills/daily-dev-report/SKILL.md`. Full design in `.claude/prds/daily-dev-report.prd.md`.
 
 - **Hermes web_search**: Hermes image installs the `ddgs` package (DuckDuckGo, no API key). `start.sh` calls `scripts/ensure_hermes_web_search.py`, which idempotently writes `web.search_backend: ddgs` into `~/.hermes/config.yaml` without overwriting an operator-chosen backend (`brave_free`). The helper uses surgical text edits (preserves comments and key order) and does not require host PyYAML. Four profiles share the image and default config. See `docs/hermes-channels.md`.
+
+- **DeepSeek V4.1 Flash（`deepseek-flash`）与 Hermes 底座版本的强耦合**: 三个 agent（爱玛士/爱码士/虾酱）主模型统一为 `deepseek-flash`（2026-09-10 发布的 V4.1 Flash，原生多模态、1M 上下文；旧的 V4 系列三支 id 均已下线，完整名单见 `tests/test_model_ids.py`）。⚠️ **旧底座（Hermes ≤ v0.18.2 / build 2026.7.7.2 / 镜像层 2026-07-20）会把这个 id 改写掉**：`hermes_cli/model_normalize.py` 有一张形状白名单（`^deepseek-v\d+…`）作为唯一的 DeepSeek 直通条件，canonical 的 `deepseek-flash` 没有版本段，落入兜底分支被代填；因它是 config 里的 default model，改写告警还被 `_model_is_default` 抑制。上游在源码注释里记为 **#107206**（现底座 v0.21.2 / 2026-09-11 起改为 `_DEEPSEEK_RETIRED_ALIASES` 退役别名折叠表，其余原样透传）。**注意**：被代填后实际服务哪个模型由**服务端别名表**决定（今天实测两个别名都落到 Flash 系），所以症状不是"必然降级"，而是"配置里写的 id 不保证原样到达线上"。**判据：`bash tests/test-hermes-normalize.sh` 必须绿**（底座回退到旧层会立刻变红）。同类守卫：`tests/test_model_ids.py`、`tests/test-cc-model-migration.sh`。
 
 - **Hermes profile 隔离，以及 `s6-log: unable to lock` 这条噪音（看到不必排查）**: 每个 hermes 容器都会启动**全部** profile 的 s6 gateway 服务树（default / coder / daoyuan / finance），随后由 `entrypoint-wrapper.sh` 的后台逻辑杀掉与本容器 `HERMES_PROFILE` 不匹配的那些，只留自己的（日志里会看到 `🚫 停止多余 gateway: …`）。四个容器共享同一个 `/opt/data` 卷，而各 profile 的日志目录 `$HERMES_HOME/logs/gateways/<profile>/`、连同一把 `lock` 文件都在该卷上 —— **多个容器会抢同一把锁，抢输的那条 `s6-log` fatal 退出、随后由 s6-supervise 重启**（各 profile 的 `log/run` 启动时都会先 `rm -f` 自己的 lock）。因此这条报错是**跨容器锁竞争**，与「报错的那个 profile 网关有没有在跑」**无关**：实测 `hermes-daoyuan` 报的是它**自己**的 `daoyuan/lock`，而同容器 `gateway-daoyuan` 是 `up`。**影响：不影响可用性**；抢锁切换的那个瞬间可能有日志行丢失（此处为推断，未实测）。观察命令要用绝对路径（`s6-svstat` **不在 PATH 里**）：`/command/s6-svstat /run/service/gateway-<profile>`。
 

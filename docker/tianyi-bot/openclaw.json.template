@@ -1,4 +1,5 @@
 {
+  "meta": {},
   "models": {
     "mode": "merge",
     "providers": {
@@ -53,16 +54,14 @@
       },
       "workspace": "/home/node/.openclaw/workspace"
     },
-    "list": [
-      {
-        "id": "tianyi-dev",
-        "default": true,
+    "entries": {
+      "tianyi-dev": {
         "workspace": "/home/node/.openclaw/workspace",
         "sandbox": {
           "mode": "off"
         }
       }
-    ]
+    }
   },
   "tools": {
     "profile": "coding",
@@ -104,7 +103,9 @@
       "groupPolicy": "open",
       "requireMention": true,
       "groupSessionScope": "group",
-      "streaming": true,
+      "streaming": {
+        "mode": "partial"
+      },
       "typingIndicator": true,
       "resolveSenderNames": false,
       "configWrites": false,
@@ -144,8 +145,7 @@
       "mode": "token"
     },
     "tailscale": {
-      "mode": "off",
-      "resetOnExit": false
+      "mode": "off"
     }
   },
   "plugins": {
