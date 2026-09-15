@@ -1,7 +1,7 @@
 """
 TDD tests for collect-agentops.py — AgentOps ledger auto-collection.
 
-Run: pytest tests/test-collect-agentops.py -v
+Run: pytest tests/test_collect_agentops.py -v
 """
 
 import json

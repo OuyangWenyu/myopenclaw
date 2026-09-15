@@ -193,14 +193,19 @@ docker compose run --rm --entrypoint "node" openclaw-gateway openclaw.mjs config
 
 **原因**：2026.3.31 因为 host 上运行的 `openclaw doctor --fix` 写出了 Docker 不认识的 streaming 配置格式，导致 gateway.err.log 在 3 个月内增长到 762MB（2380 万行重复错误），无人察觉。
 
-**升级流程**（当前 pin **`2026.9.1`**；三栈版本必须一致，守卫 `tests/test-openclaw-pins.sh` 钉着 5 处 pin + 实际部署版本）：
+**升级流程**（当前 pin **`2026.9.1`**；三栈版本必须一致，守卫 `tests/test-openclaw-pins.sh` 钉着 **9 个文件**的 pin + 实际部署版本）：
 
 ```bash
 # 1. 先在数据目录副本上演练迁移 —— 不过就不升
+#    ⚠️ 只覆盖主网关（~/.openclaw）；两个 bot 的数据目录按第 4 步各自演练
+#    退出码：0 = 通过，1 = 迁移校验失败，2 = 脚本自身错误（源配置缺失/镜像拉取失败）
+#    换目标版本：OPENCLAW_REHEARSE_TAG=<tag> bash scripts/rehearse-openclaw-migration.sh
 bash scripts/rehearse-openclaw-migration.sh
 
-# 2. 一次性更新全部 5 处 pin（漏改不会报错，只会静默跑旧版本）：
-#    .env / .env.zhixun-bot / .env.tianyi-bot + 两个 bot compose 的兜底默认值
+# 2. 一次性更新全部 9 个文件的 pin（漏改不会报错，只会静默跑旧版本）：
+#    3 个 .env          .env / .env.zhixun-bot / .env.tianyi-bot
+#    3 个 .example      同上三者（模板是新部署的唯一来源，漏改则新机跑旧版）
+#    3 个 compose 兜底   主 compose + 两个 bot compose 的 ${VAR:-默认值}
 bash tests/test-openclaw-pins.sh          # 改的过程中它会红，全改完才绿
 
 # 3. 主网关：停 → doctor --fix **连跑两遍** → validate → 起
@@ -234,7 +239,7 @@ docker compose up -d openclaw-gateway
 - **崩溃-重启会触发 crash-loop breaker**，之后通道**不再自动启动**（日志：`channel autostart suppressed by crash-loop breaker`）。补救：`gateway call channels.start --params '{"channel":"feishu"}'`，或等窗口（300s）过期后重启
 - **bot 的渲染产物必须带 `meta`，但不要声明版本**：2026.9.1 会把「没有 `meta` 的配置写入」判为可疑（`missing-meta-vs-last-good`）并回滚到上一份好配置 ⇒ **每次启动的渲染都被静默丢弃**，改模板、轮换 `.env.*-bot` 里的凭据都不会生效（实测：数据目录出现 `openclaw.json.clobbered.<ts>`）。用 `meta: {}` 即可 —— 判据只要求 `meta` 是对象。**但不要填 `lastTouchedVersion`**：那是「未来版本保护」的判据，比当前二进制新会让网关**拒绝启动**（服务模式 exit 78），于是「升级出问题 → 回滚镜像 tag」这最后一条退路会失效。
 - **渲染脚本决定形状的字段，只有目标版本的校验器说了算**：`render-config.mjs` 写 `channels.feishu.streaming`，2026.9.1 把它从布尔改成对象后，**每次渲染都是 schema-invalid**（模板里当时也有一份布尔 `"streaming": true`，已一并修正 —— 静态守卫本该抓到，只是当时没有针对该键的断言）。可靠断言是真跑一次目标版本的 `config validate`：守卫 `tests/test-bot-rendered-config.sh`（渲染两种取值再送校验，按**退出码 + 文本**双条件判定）。
-- 2.0 的 schema 重命名（守卫 `tests/test_openclaw_schema.py`）：`messages.tts`→**顶层 `tts`**、`gateway.nodes.denyCommands`→`gateway.nodes.commands.deny`、`tools.exec{security,ask}`→`{mode}`（`ask` ≡ `allowlist`/`on-miss`，见镜像内 `docs/tools/permission-modes.md`）、`agents.list`→按 id 键控的 `agents.entries`、`channels.feishu.streaming` 布尔→`{mode: partial|off}`
+- 2.0 的 schema 重命名（守卫 `tests/test_openclaw_schema.py`，钉的是「**旧名即 invalid**」那几条）：`messages.tts`→**顶层 `tts`**、`gateway.nodes.denyCommands`→`gateway.nodes.commands.deny`、`agents.list`→按 id 键控的 `agents.entries`、`channels.feishu.streaming` 布尔→`{mode: partial|off}`。另有一条**性质不同、别混进来**：`tools.exec{security,ask}`→`{mode}`（`ask` ≡ `allowlist`/`on-miss`，见镜像内 `docs/tools/permission-modes.md`）—— 旧键**仍然合法**（实测 `config validate` 不把它列为 retired），`doctor --fix` 只是把配置**归一**成 canonical 的 `{"mode": "ask"}`。两个模板已改用新形式，由 `tests/test_ops_defaults.py` 断言 `mode == "ask"` 钉住（防新部署比线上更松）
 
 **zhixun bot 配置独立**：zhixun 飞书机器人使用独立的 `openclaw.json`（位于 `~/.openclaw-zhixun/`），不与虾酱主配置共享。配置由 `render-config.mjs` 从 `openclaw.json.template` 渲染生成，凭据从 `.env.zhixun-bot` 注入。修改 zhixun bot 配置需在容器内操作：
 ```bash
@@ -243,7 +248,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 ## Architecture
 
-**Ten Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network (13 total including profile-gated containers). Plus two **separate bot stacks**: **zhixun** (`docker-compose.zhixun-bot.yml`, isolated `zhixun-bot-net`) and **tianyi** (`docker-compose.tianyi-bot.yml`, shares `myopenclaw-net`).
+**14 Docker services** orchestrated by `docker-compose.yml` on a shared `myopenclaw-net` bridge network (15 total including the profile-gated `openclaw-cli`). Plus two **separate bot stacks**: **zhixun** (`docker-compose.zhixun-bot.yml`, isolated `zhixun-bot-net`) and **tianyi** (`docker-compose.tianyi-bot.yml`, shares `myopenclaw-net`).
 
 0. **uptime-kuma** — Official `louislam/uptime-kuma:latest` image. Port 3001. Monitors all service HTTP endpoints + Docker container status via mounted Docker socket (ro). Alerts to Feishu group webhook. Resource limits: 512M/0.5 CPU. Full setup: `docs/monitoring.md`.
 
@@ -286,7 +291,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 ## Key Design Decisions
 
-- **Secret isolation**: Hermes holds its own keys; Claude Code holds its own keys; OpenClaw holds none of the personal key domains — the single exception is `XIAOMI_API_KEY`. All keys are configured in `.env`. Hermes keys blocked by its env blacklist (DEEPSEEK, OPENROUTER, OPENAI) are passed into the container via docker-compose, then materialized into `/opt/data/secrets/` files by the entrypoint wrapper (before Hermes starts), so opencode.json can reference them via `{file:}`. Keys not on the blacklist (GH_TOKEN→GITHUB_TOKEN, OPENCODE_API_KEY, LARK_CLI_APP_ID/SECRET, LARK_CLI_IDM_APP_ID/SECRET) pass through `.env` + `env_passthrough`. Claude Code keys (DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, GITHUB_TOKEN, CC_CONNECT_FEISHU_APP_ID/SECRET) are passed directly to the claude-code container. `ANTHROPIC_API_KEY` is set from `DEEPSEEK_API_KEY` by the entrypoint; `ANTHROPIC_BASE_URL` defaults to DeepSeek's Anthropic-compatible endpoint (`https://api.deepseek.com/anthropic`). `XIAOMI_API_KEY` (小米 MiMo) 唯一的消费方是 openclaw-gateway 的 **虾酱 TTS 语音回复**（`mimo-v2.5-tts`，见 `openclaw/config/openclaw.json.example` messages.tts）—— 三个 agent 的主模型已切至 `deepseek-flash`，hermes / hermes-coder 上的该注入目前无消费方（保留以防回滚）。
+- **Secret isolation**: Hermes holds its own keys; Claude Code holds its own keys; OpenClaw holds none of the personal key domains — the single exception is `XIAOMI_API_KEY`. All keys are configured in `.env`. Hermes keys blocked by its env blacklist (DEEPSEEK, OPENROUTER, OPENAI) are passed into the container via docker-compose, then materialized into `/opt/data/secrets/` files by the entrypoint wrapper (before Hermes starts), so opencode.json can reference them via `{file:}`. Keys not on the blacklist (GH_TOKEN→GITHUB_TOKEN, OPENCODE_API_KEY, LARK_CLI_APP_ID/SECRET, LARK_CLI_IDM_APP_ID/SECRET) pass through `.env` + `env_passthrough`. Claude Code keys (DEEPSEEK_API_KEY, ANTHROPIC_API_KEY, ANTHROPIC_BASE_URL, GITHUB_TOKEN, CC_CONNECT_FEISHU_APP_ID/SECRET) are passed directly to the claude-code container. `ANTHROPIC_API_KEY` is set from `DEEPSEEK_API_KEY` by the entrypoint; `ANTHROPIC_BASE_URL` defaults to DeepSeek's Anthropic-compatible endpoint (`https://api.deepseek.com/anthropic`). `XIAOMI_API_KEY` (小米 MiMo) 唯一的消费方是 openclaw-gateway 的 **虾酱 TTS 语音回复**（`mimo-v2.5-tts`，见 `openclaw/config/openclaw.json.example` 的**顶层 `tts` 段** —— 2.0 起已从 `messages.tts` 迁出）—— 三个 agent 的主模型已切至 `deepseek-flash`，hermes / hermes-coder 上的该注入目前无消费方（保留以防回滚）。
 
 - **Tool config persistence**: Host-side config persistence via volume mounts + symlinks: gh (`~/.config/gh` → `/opt/gh-config`, symlinked in both Hermes and claude-code), opencode (`~/.config/opencode` → `/opt/opencode-config`, via `OPENCODE_CONFIG_DIR`), Claude Code (`~/.claude` → `/opt/claude-config`, symlinked), cc-connect (`~/.cc-connect` → `/opt/cc-config`, symlinked), lark-cli (`~/.lark-cli` → `/opt/lark-config`, symlinked), himalaya (`~/.hermes/.config/himalaya/` on `/opt/data` volume, auto-generated by entrypoint wrapper from `EMAIL_*` vars in `~/.hermes/.env`, symlinked to `/root/.config/himalaya` and `/opt/data/home/.config/himalaya`), ortie (`~/.hermes/.config/ortie/` on `/opt/data` volume, Outlook OAuth tokens + config from `EMAIL_OUTLOOK_*`, same symlink pattern), cardamum (`~/.hermes/.contacts/` on `/opt/data` volume, auto-generated by entrypoint wrapper with vdir backend, symlinked for root access). First-run initialization in `start.sh` seeds config from `.example` templates. cc-connect config uses `${VAR_NAME}` for env var substitution, filled at runtime by cc-connect itself. lark-cli profiles are auto-initialized by `entrypoint-wrapper.sh` from `LARK_CLI_APP_ID/SECRET` and `LARK_CLI_IDM_APP_ID/SECRET` env vars; OAuth authorization (`lark-cli auth login`) must be done manually after first deploy.
 
@@ -322,11 +327,13 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 - **Hermes web_search**: Hermes image installs the `ddgs` package (DuckDuckGo, no API key). `start.sh` calls `scripts/ensure_hermes_web_search.py`, which idempotently writes `web.search_backend: ddgs` into `~/.hermes/config.yaml` without overwriting an operator-chosen backend (`brave_free`). The helper uses surgical text edits (preserves comments and key order) and does not require host PyYAML. Four profiles share the image and default config. See `docs/hermes-channels.md`.
 
-- **DeepSeek V4.1 Flash（`deepseek-flash`）与 Hermes 底座版本的强耦合**: 三个 agent（爱玛士/爱码士/虾酱）主模型统一为 `deepseek-flash`（2026-09-10 发布的 V4.1 Flash，原生多模态、1M 上下文；旧的 V4 系列三支 id 均已下线，完整名单见 `tests/test_model_ids.py`）。⚠️ **旧底座（Hermes ≤ v0.18.2 / build 2026.7.7.2 / 镜像层 2026-07-20）会把这个 id 改写掉**：`hermes_cli/model_normalize.py` 有一张形状白名单（`^deepseek-v\d+…`）作为唯一的 DeepSeek 直通条件，canonical 的 `deepseek-flash` 没有版本段，落入兜底分支被代填；因它是 config 里的 default model，改写告警还被 `_model_is_default` 抑制。上游在源码注释里记为 **#107206**（现底座 v0.21.2 / 2026-09-11 起改为 `_DEEPSEEK_RETIRED_ALIASES` 退役别名折叠表，其余原样透传）。**注意**：被代填后实际服务哪个模型由**服务端别名表**决定（今天实测两个别名都落到 Flash 系），所以症状不是"必然降级"，而是"配置里写的 id 不保证原样到达线上"。**判据：`bash tests/test-hermes-normalize.sh` 必须绿**（底座回退到旧层会立刻变红）。同类守卫：`tests/test_model_ids.py`、`tests/test-cc-model-migration.sh`。
+- **DeepSeek V4.1 Flash（`deepseek-flash`）与 Hermes 底座版本的强耦合**: 三个 agent（爱玛士/爱码士/虾酱）主模型统一为 `deepseek-flash`（2026-09-10 发布的 V4.1 Flash，原生多模态、1M 上下文；旧的 V4 系列三支 id 均已下线，完整名单见 `tests/test_model_ids.py`）。⚠️ **旧底座（Hermes ≤ v0.18.2 / build 2026.7.7.2 / 镜像层 2026-07-20）会把这个 id 改写掉**：`hermes_cli/model_normalize.py` 有一张形状白名单（`^deepseek-v\d+…`）作为唯一的 DeepSeek 直通条件，canonical 的 `deepseek-flash` 没有版本段，落入兜底分支被代填；因它是 config 里的 default model，改写告警还被 `_model_is_default` 抑制。上游在源码注释里记为 **#107206**（现底座 v0.21.2 / 2026-09-11 起改为 `_DEEPSEEK_RETIRED_ALIASES` 退役别名折叠表，其余原样透传）。**注意**：被代填后实际服务哪个模型由**服务端别名表**决定（今天实测两个别名都落到 Flash 系），所以症状不是"必然降级"，而是"配置里写的 id 不保证原样到达线上"。**判据：`bash tests/test-hermes-normalize.sh` 必须绿**（底座回退到旧层会立刻变红）。迁移既有 profile 的配置由 `scripts/ensure_hermes_model.py` 幂等完成 —— 文本手术改写、只改已知历史取值（`mimo-v2.5`(-pro) 与非 canonical 的 `deepseek-v*`），不覆盖操作者手选的其他模型，与 `ensure_hermes_web_search.py` 同一套路。同类守卫：`tests/test_model_ids.py`、`tests/test-cc-model-migration.sh`。
 
 - **Hermes profile 隔离，以及 `s6-log: unable to lock` 这条噪音（看到不必排查）**: 每个 hermes 容器都会启动**全部** profile 的 s6 gateway 服务树（default / coder / daoyuan / finance），随后由 `entrypoint-wrapper.sh` 的后台逻辑杀掉与本容器 `HERMES_PROFILE` 不匹配的那些，只留自己的（日志里会看到 `🚫 停止多余 gateway: …`）。四个容器共享同一个 `/opt/data` 卷，而各 profile 的日志目录 `$HERMES_HOME/logs/gateways/<profile>/`、连同一把 `lock` 文件都在该卷上 —— **多个容器会抢同一把锁，抢输的那条 `s6-log` fatal 退出、随后由 s6-supervise 重启**（各 profile 的 `log/run` 启动时都会先 `rm -f` 自己的 lock）。因此这条报错是**跨容器锁竞争**，与「报错的那个 profile 网关有没有在跑」**无关**：实测 `hermes-daoyuan` 报的是它**自己**的 `daoyuan/lock`，而同容器 `gateway-daoyuan` 是 `up`。**影响：不影响可用性**；抢锁切换的那个瞬间可能有日志行丢失（此处为推断，未实测）。观察命令要用绝对路径（`s6-svstat` **不在 PATH 里**）：`/command/s6-svstat /run/service/gateway-<profile>`。
 
 - **Hermes image rebuild**: ✅ Fixed 2026-07-20 — cardamum pin updated to `771879c` (2026-07-18). OSError patch removed (fixed upstream in v0.18.2). Entrypoint now hands off to s6-overlay `/init` instead of deprecated `entrypoint.sh`. Image rebuilds clean with `docker compose build hermes`.
+
+- **tirith 预执行安全扫描器 —— 宿主与容器共用同一个二进制文件**: Hermes 把 tirith 装在 `$HERMES_HOME/bin/tirith`，而 `~/.hermes` **既是宿主目录、又是容器挂载的 `/opt/data`** —— 两个平台写的是同一个文件，谁后写谁赢。宿主侧一旦写入 macOS 二进制（apple-darwin），容器内每次 spawn 都失败；`tools/tirith_security.py` 在 3 次失败后打开熔断器，**该进程余下时间直接 `return allow`** —— 即 `security.tirith_enabled: true` 表面为真、实际全放行，日志里只留一条易被忽略的 spawn 失败。这是**工具静默降级**的典型：配置看起来是对的，防护却不存在。判据 `bash tests/test-tirith-binary.sh` —— 它不只验「文件在」，还验「是 Linux ELF（非错平台二进制）」与「恶意样例真的被拦（非 fail-open 放行）」。巡警：`scripts/collect_agentops.py` 的 tirith 信号（见 `docs/agentops.md`）。**回滚**：宿主上 `mv ~/.hermes/bin/tirith.macos-arm64.bak ~/.hermes/bin/tirith` 即恢复原状。
 
 ## Network & DNS
 
@@ -350,9 +357,9 @@ When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains,
 - `openclaw-zhixun/workspace/` — zhixun bot agent policy files (AGENTS.md, SOUL.md)
 - `openclaw-tianyi/workspace/` — tianyi bot agent policy files (AGENTS.md, SOUL.md)
 - `hermes/scripts/`, `openclaw/scripts/`, `claude/scripts/` — per-service backup scripts, mounted read-only into backup-cron
-- `scripts/` — top-level orchestration scripts (start, stop, restore, cloud setup, launchd, start-zhixun-bot)
+- `scripts/` — top-level orchestration scripts (start, stop, restore, cloud setup, launchd, start-zhixun-bot, rehearse-openclaw-migration, ensure_hermes_model, ensure_hermes_web_search)
 - `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, agentops, healthchecks）
 - `skills/` — 执行层 skill（morning-triage-v2 等 Hermes cron skill）
-- `tests/` — 守卫测试（pytest `test_*.py` + bash `test-*.sh`）。目前**没有 CI 在跑它们**，需手动执行：`uv run --with pytest --with pyyaml pytest tests/ -q` 与 `bash tests/test-*.sh`
+- `tests/` — 守卫测试。Python 侧（`test_*.py`，**统一用下划线** —— pytest 默认只收 `test_*.py`/`*_test.py`，用连字符会静默不被收集）与 bash 侧（`test-*.sh`）分开跑：`uv run --with pytest --with pyyaml pytest tests/ -q`（当前 **152 项**）与 `for t in tests/test-*.sh; do bash "$t" || echo "FAIL $t"; done`。**没有 CI 在跑它们**（`.github/workflows/docs.yml` 只构建文档），全靠手动 —— 改过模板 / pin / 模型名后务必自己跑一遍。另有 `scripts/tests/test-start-sh-optional-greps.sh` 守卫 start.sh 的缺键容错
 - `.secrets/` — encrypted via git-crypt (hermes.env.example, openclaw.env.example)
 - All scripts use `set -euo pipefail` and Chinese-language output/emojis

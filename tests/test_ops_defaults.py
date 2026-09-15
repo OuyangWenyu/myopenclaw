@@ -50,8 +50,9 @@ class TestDailyBackupDefault:
 class TestOpenclawExecDefault:
     """exec 策略不得比线上更松 —— 模板是新建部署的唯一来源。
 
-    线上 `~/.openclaw/openclaw.json` 早已被手工加固为 `allowlist` / `on-miss`，而主模板
-    长期停留在 `full` / `off`；tianyi 模板则**连 exec 段都没有** —— 而 OpenClaw 对
+    线上 `~/.openclaw/openclaw.json` 早已被手工加固，2.0 的 `doctor --fix` 又把它归一成
+    canonical 形式 `{"mode": "ask"}`（等价于旧键 `security=allowlist` + `ask=on-miss`）。
+    而主模板长期停留在 `full` / `off`；tianyi 模板则**连 exec 段都没有** —— 而 OpenClaw 对
     coding profile 的内置默认恰恰是最松的一档（镜像内 `DEFAULT_SECURITY = "full"`、
     `DEFAULT_ASK = "off"`，实测于 `dist/exec-approvals-*.js`）。tianyi 又同时是
     coding profile + 无 agent 级 tools.allow 收窄 + `sandbox.mode: "off"` +
@@ -72,14 +73,12 @@ class TestOpenclawExecDefault:
     def _assert_hardened(self, exec_cfg, label):
         assert exec_cfg is not None, (
             f"{label} 没有 exec 段 —— OpenClaw 对 coding profile 的内置默认是 "
-            "full/off，等于默认放开无确认的全量 shell"
+            "最松的一档，等于默认放开无确认的全量 shell"
         )
-        assert exec_cfg["security"] == "allowlist", (
-            f"{label} exec.security 是 {exec_cfg['security']!r}，应为 'allowlist'；"
-            "full 意味着新部署默认放开全量 shell"
-        )
-        assert exec_cfg["ask"] == "on-miss", (
-            f"{label} exec.ask 是 {exec_cfg['ask']!r}，不得默认跳过确认"
+        assert exec_cfg.get("mode") == "ask", (
+            f"{label} exec.mode 是 {exec_cfg.get('mode')!r}，应为 'ask'。"
+            "该档位等价于旧键 security=allowlist + ask=on-miss（2.0 起 doctor 会"
+            "把旧键归一成 mode）；更松的取值意味着新部署默认放开无确认的全量 shell"
         )
 
     def test_main_template_exec_matches_hardened_value(self):

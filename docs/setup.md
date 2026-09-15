@@ -25,6 +25,7 @@ cp .env.example .env
 | 变量 | 必填？ | 说明 |
 |------|--------|------|
 | `DEEPSEEK_API_KEY` | **推荐** | DeepSeek API Key，Claude Code 和 OpenClaw 默认模型使用 |
+| `XIAOMI_API_KEY` | 可选 | 小米 MiMo API Key，**仅**虾酱的 TTS 语音回复用（`mimo-v2.5-tts`）；不填则该能力不可用，其余 agent 已不依赖 |
 | `GLM_API_KEY` | 可选 | 智谱 API Key，Hermes 备用模型 |
 | `CC_CONNECT_FEISHU_APP_ID` / `SECRET` | 可选 | cc-connect 飞书应用凭证 |
 | `GH_TOKEN` | 可选 | GitHub PAT，gh CLI 认证用 |

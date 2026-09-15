@@ -2,7 +2,7 @@
 
 > 本文是 AgentOps 健康采集的详细说明。全部定时任务的总览见 [调度系统](scheduling.md)。
 
-每天 07:45 自动采集 5 种系统健康信号，写入 ledger 供晨间四签（morning-triage-v2）消费。
+每天 07:45 自动采集 6 种系统健康信号，写入 ledger 供晨间四签（morning-triage-v2）消费。
 
 ## 采集的信号
 
@@ -13,6 +13,7 @@
 | 磁盘使用率 | `df -P /System/Volumes/Data` | > 85% |
 | 网关错误循环 | `scripts/check-gateway-errors.sh --json` | 检测到重复错误 |
 | 容器健康状态 | `docker compose ps` JSON 中的 `(unhealthy)` 状态 | 任何 unhealthy |
+| **tirith 安全扫描器不可用** | 读 `~/.hermes/bin/tirith*` 前 4 字节魔数 | 非 `\x7fELF`（如 macOS 二进制）即告警 |
 
 ## 调度
 

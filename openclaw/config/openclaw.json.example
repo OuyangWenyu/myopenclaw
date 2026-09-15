@@ -89,8 +89,7 @@
   "tools": {
     "profile": "coding",
     "exec": {
-      "security": "allowlist",
-      "ask": "on-miss"
+      "mode": "ask"
     }
   },
   "commands": {
