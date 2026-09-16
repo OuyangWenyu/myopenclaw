@@ -363,6 +363,34 @@ services:
           memory: 256M
           cpus: "0.5"
 
+  # ── paper-queue MCP（论文清单）────────────────────────────────
+  # ⚠️ 队列目录**只挂给这个容器**，openclaw-gateway 不挂 —— 虾酱（LLM 驱动、可被
+  # 提示注入）实测能 read/write 那个目录，挂在一起时它可以绕开一切校验直接改库。
+  # 搬出来之后它只能走这个 MCP 接口，签名与身份校验在那里生效。
+  paper-queue-mcp:
+    build:
+      context: ./docker/paper-queue-mcp
+      dockerfile: Dockerfile
+    image: myopenclaw/paper-queue-mcp:latest
+    container_name: paper-queue-mcp
+    restart: unless-stopped
+    ports:
+      - "${PAPER_QUEUE_MCP_PORT:-8003}:8003"
+    volumes:
+      - ${HOME}/.myagentdata/paper-queue:/data
+    environment:
+      - PAPER_QUEUE_DB=/data/queue.sqlite
+      # 与插件共享的归属签名密钥（同一份写在 openclaw.json 的插件 config 里）。
+      # 两边必须一致，否则每次写入都会被拒 —— 有守卫钉着。
+      - PAPER_QUEUE_ACTOR_SECRET=${PAPER_QUEUE_ACTOR_SECRET:-}
+    networks:
+      - myopenclaw-net
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: "0.5"
+
   # ── OpenClaw gateway ─────────────────────────────────────────
   openclaw-gateway:
     image: ${OPENCLAW_IMAGE:-ghcr.io/openclaw/openclaw:2026.9.1}
@@ -373,6 +401,9 @@ services:
       - "${OPENCLAW_PORT:-18789}:18789"
     volumes:
       - ${HOME}/.openclaw:/home/node/.openclaw
+      # 论文清单的库**刻意不挂在这里**：虾酱实测能 read/write 那个目录（exec 被
+      # allowlist 挡住，文件工具没有），挂在一起它就能绕开校验直接改库。队列目录
+      # 只挂给 paper-queue-mcp，虾酱只能走 MCP 接口。
       - ./openclaw/scripts/fix-host-paths.sh:/fix-host-paths.sh:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
@@ -460,6 +491,12 @@ services:
       - ${HOME}/.claude:/root/.claude:ro
       - ${HOME}/.cc-connect:/root/.cc-connect:ro
       - ${HOME}/.myagentdata:/.myagentdata:ro
+      # 心跳目录：窄口径 RW。整个 /.myagentdata 是只读挂载，但备份跑完要往这里
+      # 写一份心跳供宿主的 collect_agentops.py 读 —— 心跳**不能**放云盘目录：
+      # 实测云盘对宿主进程的可见性按进程上下文分裂（launchd 能 readdir 云盘根却
+      # 读不了文件，交互式 shell 反过来），只有本地路径两边都读得到。
+      # 只放开这一个子目录，不把整个 agent 数据目录变成可写。
+      - ${HOME}/.myagentdata/agentops:/.agentops:rw
       - ${BACKUP_ROOT:-/tmp/myopenclaw-backups}:/backup:rw
       - ./hermes/scripts:/hermes-scripts:ro
       - ./openclaw/scripts:/openclaw-scripts:ro

@@ -127,6 +127,21 @@
       }
     }
   },
+  "mcp": {
+    "servers": {
+      "paper-queue": {
+        "url": "http://paper-queue-mcp:8003/mcp",
+        "transport": "streamable-http",
+        "connectionTimeoutMs": 10000,
+        "requestTimeoutMs": 30000
+      }
+    }
+  },
+  "skills": {
+    "entries": {
+      "paper-fetch": { "enabled": false }
+    }
+  },
   "channels": {
     "discord": {
       "enabled": false,

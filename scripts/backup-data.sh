@@ -30,8 +30,23 @@ LATEST="${BACKUP_ROOT}/data/latest"
 mkdir -p "${DEST}"
 echo "   📂 备份目标: ${DEST}"
 
-rsync -a --delete "${DATA_ROOT}/" "${DEST}/"
+# 排除 paper-queue 的裸 SQLite 及其 -wal/-shm：WAL 模式下最新提交可能还在 -wal 里，
+# rsync 只是某一瞬间的文件视图，直接拷会得到不一致的副本。下面用 sqlite3 .backup 热备。
+rsync -a --delete --exclude='paper-queue/queue.sqlite*' "${DATA_ROOT}/" "${DEST}/"
 echo "   ✅ 快照完成: ${DEST}"
+
+# ── paper-queue/queue.sqlite（论文清单，虾酱写 / mylibrary 读）──────
+PQ_SQLITE_SRC="${DATA_ROOT}/paper-queue/queue.sqlite"
+if [[ -f "${PQ_SQLITE_SRC}" ]]; then
+  mkdir -p "${DEST}/paper-queue"
+  if command -v sqlite3 &>/dev/null; then
+    sqlite3 "${PQ_SQLITE_SRC}" ".backup '${DEST}/paper-queue/queue.sqlite'"
+    echo "   ✅ SQLite 热备完成 (paper-queue)"
+  else
+    echo "   ❌ sqlite3 未安装，无法安全备份论文清单库" >&2
+    exit 1
+  fi
+fi
 
 # ── 同步到 latest/ ───────────────────────────────────────────
 rsync -a --delete "${DEST}/" "${LATEST}/"

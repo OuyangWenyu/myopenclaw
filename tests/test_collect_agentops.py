@@ -173,6 +173,15 @@ class TestDetectRestarts:
 # =============================================================
 
 
+def _probe(dt, *, unreadable=False, ok=True, source="heartbeat", detail=""):
+    """构造 BackupProbe，供 check_backup_freshness 的分支测试使用。"""
+    from scripts.collect_agentops import BackupProbe
+
+    return BackupProbe(
+        last_success=dt, source=source, unreadable=unreadable, ok=ok, detail=detail
+    )
+
+
 class TestBackupFreshness:
     """Detect stale backups."""
 
@@ -180,8 +189,8 @@ class TestBackupFreshness:
         """Backup within 24 hours should not generate item."""
         from scripts.collect_agentops import check_backup_freshness
 
-        with patch("scripts.collect_agentops._get_latest_backup_time") as mock_time:
-            mock_time.return_value = datetime.now() - timedelta(hours=6)
+        with patch("scripts.collect_agentops.probe_backup") as mock_probe:
+            mock_probe.return_value = _probe(datetime.now() - timedelta(hours=6))
             result = check_backup_freshness(backup_root="/fake/backup", threshold_hours=24)
             assert len(result) == 0
 
@@ -189,8 +198,8 @@ class TestBackupFreshness:
         """Backup older than threshold should generate item."""
         from scripts.collect_agentops import check_backup_freshness
 
-        with patch("scripts.collect_agentops._get_latest_backup_time") as mock_time:
-            mock_time.return_value = datetime.now() - timedelta(hours=48)
+        with patch("scripts.collect_agentops.probe_backup") as mock_probe:
+            mock_probe.return_value = _probe(datetime.now() - timedelta(hours=48))
             result = check_backup_freshness(backup_root="/fake/backup", threshold_hours=24)
             assert len(result) == 1
             assert "备份" in result[0]["title"]
@@ -200,11 +209,45 @@ class TestBackupFreshness:
         """No backup dir should generate alert item."""
         from scripts.collect_agentops import check_backup_freshness
 
-        with patch("scripts.collect_agentops._get_latest_backup_time") as mock_time:
-            mock_time.return_value = None  # No backup found
+        with patch("scripts.collect_agentops.probe_backup") as mock_probe:
+            mock_probe.return_value = _probe(None, source="none")
             result = check_backup_freshness(backup_root="/nonexistent", threshold_hours=24)
             assert len(result) == 1
             assert result[0]["needs_human_decision"] is True
+
+    def test_unreadable_is_not_reported_as_missing(self):
+        """读不到 ≠ 没有。权限/IO 失败必须报「无法确认」，不能断言「无备份」。
+
+        历史缺陷：iterdir() 的 PermissionError 被吞掉后返回 None，与「真的没有备份」
+        走同一条分支，于是把「我不知道」说成了「没有」。
+        """
+        from scripts.collect_agentops import check_backup_freshness
+
+        with patch("scripts.collect_agentops.probe_backup") as mock_probe:
+            mock_probe.return_value = _probe(
+                None, unreadable=True, detail="备份目录不可读（Operation not permitted）"
+            )
+            result = check_backup_freshness(backup_root="/fake/backup", threshold_hours=24)
+
+        assert len(result) == 1
+        assert "无法确认" in result[0]["title"]
+        assert "未找到" not in result[0]["title"]
+        assert "Operation not permitted" in result[0]["evidence"]
+
+    def test_failed_run_is_not_reported_as_stale(self):
+        """心跳说这次跑失败了 —— 报「失败」，别报成「过期」。"""
+        from scripts.collect_agentops import check_backup_freshness
+
+        with patch("scripts.collect_agentops.probe_backup") as mock_probe:
+            mock_probe.return_value = _probe(
+                datetime.now() - timedelta(minutes=5),
+                ok=False,
+                detail="failed=[openclaw]",
+            )
+            result = check_backup_freshness(backup_root="/fake/backup", threshold_hours=24)
+
+        assert len(result) == 1
+        assert "失败" in result[0]["title"]
 
 
 # =============================================================
@@ -705,6 +748,239 @@ class TestCheckTirithBinary:
 
         with patch("scripts.collect_agentops.TIRITH_BIN_DIR", tmp_path / "absent"):
             assert check_tirith_binary() == []
+
+
+# =============================================================
+# Test Suite: 备份探测 —— 快照目录名
+# =============================================================
+
+
+def _snapshot(root, service, name):
+    d = Path(root) / service / name
+    d.mkdir(parents=True, exist_ok=True)
+    return d
+
+
+class TestSnapshotScan:
+    """按快照**目录名**判定备份时间。
+
+    这一组钉住的历史缺陷（2026-09-16）：探测曾要求 `latest` 是**符号链接**
+    （`is_symlink()`），而备份脚本用 `rsync -a --delete "${DEST}/" "${LATEST}/"`
+    建 `latest` —— 那是**真实目录**。于是 5/5 服务全部不匹配，恒定返回「无备份」，
+    58 次运行 58 次误报。同一版本里另一条错判是把 mtime 当备份时间，而 `rsync -a`
+    的 -t 会把目标目录 mtime 覆盖成源目录的（prune 逻辑早已因此改用目录名）。
+    """
+
+    def test_real_directory_latest_is_detected(self, tmp_path):
+        """latest 是普通目录 —— 必须照样数出来。"""
+        from scripts.collect_agentops import probe_backup
+
+        _snapshot(tmp_path, "hermes", "2026-09-16_020000")
+        (tmp_path / "hermes" / "latest").mkdir()
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=tmp_path / "absent.json")
+
+        assert p.last_success == datetime(2026, 9, 16, 2, 0, 0)
+        assert p.unreadable is False
+
+    def test_symlink_latest_is_also_fine(self, tmp_path):
+        """反过来：就算 latest 真是符号链接也不能出错。"""
+        from scripts.collect_agentops import probe_backup
+
+        snap = _snapshot(tmp_path, "hermes", "2026-09-15_020000")
+        (tmp_path / "hermes" / "latest").symlink_to(snap)
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=tmp_path / "absent.json")
+
+        assert p.last_success == datetime(2026, 9, 15, 2, 0, 0)
+
+    def test_latest_dir_alone_is_not_a_snapshot(self, tmp_path):
+        """只有 latest/、没有带时间戳的快照 ⇒ 仍然算「没有备份」。"""
+        from scripts.collect_agentops import probe_backup
+
+        (tmp_path / "hermes" / "latest").mkdir(parents=True)
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=tmp_path / "absent.json")
+
+        assert p.last_success is None
+        assert p.unreadable is False
+
+    def test_newest_across_services_wins(self, tmp_path):
+        from scripts.collect_agentops import probe_backup
+
+        _snapshot(tmp_path, "hermes", "2026-09-10_020000")
+        _snapshot(tmp_path, "openclaw", "2026-09-16_020000")
+        _snapshot(tmp_path, "claude", "2026-09-12_020000")
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=tmp_path / "absent.json")
+
+        assert p.last_success == datetime(2026, 9, 16, 2, 0, 0)
+
+    def test_mtime_is_ignored(self, tmp_path):
+        """把快照目录 mtime 改成很久以前，判据不能跟着变。"""
+        from scripts.collect_agentops import probe_backup
+
+        snap = _snapshot(tmp_path, "hermes", "2026-09-16_020000")
+        old = (datetime(2020, 1, 1)).timestamp()
+        os.utime(snap, (old, old))
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=tmp_path / "absent.json")
+
+        assert p.last_success == datetime(2026, 9, 16, 2, 0, 0)
+
+    def test_unparseable_dirs_are_skipped(self, tmp_path):
+        from scripts.collect_agentops import probe_backup
+
+        _snapshot(tmp_path, "hermes", "manual-backup")
+        _snapshot(tmp_path, "hermes", "2026-13-45_999999")
+        _snapshot(tmp_path, "openclaw", "2026-09-01_020000")
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=tmp_path / "absent.json")
+
+        assert p.last_success == datetime(2026, 9, 1, 2, 0, 0)
+
+    def test_missing_root_is_missing_not_unreadable(self, tmp_path):
+        from scripts.collect_agentops import probe_backup
+
+        p = probe_backup(backup_root=tmp_path / "nope", heartbeat=tmp_path / "absent.json")
+
+        assert p.last_success is None
+        assert p.unreadable is False
+
+    def test_path_that_is_a_file_is_unreadable(self, tmp_path):
+        """拿到的不是目录 ⇒ 这是「探测失败」，不是「没有备份」。"""
+        from scripts.collect_agentops import probe_backup
+
+        not_a_dir = tmp_path / "surprise"
+        not_a_dir.write_text("x")
+
+        p = probe_backup(backup_root=not_a_dir, heartbeat=tmp_path / "absent.json")
+
+        assert p.last_success is None
+        assert p.unreadable is True
+
+
+# =============================================================
+# Test Suite: 备份探测 —— 心跳
+# =============================================================
+
+
+class TestBackupHeartbeat:
+    """心跳是首选来源：它记的是「这次跑成功了吗」，不是一个目录看起来在不在。
+
+    心跳刻意放在云盘目录**之外**：实测云盘目录对宿主进程的可见性按进程上下文分裂 ——
+    launchd 能 readdir 云盘根目录但读不了里面的文件（EPERM），交互式 shell 反过来
+    （读得了文件、readdir 却 EPERM）。放在云盘里的信号总有一类宿主进程读不到。
+    """
+
+    @staticmethod
+    def _hb(path, **fields):
+        payload = {"status": "ok"}
+        payload.update(fields)
+        Path(path).write_text(json.dumps(payload))
+        return path
+
+    def test_heartbeat_wins_over_snapshot(self, tmp_path):
+        from scripts.collect_agentops import probe_backup
+
+        _snapshot(tmp_path, "hermes", "2026-01-01_000000")  # 很旧
+        hb = self._hb(
+            tmp_path / "hb.json",
+            epoch=int(datetime(2026, 9, 16, 2, 0, 0).timestamp()),
+        )
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=hb)
+
+        assert p.source == "heartbeat"
+        assert p.last_success == datetime(2026, 9, 16, 2, 0, 0)
+        assert p.ok is True
+
+    def test_epoch_beats_string_so_timezone_cannot_shift_it(self, tmp_path):
+        """容器跑 UTC、宿主跑 CST。绝对时刻只能靠 epoch，字符串会被时区解释歪。"""
+        from scripts.collect_agentops import probe_backup
+
+        moment = datetime(2026, 9, 16, 2, 0, 0)
+        hb = self._hb(
+            tmp_path / "hb.json",
+            epoch=int(moment.timestamp()),
+            timestamp="2026-09-16T02:00:00+00:00",  # 与 epoch 同刻、但字符串带 UTC 偏移
+        )
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=hb)
+
+        assert p.last_success == moment
+
+    def test_iso_timestamp_used_when_epoch_absent(self, tmp_path):
+        from scripts.collect_agentops import probe_backup
+
+        hb = self._hb(tmp_path / "hb.json", timestamp="2026-09-16T02:00:00")
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=hb)
+
+        assert p.last_success == datetime(2026, 9, 16, 2, 0, 0)
+
+    def test_absent_heartbeat_falls_back_to_snapshot(self, tmp_path):
+        from scripts.collect_agentops import probe_backup
+
+        _snapshot(tmp_path, "hermes", "2026-09-16_020000")
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=tmp_path / "absent.json")
+
+        assert p.source == "snapshot"
+        assert p.last_success == datetime(2026, 9, 16, 2, 0, 0)
+
+    def test_corrupt_heartbeat_falls_back_to_snapshot(self, tmp_path):
+        """损坏的心跳不能被当成「备份失败」，只能退回快照判据。"""
+        from scripts.collect_agentops import probe_backup
+
+        _snapshot(tmp_path, "hermes", "2026-09-16_020000")
+        hb = tmp_path / "hb.json"
+        hb.write_text("{ not json")
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=hb)
+
+        assert p.source == "snapshot"
+        assert p.last_success == datetime(2026, 9, 16, 2, 0, 0)
+        assert p.ok is True
+
+    def test_heartbeat_without_timestamp_falls_back(self, tmp_path):
+        from scripts.collect_agentops import probe_backup
+
+        _snapshot(tmp_path, "hermes", "2026-09-16_020000")
+        hb = self._hb(tmp_path / "hb.json")  # 没有 timestamp
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=hb)
+
+        assert p.source == "snapshot"
+
+    def test_failed_run_is_surfaced(self, tmp_path):
+        """本次跑挂了 —— 时间有了，但必须标成 not ok 并把失败服务带出来。"""
+        from scripts.collect_agentops import probe_backup
+
+        hb = self._hb(
+            tmp_path / "hb.json",
+            status="failed",
+            epoch=int(datetime(2026, 9, 16, 2, 0, 0).timestamp()),
+            failed=["openclaw", "data"],
+        )
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=hb)
+
+        assert p.ok is False
+        assert "openclaw" in p.detail and "data" in p.detail
+
+    def test_heartbeat_unreadable_does_not_become_a_failure_claim(self, tmp_path):
+        """心跳读不出来（权限）⇒ 退回快照，不能凭空断言备份失败。"""
+        from scripts.collect_agentops import probe_backup
+
+        _snapshot(tmp_path, "hermes", "2026-09-16_020000")
+        hb = tmp_path / "hb.json"
+        hb.mkdir()  # 是个目录 ⇒ read_text() 抛 IsADirectoryError(OSError)
+
+        p = probe_backup(backup_root=tmp_path, heartbeat=hb)
+
+        assert p.ok is True
+        assert p.source == "snapshot"
 
 
 if __name__ == "__main__":
