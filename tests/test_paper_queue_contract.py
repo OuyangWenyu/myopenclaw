@@ -109,10 +109,16 @@ class TestEnumEnforcement:
         with pytest.raises(sqlite3.IntegrityError):
             insert(conn, attribution_ambiguous=bad)
 
-    @pytest.mark.parametrize("source", ["single", "batched", "session_latest"])
+    @pytest.mark.parametrize("source", ["single", "batched", None])
     def test_accepts_documented_attribution_sources(self, conn, source):
         insert(conn, attribution_source=source)
         assert conn.execute("SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 1
+
+    def test_rejects_the_retired_session_latest_label(self, conn):
+        """v3 起 `session_latest` 已退役 —— 非用户触发的回合不再产生记录，
+        插件不绑定身份、写入被拒，没有"退回会话最近发言者"这条路。"""
+        with pytest.raises(sqlite3.IntegrityError):
+            insert(conn, attribution_source="session_latest")
 
     def test_accepts_documented_enum_values(self, conn):
         insert(conn, input_kind="doi", doi="10.1038/x", doi_source="user",

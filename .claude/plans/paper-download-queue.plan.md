@@ -27,7 +27,8 @@
 2. **身份由宿主注入，不经模型**（`message_received` 采集 → `before_tool_call` 注入）。
    *代价*：多一个插件要维护；插件挂了写入会被拒（fail closed，不会静默伪造）。
 3. **归属是 run 粒度**：同回合内后到的消息继承先到者的绑定。**如实标注**
-   `attribution_source ∈ {single, batched, session_latest}` + `attribution_ambiguous`，
+   `attribution_source ∈ {single, batched}`（更早的历史值在 schema v3 迁移时置 NULL）
+   + `attribution_ambiguous`，
    不静默。*代价*：多人同回合发言仍可能串台，只是**看得出来**。
 4. **去重键只从用户实际说的内容派生**：`inferred` 的 DOI 不参与。
    *代价*：标题类去重很弱（措辞不同即两条），真正的去重交消费方。

@@ -24,7 +24,11 @@
 import { definePluginEntry } from "openclaw/plugin-sdk/plugin-entry";
 import { createHmac } from "node:crypto";
 
-const TOOL_SUFFIXES = ["__paper_queue_add", "__paper_queue_list", "__paper_queue_cancel"];
+const TOOL_NAMES = ["paper_queue_add", "paper_queue_list", "paper_queue_cancel"];
+// MCP 工具名是 `<服务名>__<工具名>`；命名冲突时 OpenClaw 会加 `-2` 之类的后缀。
+// 按裸后缀匹配会在那种情况下**静默失配**（注入消失 → 写入被拒），所以用正则容忍后缀。
+const TOOL_PATTERN = `(?:^|__)(${TOOL_NAMES.join("|")})(?:-\\d+)?$`;
+const TOOL_RE = new RegExp(TOOL_PATTERN);
 
 // 网关是长期进程，这些表会一直长 —— 每个都设上限，超了丢最旧的（Map 保留插入序）。
 const MAX_CACHE = 500;
@@ -67,14 +71,19 @@ function str(value: unknown): string | null {
   return s || null;
 }
 
+/** 取本插件的工具动作（add / list / cancel）；不是本插件的工具返回 null。 */
+function queueAction(toolName: string): string | null {
+  const match = TOOL_RE.exec(toolName);
+  return match ? match[1].slice("paper_queue_".length) : null;
+}
+
 function isPaperQueueTool(toolName: string): boolean {
-  return TOOL_SUFFIXES.some((suffix) => toolName.endsWith(suffix));
+  return queueAction(toolName) !== null;
 }
 
 /** 签名覆盖的 item 字段。必须与服务端 mcp_server.py 的 ITEM_SIGNED_FIELDS 逐字一致。 */
 const ITEM_SIGNED_FIELDS = ["title", "doi", "doi_source", "arxiv_id", "url", "note", "raw_input"];
 const MAX_SIGNED_ITEMS = 50;
-const CANCEL_SUFFIX = "__paper_queue_cancel";
 
 /** 只在两边都是字符串时按原文签；非字符串一律记空串，保证跨语言一致。 */
 function signedItemValue(item: any, field: string): string {
@@ -84,7 +93,7 @@ function signedItemValue(item: any, field: string): string {
 
 /** 本次请求内容的规范字符串 —— 签名必须覆盖它，否则签名只是一枚可重放的 bearer 值。 */
 function signablePayload(toolName: string, params: any): string {
-  if (toolName.endsWith(CANCEL_SUFFIX)) return String(params?.request_key ?? "");
+  if (queueAction(toolName) === "cancel") return String(params?.request_key ?? "");
   const items = params?.items;
   if (!Array.isArray(items)) return "";
   return items
@@ -168,12 +177,19 @@ export default definePluginEntry({
         const sessionKey = str(c.sessionKey);
         if (!runId || !sessionKey) return;
 
-        const sender = bySession.get(sessionKey) ?? null;
         const seen = inboundSinceBind.get(sessionKey) ?? 0;
         inboundSinceBind.set(sessionKey, 0);
 
+        // 只有**用户消息触发**的回合才绑定身份。cron / heartbeat / 命令行注入的回合
+        // 没有入站消息，此时退回"会话最近发言者"等于瞎猜 —— 会把请求记到错误的人头上。
+        // 宁可不绑（工具调用拿不到身份 → 服务端拒绝写入），也不猜。
+        if (seen < 1) {
+          log("warn", `本回合无入站消息（非用户触发），不绑定身份，paper_queue_* 将被拒绝 runId=${runId}`);
+          return;
+        }
+        const sender = bySession.get(sessionKey) ?? null;
         if (!sender) {
-          log("warn", `本回合未找到入站发送者，paper_queue_* 将因缺少身份被拒绝 runId=${runId}`);
+          log("warn", `收到入站消息但未取到发送者，paper_queue_* 将因缺少身份被拒绝 runId=${runId}`);
           return;
         }
         remember(byRun, runId, sender);
@@ -218,19 +234,17 @@ export default definePluginEntry({
         const runId = str(c.runId);
         const sessionKey = str(c.sessionKey ?? "");
         const bound = runId ? byRun.get(runId) ?? null : null;
-        const fallback = sessionKey ? bySession.get(sessionKey) ?? null : null;
-        const sender = bound ?? fallback;
 
+        // 没有绑定就注入空身份，由服务端拒绝写入（fail closed）。
+        // **不再退回 bySession** —— 那正是"猜归属"的来源：非用户触发的回合会把请求
+        // 记到该会话最近发言者头上。宁可不写，不可写错。
+        //
         // 如实标注绑定来源，而不是"哪个表答的"——早先的版本就是后者，结果这个字段
-        // 在生产里恒为 message_id，把一个本该暴露低可信度的信号变成了摆设。
-        let source = "";
-        if (bound) {
-          source = (bound as Sender & { single?: boolean }).single === false
-            ? "batched"
-            : "single";
-        } else if (fallback) {
-          source = "session_latest";
-        }
+        // 在生产里恒为常量，把一个本该暴露低可信度的信号变成了摆设。
+        const source = bound
+          ? ((bound as Sender & { single?: boolean }).single === false ? "batched" : "single")
+          : "";
+        const sender = bound;
 
         const actorId = sender?.senderId ?? "";
         const messageRef = sender?.messageId ?? "";

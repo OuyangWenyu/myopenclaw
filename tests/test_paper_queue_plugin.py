@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 from pathlib import Path
 
 import pytest
@@ -150,14 +151,43 @@ class TestCrossFileConsistency:
                 f"server 读取 {param}，但插件没有注入它 —— 归属会静默失效"
             )
 
-    def test_every_server_tool_has_a_plugin_suffix(self, server):
-        suffixes = INDEX_TS.split("const TOOL_SUFFIXES", 1)[1].split("]", 1)[0]
+    def test_every_server_tool_is_matched(self, server):
+        """server 暴露的每个工具都必须能被插件的规则匹配到 —— 匹配不上 = 注入静默失效。"""
         for tool in server.TOOLS:
-            assert f'"__{tool["name"]}"' in suffixes, (
-                f"server 暴露 {tool['name']}，插件的后缀列表里没有它 —— 该工具的调用不会被注入身份"
+            assert _tool_pattern().search(f"paper-queue__{tool['name']}"), (
+                f"server 暴露 {tool['name']}，但插件的匹配规则认不出来"
             )
 
-    def test_suffix_matching_is_namespaced(self, server):
-        """MCP 工具名是 `<server>__<tool>`，裸名匹配会匹配不到。"""
-        for tool in server.TOOLS:
-            assert f'"__{tool['name']}"' in INDEX_TS
+    @pytest.mark.parametrize("name,expected", [
+        ("paper-queue__paper_queue_add", True),
+        ("paper-queue__paper_queue_list", True),
+        ("paper-queue__paper_queue_cancel", True),
+        # ⚠️ OpenClaw 在命名冲突时会给工具加 `-N` 后缀。早先按裸后缀匹配会在这里
+        # **静默失配**（注入消失 → 写入被拒），所以改用正则容忍它。
+        ("paper-queue__paper_queue_add-2", True),
+        ("other__paper_queue_list-10", True),
+        ("paper_queue_add", True),                      # 无命名空间时也认
+        ("paper-queue__paper_queue_addendum", False),   # 前缀相同但不是同一个工具
+        ("paper-queue__read", False),
+        ("paper-queue__paper_queue_delete", False),
+    ])
+    def test_tool_pattern_matches(self, name, expected):
+        assert bool(_tool_pattern().search(name)) is expected
+
+    def test_pattern_is_namespaced(self, server):
+        """MCP 工具名是 `<server>__<tool>` —— 规则必须认命名空间，也不能误伤同前缀的工具。"""
+        assert _tool_pattern().search("paper-queue__paper_queue_add")
+
+
+def _tool_pattern() -> "re.Pattern[str]":
+    """把 index.ts 里的 TOOL_PATTERN 抽出来，用 Python 的 re 编译后**真的去匹配**。
+
+    验的是行为而不是"某个字符串存在"：`(?:^|__)`、`-\\d+`、`$` 在 Python 与 JS
+    语义一致，所以这个模式在 Python 下的表现就是它在 JS 下的表现。
+    """
+    names = INDEX_TS.split("const TOOL_NAMES = [", 1)[1].split("]", 1)[0]
+    name_list = re.findall(r'"([^"]+)"', names)
+    raw = re.search(r"const TOOL_PATTERN = `(.+?)`;", INDEX_TS, re.S).group(1)
+    raw = raw.replace('${TOOL_NAMES.join("|")}', "|".join(name_list))
+    raw = raw.replace(r"\\d", r"\d")     # TS 模板里写 `\\d`，运行时字符串是 `\d`
+    return re.compile(raw)

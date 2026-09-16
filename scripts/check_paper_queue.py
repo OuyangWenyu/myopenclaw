@@ -40,6 +40,12 @@ DB_PATH = Path(os.environ.get(
 ))
 TZ_NAME = os.environ.get("TZ", "Asia/Shanghai")
 
+# 哨兵：server 首次建库时在库旁边留下。用来区分「库被删了」与「从来没建过库」——
+# 后者是正常的（没人用过），前者要报警。
+# ⚠️ 这个后缀必须与 mcp_server.py 的 SENTINEL_SUFFIX 一致；有守卫跨文件比对。
+SENTINEL_SUFFIX = ".initialized"
+SENTINEL_PATH = Path(str(DB_PATH) + SENTINEL_SUFFIX)
+
 TABLE = "paper_requests"
 
 # 检查器依赖的列。缺列说明库来自更早的 schema 或别的工具 —— 必须报出来，
@@ -57,7 +63,7 @@ VALID_INPUT_KINDS = {"title", "doi", "arxiv", "url"}
 VALID_DOI_SOURCES = {"user", "inferred"}
 # 与 schema.sql 的 CHECK 保持一致。改枚举时**三处一起改**（schema.sql / 这里 /
 # mcp_server.py 写入侧），漏一处就会对正常数据报假红 —— 真异常被淹没。
-VALID_ATTRIBUTION_SOURCES = {"single", "batched", "session_latest"}
+VALID_ATTRIBUTION_SOURCES = {"single", "batched"}
 
 # 与 schema.sql 的 CHECK 保持一致：严格定宽 YYYY-MM-DDTHH:MM:SSZ。
 # 带毫秒/偏移的值虽然"看着像 ISO"，却会让字典序范围查询静默漏记录。
@@ -236,6 +242,14 @@ def main() -> int:
     as_json = "--json" in sys.argv
 
     if not DB_PATH.exists():
+        # 哨兵（server 首次建库时留下）还在、库却没了 ⇒ 这是**被删**，不是"从没建过"。
+        # 两者在此之前表现完全一样，删库因此不会触发任何告警。
+        if SENTINEL_PATH.exists():
+            findings = [{"kind": "queue_deleted", "row_id": None,
+                         "detail": f"哨兵 {SENTINEL_PATH.name} 还在，但库文件不存在 —— "
+                                   "队列像是被删了（可从备份恢复）"}]
+            (emit_json if as_json else emit_human)("findings", findings, zero_counts())
+            return 1
         (emit_json if as_json else emit_human)("not_initialized", [], {})
         return 0
 

@@ -45,7 +45,7 @@ SERVER_VERSION = "0.1.0"
 TABLE = "paper_requests"
 # 必须与 schema.sql 的 `PRAGMA user_version` 一致。改表结构时两边一起 +1，
 # 否则老库不会被迁移（见 _migrate_if_stale）。
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 TS_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 # 与 schema.sql 的 CHECK 同一条规则：严格定宽 YYYY-MM-DDTHH:MM:SSZ。
 # 写侧由 DB 兜底，读侧（since/until）必须自己挡。
@@ -68,6 +68,21 @@ def resolve_db() -> Path:
     return Path(os.environ.get("PAPER_QUEUE_DB", DEFAULT_DB))
 
 
+SENTINEL_SUFFIX = ".initialized"
+
+
+def _touch_sentinel(db_path: Path) -> None:
+    """在库旁边留一个「曾经初始化过」的标记。
+
+    检查器靠它区分**「库被删了」**和**「从来没建过库」** —— 在此之前两者的表现都是
+    "打不开"，删库因此不触发任何告警。尽力而为：写不进去只告警，不影响工具调用。
+    """
+    try:
+        Path(str(db_path) + SENTINEL_SUFFIX).touch()
+    except OSError as exc:
+        print(f"⚠️  paper-queue: 无法写哨兵文件（删库将无法被检出）: {exc}", file=sys.stderr)
+
+
 def connect(path: Path | str | None = None) -> sqlite3.Connection:
     target = Path(path) if path else resolve_db()
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -76,6 +91,7 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode = WAL")
     conn.execute("PRAGMA busy_timeout = 5000")
     ensure_schema(conn)
+    _touch_sentinel(target)
     return conn
 
 
@@ -116,13 +132,14 @@ def _migrate_if_stale(conn: sqlite3.Connection) -> None:
         select_list = []
         for column in columns:
             if column == "attribution_source":
-                # v1 的 'message_id' 标签在生产里恒为常量（实际走的是会话兜底），
-                # 所以一律降级成 'session_latest' —— 保守、诚实，不假装当时是精确绑定。
+                # v3 起枚举只剩 single / batched。历史值（message_id / session_fallback /
+                # session_latest）都无法诚实地映射到这两档 —— v1 的 message_id 标签在生产里
+                # 恒为常量、实际走的是会话兜底；session_latest 本身就是要被淘汰的那一档。
+                # 一律置 NULL，表示"未记录"，不假装知道当时有多可信。
                 select_list.append(
-                    "CASE attribution_source"
-                    " WHEN 'message_id' THEN 'session_latest'"
-                    " WHEN 'session_fallback' THEN 'session_latest'"
-                    " ELSE attribution_source END")
+                    "CASE WHEN attribution_source IN"
+                    " ('message_id','session_fallback','session_latest')"
+                    " THEN NULL ELSE attribution_source END")
             else:
                 select_list.append(column)
         conn.execute(
@@ -285,6 +302,8 @@ ACTOR_ID_RE = re.compile(r"^\d{10,25}$")
 MAX_ITEMS = 50
 MAX_FIELD_CHARS = 2000
 MAX_SIGNED_ITEMS = 50
+# 单次 list 响应的字符上限：行数与字段各有上限，但相乘仍可能塞回约 1MB 进模型上下文。
+MAX_RESPONSE_CHARS = 100_000
 
 
 def _signed_item_value(item: dict, field: str) -> str:
@@ -606,6 +625,33 @@ def _text_result(payload, is_error: bool = False) -> dict:
     return {"content": [{"type": "text", "text": text}], "isError": is_error}
 
 
+def capped_list_payload(rows: list[dict]) -> dict:
+    """把清单结果裁到 MAX_RESPONSE_CHARS 以内。
+
+    行数与字段各有上限，但两者相乘仍可能让一次查询把约 1MB 塞回模型上下文 ——
+    既费钱又挤占上下文。超限时从**尾部**裁行并如实标注 `truncated`。
+    """
+    kept: list[dict] = []
+    used = 0
+    for row in rows:
+        size = len(json.dumps(row, ensure_ascii=False))
+        if kept and used + size > MAX_RESPONSE_CHARS:
+            break
+        kept.append(row)
+        used += size
+
+    payload = {"count": len(kept), "total": len(rows), "items": kept}
+    # 单行就超限时也得打标：那时我们会照返回它（返回空会被读成"清单是空的"），
+    # 但"响应超限"这件事本身必须让调用方知道。
+    if len(kept) < len(rows) or used > MAX_RESPONSE_CHARS:
+        payload["truncated"] = True
+        payload["note"] = (
+            f"结果过大，仅返回前 {len(kept)} 条（共 {len(rows)} 条）。"
+            "缩小 window 或传 limit 可看到其余部分。"
+            if len(kept) < len(rows) else "结果过大：单条即超出响应上限，仍返回该条。")
+    return payload
+
+
 def _call_tool(conn: sqlite3.Connection, name: str, args: dict) -> dict:
     actor = {k: args.get(k) for k in _ACTOR_PROPS if k in args}
     if name == "paper_queue_add":
@@ -623,7 +669,7 @@ def _call_tool(conn: sqlite3.Connection, name: str, args: dict) -> dict:
             include_cancelled=bool(args.get("include_cancelled")),
             limit=args.get("limit") or 50,
         )
-        return _text_result({"count": len(rows), "items": rows})
+        return _text_result(capped_list_payload(rows))
     if name == "paper_queue_cancel":
         error = actor_signature_error(name, args)
         if error:
@@ -668,6 +714,15 @@ def handle(req: dict, conn: sqlite3.Connection) -> dict | None:
 
 
 def main() -> int:
+    if "--migrate" in sys.argv:
+        # 给装机用：只把库升到当前 schema 就退出，不进入 stdio 循环。
+        # 没有这一步的话，迁移要等到**第一次工具调用**才跑 —— 在那之前检查器会把
+        # 存量老标签判成非法值（假红），而假红会淹没真异常。
+        conn = connect()
+        conn.close()
+        print(f"paper-queue: schema 已就绪（v{SCHEMA_VERSION}）")
+        return 0
+
     conn = connect()
     for line in sys.stdin:
         line = line.strip()

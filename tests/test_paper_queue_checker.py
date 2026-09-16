@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sqlite3
 import subprocess
 import sys
@@ -109,6 +110,43 @@ class TestExitCodes:
         r = run_checker(db, "--json")
         assert r.returncode == 0, r.stderr
         assert jsonify(r)["status"] == "ok"
+
+    def test_deleted_queue_is_detected(self, tmp_path, jsonify):
+        """**哨兵存在但库没了 = 被删**，不是"从没用过" —— 后者退 0，前者必须退 1。
+
+        在此之前两者表现完全一样，删库不会触发任何告警。
+        """
+        db = tmp_path / "q.sqlite"
+        make_valid_db(db)
+        # 模拟 server 建过库（留下哨兵），随后库被删
+        Path(str(db) + ".initialized").touch()
+        db.unlink()
+
+        r = run_checker(db, "--json")
+        assert r.returncode == 1
+        data = jsonify(r)
+        assert data["status"] == "findings"
+        assert {f["kind"] for f in data["findings"]} == {"queue_deleted"}
+
+    def test_never_initialized_is_not_a_finding(self, tmp_path, jsonify):
+        """两者都没有 = 还没人用过，退 0（不该报警）。"""
+        db = tmp_path / "q.sqlite"
+        r = run_checker(db, "--json")
+        assert r.returncode == 0
+        assert jsonify(r)["status"] == "not_initialized"
+
+    def test_sentinel_suffix_matches_the_server(self, tmp_path):
+        """跨文件：两边后缀不一致 = 删库检测静默失效。"""
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "pq_srv_for_sentinel", REPO_ROOT / "openclaw/skills/paper-queue/mcp_server.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        checker_src = CHECKER.read_text()
+        assert "SENTINEL_SUFFIX" in checker_src
+        assert module.SENTINEL_SUFFIX in checker_src, (
+            f"server 用 {module.SENTINEL_SUFFIX!r}，检查器里找不到 —— 删库检测会失效"
+        )
 
     def test_findings_exit_one(self, tmp_path):
         db = tmp_path / "q.sqlite"
@@ -253,3 +291,48 @@ class TestOutputShape:
         assert r.returncode == 0
         with pytest.raises(json.JSONDecodeError):
             json.loads(r.stdout)
+
+
+class TestEnumAgreement:
+    """枚举散落在三处：schema.sql 的 CHECK、检查器的常量、服务端写入的取值。
+
+    漏改一处就会**对正常数据假绿或假红** —— 这个缺陷已经犯过一次（schema 升 v3 时
+    忘了同步检查器，它把退役的 `session_latest` 当合法值，于是报"健康"）。所以钉死。
+    """
+
+    @staticmethod
+    def _schema_enum() -> set:
+        sql = (REPO_ROOT / "openclaw/skills/paper-queue/schema.sql").read_text()
+        body = re.search(r"attribution_source IN \(([^)]*)\)", sql).group(1)
+        return {v.strip().strip("'") for v in body.split(",")}
+
+    @staticmethod
+    def _checker_enum() -> set:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("pq_checker_enum", CHECKER)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return set(module.VALID_ATTRIBUTION_SOURCES)
+
+    def test_checker_matches_schema(self):
+        assert self._checker_enum() == self._schema_enum(), (
+            "检查器的枚举与 schema.sql 的 CHECK 不一致 —— 会假红（淹没真异常）或漏放坏值"
+        )
+
+    def test_plugin_produces_exactly_the_allowed_values(self):
+        """取值的**生产者**是插件（服务端只存注入进来的东西），所以对它断言。
+
+        插件算出来的标签必须正好落在 schema 允许的两档里 —— 多一个（如早先的
+        `session_latest`）写入就会被 DB 拒绝，表现是"记不下来"。
+        """
+        plugin_src = (REPO_ROOT / "openclaw" / "plugins" / "paper-queue-actor"
+                      / "index.ts").read_text()
+        for value in self._schema_enum():
+            assert f'"{value}"' in plugin_src, f"schema 允许 {value}，但插件从不产出它"
+        assert "session_latest" not in plugin_src, (
+            "v3 已退役的 session_latest 不应再出现在插件里"
+        )
+
+    def test_retired_labels_stay_retired(self):
+        """v3 退役的标签不能悄悄回到枚举里（它们证不出可信度，正是要淘汰的东西）。"""
+        assert not (self._schema_enum() & {"message_id", "session_fallback", "session_latest"})

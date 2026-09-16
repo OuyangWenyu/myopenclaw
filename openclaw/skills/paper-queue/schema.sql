@@ -20,7 +20,7 @@ PRAGMA busy_timeout = 5000;
 -- schema 版本。SQLite 改不了 CHECK 约束，所以只能靠重建表迁移 —— 见
 -- mcp_server.py 的 _migrate_if_stale()。**改动本文件的表结构时必须同时 +1**，
 -- 否则老库不会被迁移，新枚举值会被旧 CHECK 拒绝（表现是"每次写都失败"）。
-PRAGMA user_version = 2;
+PRAGMA user_version = 3;
 
 CREATE TABLE IF NOT EXISTS paper_requests (
   id                    INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -42,9 +42,10 @@ CREATE TABLE IF NOT EXISTS paper_requests (
   session_ref           TEXT,
   -- 归属可信度：single=本回合前只收到一条入站（能确定是谁触发的）
   --             batched=本回合前收到多条，归属取最新那条（可能张冠李戴）
-  --             session_latest=没绑上回合，退回会话最近一次入站
+  --             NULL=历史遗留（v3 之前写入的标签无法映射到上面两档，如实置空）
+  -- 非用户触发的回合（cron / heartbeat）不产生记录 —— 插件不绑定身份，写入会被拒。
   attribution_source    TEXT    CHECK (attribution_source IS NULL
-                                       OR attribution_source IN ('single','batched','session_latest')),
+                                       OR attribution_source IN ('single','batched')),
   attribution_ambiguous INTEGER NOT NULL DEFAULT 0 CHECK (attribution_ambiguous IN (0,1)),
 
   requested_at          TEXT    NOT NULL,

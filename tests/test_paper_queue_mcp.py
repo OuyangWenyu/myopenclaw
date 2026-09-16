@@ -497,6 +497,10 @@ class TestSchemaMigration:
         PRAGMA user_version = 0;
     """
 
+    # v2 的 CHECK 允许三档（含后来退役的 session_latest）
+    V2_SCHEMA = V1_SCHEMA.replace(
+        "('message_id','session_fallback')", "('single','batched','session_latest')")
+
     def test_version_in_schema_sql_matches_the_module(self, pq):
         """两处版本号必须一起改 —— 不一致的话老库永远不会被迁移。"""
         import re as _re
@@ -521,13 +525,36 @@ class TestSchemaMigration:
 
         assert list(conn.execute(
             "SELECT request_key, attribution_source FROM paper_requests")) == \
-            [("k1", "session_latest")], "v1 的标签是幌子（生产里恒为常量），应保守降级"
+            [("k1", None)], (
+                "v1 的标签是幌子（生产里恒为常量），v3 起枚举只剩 single/batched，"
+                "映射不过去就如实置 NULL = 未记录，不假装知道当时有多可信"
+            )
         assert conn.execute("PRAGMA user_version").fetchone()[0] == module.SCHEMA_VERSION
         # 迁移后必须能写新枚举 —— 这正是迁移存在的理由
         conn.execute(
             "INSERT INTO paper_requests (request_key,input_kind,raw_input,title,requester,"
             "requested_at,attribution_source) VALUES (?,?,?,?,?,?,?)",
             ("k2", "title", "t", "T", "1", "2026-09-16T00:00:00Z", "single"))
+        conn.close()
+
+    def test_migrates_v2_session_latest_to_null(self, tmp_path, monkeypatch):
+        """v2 → v3：`session_latest` 退役，存量行如实置 NULL。"""
+        db = tmp_path / "v2.sqlite"
+        conn = sqlite3.connect(db)
+        conn.executescript(self.V2_SCHEMA)
+        conn.execute("PRAGMA user_version = 2")
+        conn.execute(
+            "INSERT INTO paper_requests (request_key,input_kind,raw_input,title,requester,"
+            "requested_at,attribution_source) VALUES (?,?,?,?,?,?,?)",
+            ("k1", "title", "t", "T", "1", "2026-09-16T00:00:00Z", "session_latest"))
+        conn.commit()
+        conn.close()
+
+        module = _load(tmp_path, monkeypatch)
+        conn = sqlite3.connect(db)
+        module.ensure_schema(conn)
+        assert list(conn.execute(
+            "SELECT attribution_source FROM paper_requests")) == [(None,)]
         conn.close()
 
     def test_fresh_db_is_created_at_current_version(self, pq):
@@ -718,3 +745,50 @@ class TestStdioTransport:
         conn = sqlite3.connect(tmp_path / "q.sqlite")
         titles = [r[0] for r in conn.execute("SELECT title FROM paper_requests")]
         assert "Still Alive" in titles
+
+
+class TestInitSentinel:
+    """库被删必须能被查出来：server 首次建库时在库旁边留哨兵，检查器靠它区分
+    「被删」与「从没用过」—— 两者在此之前都是"打不开"，删库因此不会告警。"""
+
+    def test_connect_leaves_a_sentinel(self, pq, tmp_path):
+        conn = pq.connect()
+        conn.close()
+        assert Path(str(tmp_path / "queue.sqlite") + pq.SENTINEL_SUFFIX).exists()
+
+    def test_sentinel_is_idempotent(self, pq, tmp_path):
+        pq.connect().close()
+        pq.connect().close()
+        assert Path(str(tmp_path / "queue.sqlite") + pq.SENTINEL_SUFFIX).exists()
+
+
+class TestResponseCap:
+    """`list` 是唯一会把大量数据塞回**模型上下文**的地方 —— 行数与字段各有上限，
+    但相乘仍可能到约 1MB（既费钱又挤占上下文），所以整体也得封顶。"""
+
+    def test_oversized_list_is_truncated_and_flagged(self, pq):
+        pq.MAX_RESPONSE_CHARS = 2000          # 临时收紧，便于构造
+        conn = pq.connect()
+        pq.add_items(conn, [{"title": f"Paper {i:02d}", "note": "x" * 300}
+                            for i in range(20)], actor())
+        payload = pq.capped_list_payload(pq.list_items(conn, actor()))
+        assert payload["truncated"] is True
+        assert payload["total"] == 20
+        assert 1 <= payload["count"] < payload["total"]
+        assert "缩小 window" in payload["note"]
+
+    def test_small_list_is_not_flagged(self, pq):
+        conn = pq.connect()
+        pq.add_items(conn, [{"title": "One"}], actor())
+        payload = pq.capped_list_payload(pq.list_items(conn, actor()))
+        assert "truncated" not in payload
+        assert payload["count"] == payload["total"] == 1
+
+    def test_always_returns_at_least_one_row(self, pq):
+        """单行就超限时也不能返回空 —— 那会让调用方以为"清单是空的"。"""
+        pq.MAX_RESPONSE_CHARS = 10
+        conn = pq.connect()
+        pq.add_items(conn, [{"title": "Big", "note": "y" * 500}], actor())
+        payload = pq.capped_list_payload(pq.list_items(conn, actor()))
+        assert payload["count"] == 1
+        assert payload["truncated"] is True

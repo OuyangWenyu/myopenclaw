@@ -318,6 +318,11 @@ install_paper_queue() {
   # 跑守卫测试会在源码目录旁边留下 __pycache__，别把它带进运行时目录
   rm -rf "${dst}/__pycache__"
   echo "   ✅ paper-queue 已安装到 ~/.openclaw/skills + ~/.openclaw/extensions"
+
+  # 主动把库升到当前 schema。不跑这一步的话，迁移要等到**第一次工具调用**才发生 ——
+  # 在那之前存量老标签会被检查器判成非法值（假红淹没真异常）。
+  PAPER_QUEUE_DB="${HOME}/.myagentdata/paper-queue/queue.sqlite" \
+    python3 "${dst}/mcp_server.py" --migrate 2>&1 | sed 's/^/   /' || true
 }
 install_paper_queue
 
