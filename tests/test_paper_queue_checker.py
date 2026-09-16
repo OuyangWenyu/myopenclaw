@@ -26,7 +26,7 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 CHECKER = REPO_ROOT / "scripts" / "check_paper_queue.py"
-SCHEMA = REPO_ROOT / "openclaw" / "skills" / "paper-queue" / "schema.sql"
+SCHEMA = REPO_ROOT / "docker" / "paper-queue-mcp" / "schema.sql"
 
 # Columns the checker depends on. Hand-built "broken" DBs use this shape so the column
 # check passes and the row-level checks are what actually fires.
@@ -139,7 +139,7 @@ class TestExitCodes:
         """跨文件：两边后缀不一致 = 删库检测静默失效。"""
         import importlib.util
         spec = importlib.util.spec_from_file_location(
-            "pq_srv_for_sentinel", REPO_ROOT / "openclaw/skills/paper-queue/mcp_server.py")
+            "pq_srv_for_sentinel", REPO_ROOT / "docker/paper-queue-mcp/server.py")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         checker_src = CHECKER.read_text()
@@ -302,7 +302,7 @@ class TestEnumAgreement:
 
     @staticmethod
     def _schema_enum() -> set:
-        sql = (REPO_ROOT / "openclaw/skills/paper-queue/schema.sql").read_text()
+        sql = SCHEMA.read_text()
         body = re.search(r"attribution_source IN \(([^)]*)\)", sql).group(1)
         return {v.strip().strip("'") for v in body.split(",")}
 

@@ -130,8 +130,10 @@
   "mcp": {
     "servers": {
       "paper-queue": {
-        "command": "python3",
-        "args": ["/home/node/.openclaw/skills/paper-queue/mcp_server.py"]
+        "url": "http://paper-queue-mcp:8003/mcp",
+        "transport": "streamable-http",
+        "connectionTimeoutMs": 10000,
+        "requestTimeoutMs": 30000
       }
     }
   },

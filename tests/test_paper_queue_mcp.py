@@ -25,7 +25,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SERVER = REPO_ROOT / "openclaw" / "skills" / "paper-queue" / "mcp_server.py"
+SERVER = REPO_ROOT / "docker" / "paper-queue-mcp" / "server.py"
 
 ACTOR = "1297756995834609676"          # Owen 的 Discord 用户 ID（雪花）
 OTHER = "987654321098765432"           # 另一位群成员
@@ -309,16 +309,19 @@ class TestIdentityIsMandatory:
         with pytest.raises(ValueError):
             pq.add_items(conn, [], actor())
 
-    def test_model_supplied_requester_cannot_spoof_attribution(self, pq):
-        """模型在参数里塞 requester=别人 也没用 —— add 只认宿主注入的 actor_id。"""
-        conn = pq.connect()
-        args = signed(pq, "paper_queue_add",
-                      {"items": [{"title": "Spoofed"}], "requester": OTHER,
-                       "actor_id": ACTOR})
-        pq.handle({"jsonrpc": "2.0", "id": 9, "method": "tools/call",
-                   "params": {"name": "paper_queue_add", "arguments": args}}, conn)
-        row = conn.execute("SELECT requester FROM paper_requests").fetchone()
-        assert row["requester"] == ACTOR
+    def test_write_tools_have_no_requester_parameter(self, pq):
+        """归属只认宿主注入的 `actor_id`。
+
+        更强的保证来自**函数签名**：写入工具连 `requester` 参数都没有，模型想伪造都
+        无处可传（FastMCP 会拒绝未知参数）。读工具保留 `requester` 是**筛选**用途，
+        伪造它写不进任何东西。
+        """
+        import inspect
+        for tool in (pq.paper_queue_add, pq.paper_queue_cancel):
+            assert "requester" not in inspect.signature(tool).parameters, (
+                f"{tool.__name__} 暴露 requester 参数 = 给模型留了伪造归属的口子"
+            )
+        assert "requester" in inspect.signature(pq.paper_queue_list).parameters
 
 
 class TestInputLimits:
@@ -438,43 +441,6 @@ class TestCancel:
         assert pq.add_items(conn, [{"title": "X"}], actor())[0]["status"] == "queued"
 
 
-class TestJsonRpc:
-    def test_initialize_returns_protocol_version(self, pq):
-        resp = pq.handle({"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                          "params": {}}, pq.connect())
-        assert resp["result"]["protocolVersion"] == "2024-11-05"
-
-    def test_tools_list_exposes_three_tools(self, pq):
-        resp = pq.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, pq.connect())
-        names = {t["name"] for t in resp["result"]["tools"]}
-        assert names == {"paper_queue_add", "paper_queue_list", "paper_queue_cancel"}
-
-    def test_notification_has_no_response(self, pq):
-        assert pq.handle({"jsonrpc": "2.0",
-                          "method": "notifications/initialized"}, pq.connect()) is None
-
-    def test_tools_call_end_to_end(self, pq):
-        conn = pq.connect()
-        args = signed(pq, "paper_queue_add", {"items": [{"title": "By RPC"}], **actor()})
-        resp = pq.handle({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                          "params": {"name": "paper_queue_add",
-                                     "arguments": args}}, conn)
-        assert resp["result"]["isError"] is False
-        assert "queued" in resp["result"]["content"][0]["text"]
-
-    def test_missing_actor_is_an_error_result(self, pq):
-        """签名有效但身份缺失 —— 必须拒绝（fail closed）。"""
-        args = signed(pq, "paper_queue_add", {"items": [{"title": "X"}]})
-        resp = pq.handle({"jsonrpc": "2.0", "id": 4, "method": "tools/call",
-                          "params": {"name": "paper_queue_add",
-                                     "arguments": args}}, pq.connect())
-        assert resp["result"]["isError"] is True
-
-    def test_unknown_method_is_an_error(self, pq):
-        resp = pq.handle({"jsonrpc": "2.0", "id": 5, "method": "nope"}, pq.connect())
-        assert "error" in resp
-
-
 class TestSchemaMigration:
     """SQLite 改不了 CHECK 约束 —— 枚举一变就只能重建表，且必须在**装机那一刻**自动完成。
 
@@ -504,7 +470,7 @@ class TestSchemaMigration:
     def test_version_in_schema_sql_matches_the_module(self, pq):
         """两处版本号必须一起改 —— 不一致的话老库永远不会被迁移。"""
         import re as _re
-        text = (REPO_ROOT / "openclaw" / "skills" / "paper-queue" / "schema.sql").read_text()
+        text = pq.SCHEMA_PATH.read_text()
         declared = int(_re.search(r"PRAGMA user_version = (\d+)", text).group(1))
         assert declared == pq.SCHEMA_VERSION
 
@@ -654,99 +620,6 @@ class TestActorSignature:
         assert conn.execute("SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
 
 
-class TestStdioTransport:
-    """Spawn the real server and speak the real wire protocol."""
-
-    def test_handshake_and_tool_call(self, tmp_path, monkeypatch):
-        # 用模块算签名（真实部署里这一步由插件做），并让子进程拿到同一个密钥
-        module = _load(tmp_path, monkeypatch, secret=SECRET)
-        args = signed(module, "paper_queue_add",
-                      {"items": [{"title": "Wire Test"}], "actor_id": ACTOR,
-                       "actor_name": "Owen"})
-        env = {**os.environ, "PAPER_QUEUE_DB": str(tmp_path / "q.sqlite"),
-               "TZ": "Asia/Shanghai", "PAPER_QUEUE_ACTOR_SECRET": SECRET}
-        proc = subprocess.Popen(
-            [sys.executable, str(SERVER)], stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
-        )
-        try:
-            requests = [
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                 "params": {"protocolVersion": "2024-11-05", "capabilities": {}}},
-                {"jsonrpc": "2.0", "method": "notifications/initialized"},
-                {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
-                {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                 "params": {"name": "paper_queue_add", "arguments": args}},
-            ]
-            out, err = proc.communicate(
-                "\n".join(json.dumps(r) for r in requests) + "\n", timeout=30)
-        finally:
-            if proc.poll() is None:
-                proc.kill()
-
-        lines = [json.loads(x) for x in out.splitlines() if x.strip()]
-        assert len(lines) == 3, f"期望 3 条响应（通知不应答），实得 {len(lines)}；stderr={err}"
-        assert lines[0]["result"]["protocolVersion"] == "2024-11-05"
-        assert lines[1]["result"]["tools"]
-        assert lines[2]["result"]["isError"] is False
-
-    def test_malformed_arguments_do_not_kill_the_server(self, tmp_path, monkeypatch):
-        """**回归测试（HIGH）**：模型传错参数形状曾让 AttributeError 冒泡出 main()，
-        stdio 进程直接退出 —— 该会话余下的工具调用全部失效。
-
-        OpenClaw 对 MCP 工具**不做 schema 校验**（文档原话：MCP 的 schema
-        "deferred to their owning execution boundary"，也就是本进程），所以这里就是
-        唯一的边界：任何形状都只能换来一条 isError，绝不能带走进程。
-        """
-        env = {**os.environ, "PAPER_QUEUE_DB": str(tmp_path / "q.sqlite"),
-               "PAPER_QUEUE_ACTOR_SECRET": SECRET}
-        good = signed(_load(tmp_path, monkeypatch, secret=SECRET),
-                      "paper_queue_add",
-                      {"items": [{"title": "Still Alive"}], "actor_id": ACTOR})
-        proc = subprocess.Popen(
-            [sys.executable, str(SERVER)], stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env,
-        )
-        try:
-            requests = [
-                {"jsonrpc": "2.0", "id": 1, "method": "initialize",
-                 "params": {"protocolVersion": "2024-11-05", "capabilities": {}}},
-                # ① items 是字符串数组而不是对象数组（"一组论文"最自然的写法）
-                {"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                 "params": {"name": "paper_queue_add",
-                            "arguments": {"items": ["Attention Is All You Need"],
-                                          "actor_id": ACTOR}}},
-                # ② window 是数字
-                {"jsonrpc": "2.0", "id": 3, "method": "tools/call",
-                 "params": {"name": "paper_queue_list",
-                            "arguments": {"window": 7, "actor_id": ACTOR}}},
-                # ③ params/arguments 整个不是对象
-                {"jsonrpc": "2.0", "id": 4, "method": "tools/call",
-                 "params": "not-an-object"},
-                # ④ 请求本身是个列表
-                [1, 2, 3],
-                # ⑤ 挨完这些之后，服务必须还在
-                {"jsonrpc": "2.0", "id": 6, "method": "tools/call",
-                 "params": {"name": "paper_queue_add", "arguments": good}},
-            ]
-            out, err = proc.communicate(
-                "\n".join(json.dumps(r) for r in requests) + "\n", timeout=30)
-        finally:
-            if proc.poll() is None:
-                proc.kill()
-
-        lines = [json.loads(x) for x in out.splitlines() if x.strip()]
-        assert len(lines) == 5, f"期望 5 条响应，实得 {len(lines)}；stderr={err}"
-        assert lines[-1]["id"] == 6
-        assert lines[-1]["result"]["isError"] is False, "畸形入参之后服务必须仍然可用"
-        assert "queued" in lines[-1]["result"]["content"][0]["text"]
-
-        # 而且那一条好的是真的写进去了
-        conn = sqlite3.connect(tmp_path / "q.sqlite")
-        titles = [r[0] for r in conn.execute("SELECT title FROM paper_requests")]
-        assert "Still Alive" in titles
-
-
 class TestInitSentinel:
     """库被删必须能被查出来：server 首次建库时在库旁边留哨兵，检查器靠它区分
     「被删」与「从没用过」—— 两者在此之前都是"打不开"，删库因此不会告警。"""
@@ -792,3 +665,80 @@ class TestResponseCap:
         payload = pq.capped_list_payload(pq.list_items(conn, actor()))
         assert payload["count"] == 1
         assert payload["truncated"] is True
+
+class TestToolSurface:
+    """工具面本身的结构。传输层交给 FastMCP，靠真机的 `mcp doctor --probe` + 一次真实
+    调用覆盖 —— 这里只钉住"名字"和"插件注入的参数必须被工具接收"这两件会静默失效的事。"""
+
+    def test_exposes_exactly_the_three_tools(self, pq):
+        assert [t.__name__ for t in pq.TOOLS] == [
+            "paper_queue_add", "paper_queue_list", "paper_queue_cancel"]
+
+    def test_every_tool_accepts_the_injected_actor_params(self, pq):
+        """插件注入的每个 actor_* 都必须是工具的**具名参数** —— 少一个，注入就被丢掉，
+        而表现是"归属校验失败"（还看得出）或归属丢失（看不出来）。"""
+        import inspect
+        for tool in pq.TOOLS:
+            params = inspect.signature(tool).parameters
+            for name in pq._ACTOR_PROPS:
+                assert name in params, f"{tool.__name__} 缺少注入参数 {name}"
+
+    def test_reading_does_not_need_a_signature(self, pq):
+        """读不验签：requester 本就是可显式传的公开参数，伪造它写不进任何东西。"""
+        assert json.loads(pq.paper_queue_list(actor_id=ACTOR))["count"] == 0
+
+
+class TestActorSignature:
+    """插件一旦缺席，服务端必须**拒绝写入**，而不是静默采信模型自填的身份。
+
+    密钥写在配置里（模型读得到），这一层防的不是"读"而是"算"：模型算不出 HMAC。
+    签名还必须覆盖**请求内容** —— 注入的 actor_* 会进模型可见的会话记录，只签身份
+    的话它就是一枚可重放的 bearer 值。
+    """
+
+    SESSION = "agent:main:discord:channel:1"
+    MESSAGE = "1549589564275032150"
+    ADD = {"items": [{"title": "X"}], "actor_id": ACTOR, "actor_name": "Owen"}
+
+    def _args(self, **over):
+        return {**self.ADD, "session_ref": self.SESSION, "actor_message": self.MESSAGE, **over}
+
+    def test_valid_signature_is_accepted(self, pq):
+        pq.paper_queue_add(**signed(pq, "paper_queue_add", self._args()))
+        row = pq.connect().execute("SELECT requester FROM paper_requests").fetchone()
+        assert row["requester"] == ACTOR
+
+    @pytest.mark.parametrize("sig", [None, "deadbeef"])
+    def test_missing_or_wrong_signature_is_refused(self, pq, sig):
+        args = self._args()
+        if sig:
+            args["actor_sig"] = sig
+        with pytest.raises(ValueError):
+            pq.paper_queue_add(**args)
+        assert pq.connect().execute(
+            "SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
+
+    def test_signature_is_bound_to_the_payload(self, pq):
+        """换掉 items 复用同一个签名必须失败 —— 否则签名只是可重放的 bearer 值。"""
+        args = signed(pq, "paper_queue_add", self._args())
+        args["items"] = [{"title": "SOMETHING ELSE ENTIRELY"}]
+        with pytest.raises(ValueError, match="签名"):
+            pq.paper_queue_add(**args)
+
+    def test_signature_is_bound_to_the_identity(self, pq):
+        args = signed(pq, "paper_queue_add", self._args())
+        args["actor_id"] = OTHER
+        with pytest.raises(ValueError, match="签名"):
+            pq.paper_queue_add(**args)
+
+    def test_cancel_also_requires_a_signature(self, pq):
+        with pytest.raises(ValueError):
+            pq.paper_queue_cancel(request_key="title:x", actor_id=ACTOR,
+                                  session_ref=self.SESSION, actor_message=self.MESSAGE)
+
+    def test_missing_secret_refuses_writes_instead_of_skipping(self, tmp_path, monkeypatch):
+        """**未配置密钥时拒绝写入**，而不是静默跳过校验 —— 静默跳过等于 fail open：
+        env 被删或改名都会让防护无声消失，而插件那头还在签名。"""
+        module = _load(tmp_path, monkeypatch, secret=None)
+        with pytest.raises(ValueError, match="密钥"):
+            module.paper_queue_add(**self._args())

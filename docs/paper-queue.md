@@ -13,10 +13,14 @@
 | 视角 | 路径 |
 |---|---|
 | 宿主（mylibrary 读这里） | `~/.myagentdata/paper-queue/queue.sqlite` |
-| 虾酱容器内 | `/home/node/.myagentdata/paper-queue/queue.sqlite` |
+| `paper-queue-mcp` 容器内 | `/data/queue.sqlite` |
+| **虾酱所在的 openclaw-gateway** | **看不到 —— 刻意不挂** |
 
-同一个文件，靠 `docker-compose.yml` 里 openclaw-gateway 的**窄挂载**打通（只映射
-`paper-queue` 这一个子目录，不是整个 `~/.myagentdata`）。
+同一个文件，只挂给 `paper-queue-mcp` 这个独立容器。
+
+> ⚠️ **为什么不挂给虾酱**：2026-09-16 实测，虾酱的 `read`/`write` 工具**够得着**那个
+> 目录（只有 `exec` 被 allowlist 挡住）。挂在一起时，被提示注入的模型可以绕开一切
+> 校验直接改库、甚至改掉服务端代码，签名整套形同虚设。现在它只能走 MCP 接口。
 
 并发约定：两边都必须 `PRAGMA journal_mode = WAL` + `PRAGMA busy_timeout = 5000`。
 写入方（虾酱）是短事务；读取方请只读打开：
@@ -40,7 +44,7 @@ rows = conn.execute(
 ## 2. 表结构
 
 单表 `paper_requests`，一条记录 = 一次「我要这篇」的请求。完整定义见
-`openclaw/skills/paper-queue/schema.sql`（它同时是守卫测试的对象，DB 层 CHECK
+`docker/paper-queue-mcp/schema.sql`（它同时是守卫测试的对象，DB 层 CHECK
 会拒绝坏数据）。
 
 | 列 | 含义 |
@@ -97,7 +101,7 @@ rows = conn.execute(
 
 ## 5. 虾酱侧的三个工具
 
-MCP server `openclaw/skills/paper-queue/mcp_server.py`（由 OpenClaw 在容器内拉起）：
+MCP server `docker/paper-queue-mcp/server.py`（独立容器，streamable HTTP，端口 8003）：
 
 | 工具 | 说明 |
 |---|---|
@@ -121,10 +125,10 @@ MCP server `openclaw/skills/paper-queue/mcp_server.py`（由 OpenClaw 在容器�
 模型伪造不了 —— `paper_queue_add` / `paper_queue_cancel` 只认注入的 `actor_id`，
 参数里的 `requester` 被忽略；取不到身份时**拒绝写入**，不会用模型填的名字兜底。
 
-**签名（防"插件缺席"）**：插件与服务端共享一个密钥（`start.sh` 生成一次，写在
-`openclaw.json` 的 `mcp.servers.paper-queue.env` 与 `plugins.entries.paper-queue-actor.config`
-两处，**必须一致**）。插件对 `(actor_id, session_ref, actor_message, 请求内容)` 做
-HMAC-SHA256，服务端验签后才写入。
+**签名（防"插件缺席"）**：插件与服务端共享一个密钥，**唯一来源是 `.env` 的
+`PAPER_QUEUE_ACTOR_SECRET`**（`start.sh` 首次运行时生成）—— compose 把它注入 sidecar
+容器，同一份被写进 `plugins.entries.paper-queue-actor.config`。插件对
+`(actor_id, session_ref, actor_message, 请求内容)` 做 HMAC-SHA256，服务端验签后才写入。
 
 > 这一层防的**不是"读"而是"算"**：密钥就写在配置文件里，模型读得到；但它算不出 HMAC。
 > 于是"身份注入插件没加载"这种失败会变成**响亮的拒绝写入**，而不是静默采信模型自填的
@@ -136,15 +140,22 @@ HMAC-SHA256，服务端验签后才写入。
 > **密钥缺失时拒绝写入**，不静默跳过 —— 否则一次"env 被删"就会让防护无声消失。
 > 读操作（`paper_queue_list`）不验签：`requester` 本就是可显式传的公开参数。
 
-### 信任边界（别把它当密码学保证）
+### 信任边界
 
-以上保护的对象是**「工具参数」这条通道**：模型无法通过调用参数伪造归属。
+保护分两层：
 
-它**不**防「能写文件的一方」：虾酱自己的 `write`/`edit` 工具、容器里其它进程、宿主用户，
-都能直接改 `queue.sqlite`（或者改掉 MCP server 的代码来绕过校验）。所以：
+1. **容器隔离（2026-09-16 起）**：服务跑在独立容器 `paper-queue-mcp` 里，队列目录
+   **只挂给那个容器**。虾酱所在的 openclaw-gateway 里根本没有这个路径 —— 实测
+   `ls /home/node/.myagentdata` 返回 "No such file or directory"。它只能走 MCP 接口。
+2. **工具参数通道**：即使够得着接口，模型也无法通过调用参数伪造归属（见上）。
+   写入工具连 `requester` 参数都没有，伪造无处可传。
 
-- **库内容的可信度上限 = 能写 `~/.myagentdata/paper-queue/` 的所有人的可信度**；
-- 若要更强的保证，得把库挪到容器写不到的地方、由服务端代理写入（当前没做，也没有需求）。
+**仍不在保护范围内的**：
+
+- **宿主用户**（以及能写宿主文件的一切）—— 那等于"能登你机器的人"，无法也不该由本
+  设计防。
+- `paper-queue-mcp` 容器自身若被攻破 —— 但它不跑模型、不接受任意代码，攻击面只有
+  这 7 个 MCP 工具（其中 4 个是 `mcp` 库自带的 prompts/resources 空壳，碰不到队列数据）。
 
 **非用户触发的回合不产生记录。** 只有**用户消息触发**的回合才会绑定身份。
 cron / heartbeat / 命令行注入的回合没有入站消息，插件**不绑定**、工具调用随之拿不到
@@ -184,12 +195,14 @@ python3 scripts/check_paper_queue.py --json     # JSON（cron/监控用）
 ## 8. 装机与卸载
 
 装机走 `./scripts/start.sh`（幂等）：安装 skill 与插件到 `~/.openclaw/`、建
-`~/.myagentdata/paper-queue/`、注入 `mcp.servers` + 插件配置 + **禁用 `paper-fetch`**
-（"只记不下"由机器强制，而不是靠提示词）。
+`~/.myagentdata/paper-queue/`、**生成签名密钥写入 `.env`**（唯一来源，插件与服务端
+共享）、注入 `mcp.servers`（URL 形态）+ 插件配置 + **禁用 `paper-fetch`**
+（"只记不下"由机器强制，而不是靠提示词）；`paper-queue-mcp` 容器启动时先把库升到
+当前 schema 再对外服务。
 
-卸载：删 `~/.openclaw/skills/paper-queue` 与 `~/.openclaw/extensions/paper-queue-actor`，
-移除 `openclaw.json` 里对应的 `mcp.servers` / `plugins` / `skills` 条目，然后
-`docker compose restart openclaw-gateway`。
+卸载：`docker compose stop paper-queue-mcp`，删 `~/.openclaw/skills/paper-queue` 与
+`~/.openclaw/extensions/paper-queue-actor`，移除 `openclaw.json` 里对应的
+`mcp.servers` / `plugins` / `skills` 条目，然后 `docker compose restart openclaw-gateway`。
 
 > ⚠️ 重启网关前请确认它**没有正在跑启动迁移**——迁移期间重启会把它打断、下次从头再来，
 > 表现是网关"看起来卡死"（不绑端口、不报错）。静置几分钟会自行恢复。详见 `CLAUDE.md`。

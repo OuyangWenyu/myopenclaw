@@ -143,22 +143,33 @@ class TestPaperQueueWiring:
     def _service_block(name: str) -> str:
         return compose_service_block(name)
 
-    def test_compose_mounts_only_the_paper_queue_subdir(self):
-        """窄挂载：给虾酱的只是清单目录，不是整个 ~/.myagentdata。
+    def test_compose_keeps_the_queue_out_of_the_gateway(self):
+        """队列目录**不能**挂进 openclaw-gateway。
 
-        注意别的服务（如 claude-code）确实整目录挂载 —— 那是有意的。这里只约束
-        openclaw-gateway：虾酱跑的是 LLM 驱动的 shell，爆炸半径要最小。
+        2026-09-16 实测：虾酱的 `read`/`write` 工具够得着那个目录（只有 `exec` 被
+        allowlist 挡住）。挂在一起时，被提示注入的模型可以绕开一切校验直接改库。
+        现在只有 paper-queue-mcp 挂它，虾酱只能走 MCP 接口。
         """
-        block = self._service_block("openclaw-gateway")
-        assert "- ${HOME}/.myagentdata/paper-queue:/home/node/.myagentdata/paper-queue" in block
-        assert "- ${HOME}/.myagentdata:/home/node/.myagentdata" not in block, (
-            "openclaw-gateway 挂载了整个 ~/.myagentdata —— 应该只给 paper-queue 子目录"
+        gateway = self._service_block("openclaw-gateway")
+        # 只看挂载行 —— 注释里解释"为什么不挂"会自然地提到它，别被自己的说明绊倒
+        gateway_mounts = [line.strip() for line in gateway.splitlines()
+                          if line.strip().startswith("- ")]
+        assert not any("myagentdata/paper-queue" in line for line in gateway_mounts), (
+            f"openclaw-gateway 又挂上了队列目录（{gateway_mounts}）—— "
+            "虾酱能直接改库，签名形同虚设"
+        )
+        sidecar = self._service_block("paper-queue-mcp")
+        assert "${HOME}/.myagentdata/paper-queue:/data" in sidecar
+        assert "PAPER_QUEUE_ACTOR_SECRET" in sidecar, (
+            "签名密钥必须注入 sidecar，否则它无法验签 —— 每次写入都会被拒"
         )
 
     def test_template_registers_mcp_server(self):
         mcp = json.loads(OPENCLAW_EXAMPLE.read_text()).get("mcp", {}).get("servers", {})
         assert "paper-queue" in mcp, "模板是新部署的唯一来源 —— 漏了它新机器就没有清单"
-        assert mcp["paper-queue"]["command"] == "python3"
+        assert mcp["paper-queue"]["url"].startswith("http://paper-queue-mcp:"), (
+            "服务在独立容器里，模板必须用 URL 形态（stdio 形态意味着又挂回了网关）"
+        )
 
     def test_template_disables_paper_fetch(self):
         """「只记不下」由机器强制：两个 skill 的触发语（都是"下载论文"）会互相抢。"""

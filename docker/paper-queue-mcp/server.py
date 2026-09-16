@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
-paper-queue MCP server (stdio) — 论文清单的写入与查询口。
+paper-queue MCP server（streamable HTTP）— 论文清单的写入与查询口。
 
-由 OpenClaw 在 openclaw-gateway 容器内自行拉起（见 openclaw.json 的 mcp.servers）。
-**纯标准库**：openclaw 是 stock 镜像，装不了 pip 包，所以 JSON-RPC 是手写的
-（stdio 传输 = 每行一个 JSON 对象，非 LSP 那种 Content-Length 分帧）。
+**跑在独立容器里**（本目录 = docker/paper-queue-mcp），队列目录只挂给这个容器：
+虾酱所在的 openclaw-gateway 不再挂载 `~/.myagentdata/paper-queue`，因此它碰不到库，
+只能走这个接口。这不是洁癖 —— 2026-09-16 实测过虾酱的 `read`/`write` 工具**确实
+够得着那个目录**（`exec` 被 allowlist 挡住，但文件工具没有），即被提示注入的模型
+可以直接伪造清单条目、或改掉这里的验签逻辑。搬出来之后这条路才真正断掉。
+
+传输层交给 `mcp` 包（FastMCP + `run_streamable_http_async`），业务逻辑在本文件上部。
 
 三条硬规矩（改动前先读 docs/paper-queue.md）:
   1. **请求人只认宿主注入的 actor_id** —— 插件在 before_tool_call 里注入，模型碰不到。
@@ -545,84 +549,53 @@ def cancel_item(conn: sqlite3.Connection, actor: dict, request_key: str) -> dict
     return {"status": "not_found", "request_key": key}
 
 
+import asyncio
+
 # =============================================================
-# 5. MCP JSON-RPC
+# 5. MCP 工具（FastMCP / streamable HTTP）
 # =============================================================
+#
+# 传输层交给 `mcp` 包 —— 手写 JSON-RPC 的活儿不值得再干一遍。业务逻辑全在上面几节，
+# 这里只是把它们暴露成工具。
+#
+# ⚠️ `mcp` 是**可选依赖**：宿主侧的守卫测试只验业务逻辑，不该为了 import 本模块就把
+# pydantic/starlette/uvicorn 一起装上。所以 FastMCP 只在 build_server()/main() 里导入，
+# 传输层本身靠真机的 `mcp doctor paper-queue --probe` + 一次真实调用覆盖。
+#
+# 服务跑在**独立容器**里（本目录），队列目录只挂给那个容器：虾酱（LLM 驱动、可被
+# 提示注入）够不到库，只能走这里，签名与身份校验在这里生效。2026-09-16 实测过它确实
+# 能 read/write 那个目录，所以才搬出来。
 
 _ACTOR_PROPS = {
-    "actor_id": {"type": "string", "description": "宿主注入的请求人 Discord 用户 ID（权威，勿自行填写）"},
-    "actor_name": {"type": "string", "description": "宿主注入的请求人显示名（非权威）"},
-    "actor_message": {"type": "string", "description": "宿主注入的消息 ID（溯源用）"},
-    "channel_ref": {"type": "string", "description": "宿主注入的会话引用"},
-    "session_ref": {"type": "string", "description": "宿主注入的会话键"},
-    "attribution_source": {"type": "string", "description": "宿主注入的归属绑定方式"},
-    "actor_ambiguous": {"type": "boolean", "description": "宿主注入：同一回合内出现多人发言时置真"},
-    "actor_sig": {"type": "string", "description": "宿主注入的归属签名（勿自行填写）"},
+    "actor_id": {"description": "宿主注入的请求人 Discord 用户 ID（权威，勿自行填写）"},
+    "actor_name": {"description": "宿主注入的请求人显示名（非权威）"},
+    "actor_message": {"description": "宿主注入的消息 ID（溯源用）"},
+    "channel_ref": {"description": "宿主注入的会话引用"},
+    "session_ref": {"description": "宿主注入的会话键"},
+    "attribution_source": {"description": "宿主注入的归属绑定方式"},
+    "actor_ambiguous": {"description": "宿主注入：同一回合内出现多人发言时置真"},
+    "actor_sig": {"description": "宿主注入的归属签名（勿自行填写）"},
 }
 
-_ITEM_PROPS = {
-    "title": {"type": "string", "description": "论文题目（用户说过的原文，主要标识）"},
-    "doi": {"type": "string", "description": "DOI，可选"},
-    "doi_source": {"type": "string", "enum": ["user", "inferred"],
-                   "description": "DOI 来源：用户给出的用 user；自己推断的必须填 inferred（inferred 不参与去重键）"},
-    "arxiv_id": {"type": "string", "description": "arXiv ID，可选"},
-    "url": {"type": "string", "description": "PDF 直链，可选"},
-    "note": {"type": "string", "description": "附加说明，如“要正文/补充材料”"},
-    "raw_input": {"type": "string", "description": "用户原话片段，便于日后人工核对"},
-}
-
-TOOLS = [
-    {
-        "name": "paper_queue_add",
-        "description": ("把一篇或多篇论文记入清单（**只记不下**：不要下载、不要调用 paper-fetch）。"
-                        "用户说“下载/帮我下/加到文献库/同步到 Zotero”时用它；一条消息里有多篇就一次传多个 item。"),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "items": {"type": "array", "items": {
-                    "type": "object", "properties": _ITEM_PROPS}, "description": "要入队的论文"},
-                **_ACTOR_PROPS,
-            },
-            "required": ["items"],
-        },
-    },
-    {
-        "name": "paper_queue_list",
-        "description": ("列出清单（**只读**）。不传 requester 时默认列出**提问者自己**的清单。"
-                        "用户说“今天加的”“过去 24 小时加的”“我的清单”时，用 window 过滤。"),
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "window": {"type": "string", "enum": list(WINDOWS),
-                           "description": "时间窗口：today=今天(按 TZ 日界) / 24h / 7d / all（默认）"},
-                "since": {"type": "string", "description": "起始时间 ISO8601 UTC，覆盖 window"},
-                "until": {"type": "string", "description": "结束时间 ISO8601 UTC，覆盖 window"},
-                "requester": {"type": "string",
-                              "description": "查别人的清单时显式传其 Discord 用户 ID；不传=自己的"},
-                "include_cancelled": {"type": "boolean", "description": "是否包含已撤销的（默认否）"},
-                "limit": {"type": "integer", "description": "最多返回条数（默认 50）"},
-                **_ACTOR_PROPS,
-            },
-        },
-    },
-    {
-        "name": "paper_queue_cancel",
-        "description": "撤销一条清单记录（用户说“记错了/不用下了/去掉那条”时用）。撤销后同一篇可以重新入队。",
-        "inputSchema": {
-            "type": "object",
-            "properties": {
-                "request_key": {"type": "string", "description": "要撤销的 request_key"},
-                **_ACTOR_PROPS,
-            },
-            "required": ["request_key"],
-        },
-    },
-]
+PORT = int(os.environ.get("PAPER_QUEUE_PORT", "8003"))
+HOST = os.environ.get("PAPER_QUEUE_HOST", "0.0.0.0")
 
 
-def _text_result(payload, is_error: bool = False) -> dict:
-    text = payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False, indent=2)
-    return {"content": [{"type": "text", "text": text}], "isError": is_error}
+def _dump(payload) -> str:
+    return payload if isinstance(payload, str) else json.dumps(payload, ensure_ascii=False, indent=2)
+
+
+def _actor_args(local: dict) -> dict:
+    return {k: local.get(k) for k in _ACTOR_PROPS}
+
+
+def _with_conn(fn):
+    """每次调用现开现关：写很少，省得长期连接持有 WAL。"""
+    conn = connect()
+    try:
+        return fn(conn)
+    finally:
+        conn.close()
 
 
 def capped_list_payload(rows: list[dict]) -> dict:
@@ -652,98 +625,82 @@ def capped_list_payload(rows: list[dict]) -> dict:
     return payload
 
 
-def _call_tool(conn: sqlite3.Connection, name: str, args: dict) -> dict:
-    actor = {k: args.get(k) for k in _ACTOR_PROPS if k in args}
-    if name == "paper_queue_add":
-        error = actor_signature_error(name, args)
-        if error:
-            return _text_result(error, is_error=True)
-        return _text_result(add_items(conn, args.get("items") or [], actor))
-    if name == "paper_queue_list":
-        # 读不验签：requester 本来就是公开可查的参数（"查别人的清单"是设计内的能力），
-        # 伪造它不会写入任何东西。只有**写**才需要归属可信。
-        rows = list_items(
-            conn, actor,
-            window=args.get("window"), since=args.get("since"), until=args.get("until"),
-            requester=args.get("requester"),
-            include_cancelled=bool(args.get("include_cancelled")),
-            limit=args.get("limit") or 50,
-        )
-        return _text_result(capped_list_payload(rows))
-    if name == "paper_queue_cancel":
-        error = actor_signature_error(name, args)
-        if error:
-            return _text_result(error, is_error=True)
-        return _text_result(cancel_item(conn, actor, args.get("request_key") or ""))
-    return _text_result(f"未知工具: {name}", is_error=True)
+def paper_queue_add(
+    items: list[dict],
+    actor_id: str = "", actor_name: str = "", actor_message: str = "",
+    channel_ref: str = "", session_ref: str = "", attribution_source: str = "",
+    actor_ambiguous: bool = False, actor_sig: str = "",
+) -> str:
+    """把一篇或多篇论文记入清单（**只记不下**：不要下载、不要调用 paper-fetch）。
+    用户说「下载 / 帮我下 / 加到文献库 / 同步到 Zotero」时用它；
+    一条消息里有多篇就一次传多个 item。"""
+    local = locals()
+    error = actor_signature_error("paper_queue_add", local)
+    if error:
+        raise ValueError(error)
+    return _dump(_with_conn(lambda conn: add_items(conn, items or [], _actor_args(local))))
 
 
-def handle(req: dict, conn: sqlite3.Connection) -> dict | None:
-    """处理一条 JSON-RPC 请求。通知（无 id）返回 None —— 不应答。"""
-    method = req.get("method")
-    rid = req.get("id")
-    is_notification = rid is None
+def paper_queue_list(
+    window: str = "", since: str = "", until: str = "",
+    requester: str = "", include_cancelled: bool = False, limit: int = 50,
+    actor_id: str = "", actor_name: str = "", actor_message: str = "",
+    channel_ref: str = "", session_ref: str = "", attribution_source: str = "",
+    actor_ambiguous: bool = False, actor_sig: str = "",
+) -> str:
+    """列出清单（**只读**）。不传 requester 时默认列出**提问者自己**的清单；
+    用户说「今天加的 / 过去 24 小时 / 我的清单」时，用 window 过滤。"""
+    local = locals()
+    return _dump(_with_conn(lambda conn: capped_list_payload(list_items(
+        conn, _actor_args(local),
+        window=window or None, since=since or None, until=until or None,
+        requester=requester or None, include_cancelled=include_cancelled,
+        limit=limit or 50,
+    ))))
 
-    if method == "initialize":
-        return {"jsonrpc": "2.0", "id": rid, "result": {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
-        }}
-    if method == "ping":
-        return {"jsonrpc": "2.0", "id": rid, "result": {}}
-    if is_notification:
-        return None
-    if method == "tools/list":
-        return {"jsonrpc": "2.0", "id": rid, "result": {"tools": TOOLS}}
-    if method == "tools/call":
-        params = req.get("params")
-        params = params if isinstance(params, dict) else {}
-        raw_args = params.get("arguments")
-        args = raw_args if isinstance(raw_args, dict) else {}
-        try:
-            result = _call_tool(conn, str(params.get("name") or ""), args)
-        except Exception as exc:
-            # 这里刻意用宽捕获：入参是**模型生成的**，OpenClaw 对 MCP 工具不做 schema
-            # 校验，任何没预料到的形状都不该让 stdio 进程退出（退出 = 该会话余下的
-            # 工具调用全部失效）。转成 isError 结果交给模型自己纠正。
-            result = _text_result(f"调用失败: {type(exc).__name__}: {exc}", is_error=True)
-        return {"jsonrpc": "2.0", "id": rid, "result": result}
-    return {"jsonrpc": "2.0", "id": rid,
-            "error": {"code": -32601, "message": f"method not found: {method}"}}
+
+def paper_queue_cancel(
+    request_key: str,
+    actor_id: str = "", actor_name: str = "", actor_message: str = "",
+    channel_ref: str = "", session_ref: str = "", attribution_source: str = "",
+    actor_ambiguous: bool = False, actor_sig: str = "",
+) -> str:
+    """撤销一条清单记录（用户说「记错了 / 不用下了 / 去掉那条」时用）。
+    撤销后同一篇可以重新入队。"""
+    local = locals()
+    error = actor_signature_error("paper_queue_cancel", local)
+    if error:
+        raise ValueError(error)
+    return _dump(_with_conn(lambda conn: cancel_item(conn, _actor_args(local), request_key or "")))
+
+
+TOOLS = (paper_queue_add, paper_queue_list, paper_queue_cancel)
+
+
+def build_server():
+    """构造 FastMCP 实例。**只在这里导入 `mcp`** —— 见上面的可选依赖说明。
+
+    host/port 走**构造器**：装到的这个版本里 `run_streamable_http_async()` 不接受它们
+    （实测踩过：传了会 TypeError，容器起不来空转重启）。
+    """
+    from mcp.server.fastmcp import FastMCP
+
+    server = FastMCP("paper-queue", host=HOST, port=PORT)
+    for tool in TOOLS:
+        server.tool()(tool)
+    return server
 
 
 def main() -> int:
     if "--migrate" in sys.argv:
-        # 给装机用：只把库升到当前 schema 就退出，不进入 stdio 循环。
-        # 没有这一步的话，迁移要等到**第一次工具调用**才跑 —— 在那之前检查器会把
-        # 存量老标签判成非法值（假红），而假红会淹没真异常。
-        conn = connect()
-        conn.close()
+        # 给容器启动用：先把库升到当前 schema 再对外服务。
+        connect().close()
         print(f"paper-queue: schema 已就绪（v{SCHEMA_VERSION}）")
         return 0
 
-    conn = connect()
-    for line in sys.stdin:
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            req = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if not isinstance(req, dict):
-            continue
-        try:
-            response = handle(req, conn)
-        except Exception as exc:
-            # 最后一道兜底：单条畸形请求绝不能把进程带走。
-            response = {"jsonrpc": "2.0", "id": req.get("id"),
-                        "error": {"code": -32603,
-                                  "message": f"internal error: {type(exc).__name__}: {exc}"}}
-        if response is not None:
-            sys.stdout.write(json.dumps(response, ensure_ascii=False) + "\n")
-            sys.stdout.flush()
+    print(f"paper-queue-mcp: streamable HTTP on {HOST}:{PORT}/mcp "
+          f"(db={resolve_db()}, schema=v{SCHEMA_VERSION})")
+    asyncio.run(build_server().run_streamable_http_async())
     return 0
 
 

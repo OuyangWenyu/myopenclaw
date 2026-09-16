@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-SCHEMA = REPO_ROOT / "openclaw" / "skills" / "paper-queue" / "schema.sql"
+SCHEMA = REPO_ROOT / "docker" / "paper-queue-mcp" / "schema.sql"
 
 # The contract's public surface. Renaming/removing one of these breaks consumers,
 # so it is pinned here rather than left to whoever edits the schema next.

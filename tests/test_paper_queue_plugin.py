@@ -27,7 +27,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PLUGIN_DIR = REPO_ROOT / "openclaw" / "plugins" / "paper-queue-actor"
 INDEX_TS = (PLUGIN_DIR / "index.ts").read_text()
-SERVER_PY = REPO_ROOT / "openclaw" / "skills" / "paper-queue" / "mcp_server.py"
+SERVER_PY = REPO_ROOT / "docker" / "paper-queue-mcp" / "server.py"
 
 
 @pytest.fixture(scope="module")
@@ -154,8 +154,8 @@ class TestCrossFileConsistency:
     def test_every_server_tool_is_matched(self, server):
         """server 暴露的每个工具都必须能被插件的规则匹配到 —— 匹配不上 = 注入静默失效。"""
         for tool in server.TOOLS:
-            assert _tool_pattern().search(f"paper-queue__{tool['name']}"), (
-                f"server 暴露 {tool['name']}，但插件的匹配规则认不出来"
+            assert _tool_pattern().search(f"paper-queue__{tool.__name__}"), (
+                f"server 暴露 {tool.__name__}，但插件的匹配规则认不出来"
             )
 
     @pytest.mark.parametrize("name,expected", [

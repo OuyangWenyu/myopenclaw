@@ -286,6 +286,22 @@ install_paper_fetch "${HOME}/.openclaw/skills" "~/.openclaw/skills"
 install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
 
 
+# ── 确保论文清单的归属签名密钥存在 ─────────────────────────────────
+# 插件（读 openclaw.json 的 plugins.entries）与服务端（compose 注入 sidecar 容器）
+# 共享同一个密钥，**唯一来源是 .env**。两处各自生成会让它们对不上，而那种失败的
+# 表现是"每次写入都被拒"，根因很难找。轮换 = 改 .env 里的值再跑一次本脚本。
+if ! grep -q '^PAPER_QUEUE_ACTOR_SECRET=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+  _pq_secret="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  {
+    echo ""
+    echo "# 论文清单：插件与服务端共享的归属签名密钥（自动生成；轮换 = 改这里再跑一次 start.sh）"
+    printf 'PAPER_QUEUE_ACTOR_SECRET=%s\n' "${_pq_secret}"
+  } >> "${REPO_ROOT}/.env"
+  echo "   🔑 已生成论文清单签名密钥并写入 .env"
+fi
+PAPER_QUEUE_ACTOR_SECRET="${PAPER_QUEUE_ACTOR_SECRET:-$(grep '^PAPER_QUEUE_ACTOR_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
+
+
 # ── 安装 paper-queue（清单 skill + 身份注入插件）──────────────────
 # 与 install_paper_fetch 不同：源码就在本仓库里，**每次启动都覆盖安装**，
 # 这样改了仓库源码后跑一次 start.sh 即生效，不必重建镜像。
@@ -299,7 +315,7 @@ install_paper_queue() {
   local dst="${HOME}/.openclaw/skills/paper-queue"
   local plugin_dst="${HOME}/.openclaw/extensions/paper-queue-actor"
 
-  if [[ ! -f "${src}/mcp_server.py" || ! -f "${plugin_src}/index.ts" ]]; then
+  if [[ ! -f "${src}/SKILL.md" || ! -f "${plugin_src}/index.ts" ]]; then
     echo "   ⚠️  paper-queue 源文件缺失，跳过安装: ${src}"
     return
   fi
@@ -318,11 +334,6 @@ install_paper_queue() {
   # 跑守卫测试会在源码目录旁边留下 __pycache__，别把它带进运行时目录
   rm -rf "${dst}/__pycache__"
   echo "   ✅ paper-queue 已安装到 ~/.openclaw/skills + ~/.openclaw/extensions"
-
-  # 主动把库升到当前 schema。不跑这一步的话，迁移要等到**第一次工具调用**才发生 ——
-  # 在那之前存量老标签会被检查器判成非法值（假红淹没真异常）。
-  PAPER_QUEUE_DB="${HOME}/.myagentdata/paper-queue/queue.sqlite" \
-    python3 "${dst}/mcp_server.py" --migrate 2>&1 | sed 's/^/   /' || true
 }
 install_paper_queue
 
@@ -433,7 +444,7 @@ fi
 # mcp.servers / plugins.load 的变更**必须重启网关**才生效，所以这里记下是否变化，
 # 等 compose up 之后再决定要不要重启。
 if [[ -f "${OPENCLAW_CONFIG}" ]]; then
-  _pq_out="$(python3 "${REPO_ROOT}/scripts/ensure_openclaw_paper_queue.py" "${OPENCLAW_CONFIG}" || true)"
+  _pq_out="$(python3 "${REPO_ROOT}/scripts/ensure_openclaw_paper_queue.py" "${OPENCLAW_CONFIG}" "${PAPER_QUEUE_ACTOR_SECRET}" || true)"
   case "${_pq_out}" in
     updated)
       OPENCLAW_RESTART_NEEDED=true
