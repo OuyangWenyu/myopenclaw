@@ -373,6 +373,9 @@ services:
       - "${OPENCLAW_PORT:-18789}:18789"
     volumes:
       - ${HOME}/.openclaw:/home/node/.openclaw
+      # 论文清单：只映射这一个子目录（不把整个 ~/.myagentdata 交给虾酱）。
+      # 不加 :ro —— 虾酱要写。宿主侧同一份文件由 mylibrary 读取。
+      - ${HOME}/.myagentdata/paper-queue:/home/node/.myagentdata/paper-queue
       - ./openclaw/scripts/fix-host-paths.sh:/fix-host-paths.sh:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
@@ -460,6 +463,12 @@ services:
       - ${HOME}/.claude:/root/.claude:ro
       - ${HOME}/.cc-connect:/root/.cc-connect:ro
       - ${HOME}/.myagentdata:/.myagentdata:ro
+      # 心跳目录：窄口径 RW。整个 /.myagentdata 是只读挂载，但备份跑完要往这里
+      # 写一份心跳供宿主的 collect_agentops.py 读 —— 心跳**不能**放云盘目录：
+      # 实测云盘对宿主进程的可见性按进程上下文分裂（launchd 能 readdir 云盘根却
+      # 读不了文件，交互式 shell 反过来），只有本地路径两边都读得到。
+      # 只放开这一个子目录，不把整个 agent 数据目录变成可写。
+      - ${HOME}/.myagentdata/agentops:/.agentops:rw
       - ${BACKUP_ROOT:-/tmp/myopenclaw-backups}:/backup:rw
       - ./hermes/scripts:/hermes-scripts:ro
       - ./openclaw/scripts:/openclaw-scripts:ro

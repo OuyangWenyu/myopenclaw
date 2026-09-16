@@ -67,6 +67,7 @@ nav:
       - zhixun 知汛助手: zhixun-feishu-bot.md
       - 事务追踪 (aisecretary): aisecretary.md
       - 语雀知识库: yuque-mcp-hermes.md
+      - 论文清单 (paper-queue): paper-queue.md
   - 运维:
       - 调度系统: scheduling.md
       - 备份系统: backup.md

@@ -1,0 +1,16 @@
+{
+  "id": "paper-queue-actor",
+  "name": "Paper Queue Actor",
+  "description": "Injects the host-derived requester (Discord senderId) into paper_queue_* tool calls so attribution never depends on the model.",
+  "activation": { "onStartup": true },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "secret": {
+        "type": "string",
+        "description": "归属签名密钥。由 scripts/start.sh 写入并与 mcp.servers.paper-queue.env 保持一致；手工改动会让所有写入被拒。"
+      }
+    },
+    "additionalProperties": false
+  }
+}

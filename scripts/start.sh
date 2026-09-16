@@ -112,6 +112,9 @@ mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode" "${HOME}/.lark-cli"
 mkdir -p "${HOME}/.myagentdata/aisecretary"
 mkdir -p "${HOME}/.myagentdata/tdai-memory"
 mkdir -p "${HOME}/.myagentdata/agentops"
+# 论文清单（虾酱写、mylibrary 读）。必须在 compose up 之前建好：否则 Docker 会
+# 以 root 身份创建这个挂载点，容器里的 node 用户随后写不进去。
+mkdir -p "${HOME}/.myagentdata/paper-queue"
 # inbox.md is produced by collect_agentops.py (host launchd). Without the
 # directory, Docker's ro mount of ~/.myagentdata has no agentops/ subdir
 # and Daily Command Center reports a false "AgentOps 未部署".
@@ -283,6 +286,42 @@ install_paper_fetch "${HOME}/.openclaw/skills" "~/.openclaw/skills"
 install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
 
 
+# ── 安装 paper-queue（清单 skill + 身份注入插件）──────────────────
+# 与 install_paper_fetch 不同：源码就在本仓库里，**每次启动都覆盖安装**，
+# 这样改了仓库源码后跑一次 start.sh 即生效，不必重建镜像。
+#
+# 这个标志必须**在函数定义之前**初始化：安装和配置注入两处都会把它置 true，
+# 谁在后面重置一次，谁就会把前面那次静默吃掉（踩过）。
+OPENCLAW_RESTART_NEEDED=false
+install_paper_queue() {
+  local src="${REPO_ROOT}/openclaw/skills/paper-queue"
+  local plugin_src="${REPO_ROOT}/openclaw/plugins/paper-queue-actor"
+  local dst="${HOME}/.openclaw/skills/paper-queue"
+  local plugin_dst="${HOME}/.openclaw/extensions/paper-queue-actor"
+
+  if [[ ! -f "${src}/mcp_server.py" || ! -f "${plugin_src}/index.ts" ]]; then
+    echo "   ⚠️  paper-queue 源文件缺失，跳过安装: ${src}"
+    return
+  fi
+
+  # 内容变了就得重启网关才用得上：MCP server 是网关按需拉起的子进程，文件换了而网关
+  # 不重启，跑的还是老代码 —— 「看起来做了其实没生效」的典型。
+  if ! diff -rq --exclude=__pycache__ "${src}" "${dst}" >/dev/null 2>&1 \
+     || ! diff -rq "${plugin_src}" "${plugin_dst}" >/dev/null 2>&1; then
+    OPENCLAW_RESTART_NEEDED=true
+  fi
+
+  rm -rf "${dst}" "${plugin_dst}"
+  mkdir -p "$(dirname "${dst}")" "$(dirname "${plugin_dst}")"
+  cp -a "${src}" "${dst}"
+  cp -a "${plugin_src}" "${plugin_dst}"
+  # 跑守卫测试会在源码目录旁边留下 __pycache__，别把它带进运行时目录
+  rm -rf "${dst}/__pycache__"
+  echo "   ✅ paper-queue 已安装到 ~/.openclaw/skills + ~/.openclaw/extensions"
+}
+install_paper_queue
+
+
 # ── 注入 OpenClaw Discord Bot Token ─────────────────────────────
 # 从 .env 读取 OPENCLAW_DISCORD_BOT_TOKEN，注入到 openclaw.json 的 channels.discord.token
 OPENCLAW_DISCORD_BOT_TOKEN="${OPENCLAW_DISCORD_BOT_TOKEN:-$(grep '^OPENCLAW_DISCORD_BOT_TOKEN=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
@@ -381,6 +420,24 @@ else:
 " "${OPENCLAW_GH_TOKEN}"
     echo "   🔑 已注入 OpenClaw GitHub token"
   fi
+fi
+
+# ── 接入论文清单（MCP server + 身份插件 + 禁用 paper-fetch）────────
+# 幂等手术放在独立脚本里：它跨 mcp/plugins/skills 三段，还有个 plugins.allow
+# 「存在即白名单」的陷阱（凭空创建会把别的插件全挡掉），值得单独单测。
+# mcp.servers / plugins.load 的变更**必须重启网关**才生效，所以这里记下是否变化，
+# 等 compose up 之后再决定要不要重启。
+if [[ -f "${OPENCLAW_CONFIG}" ]]; then
+  _pq_out="$(python3 "${REPO_ROOT}/scripts/ensure_openclaw_paper_queue.py" "${OPENCLAW_CONFIG}" || true)"
+  case "${_pq_out}" in
+    updated)
+      OPENCLAW_RESTART_NEEDED=true
+      echo "   📝 已接入论文清单（MCP server + 身份插件 + 禁用 paper-fetch）" ;;
+    unchanged)
+      echo "   ✅ 论文清单配置已是最新" ;;
+    *)
+      echo "   ⚠️  论文清单配置注入失败，请检查 ${OPENCLAW_CONFIG}" ;;
+  esac
 fi
 
 # ── 修复 OpenClaw 第三方插件的 module 解析 ──────────────────────
@@ -501,8 +558,34 @@ echo "🚀 启动服务..."
 if [[ -n "${BACKUP_ROOT:-}" ]]; then
   echo "   备份目录: ${BACKUP_ROOT}"
 fi
+# 记录 up -d 之前的容器启动时间：用来判断这次 up 是否**重建**了容器。
+# 重建过的容器在启动时已经读过新配置，不需要再重启。这个判断不是洁癖 ——
+# 2026-09-16 实测踩过：OpenClaw 2026.9.1 会在这个 state 目录上跑一次启动迁移，
+# 迁移期间重启会把它打断、下次从头再来，表现是网关**看起来卡死**（既不绑端口、
+# 也不报错，docker logs 只有几行），静置几分钟才自行恢复。
+_openclaw_started_before="$(docker inspect openclaw-gateway --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
+
+# mcp.servers / plugins.load 的配置变更不会热加载，必须重启网关才生效
+# （实测日志：config change requires gateway restart (plugins.load)）。
+if [[ "${OPENCLAW_RESTART_NEEDED:-false}" == "true" ]]; then
+  _openclaw_started_after="$(docker inspect openclaw-gateway --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+  # 不相等 = 容器在本次 up 里才出现（首次部署）或被重建 —— 两种情况启动时都已读到新配置。
+  # 注意不能要求 before 非空：首次部署时它本来就是空的，早期版本这样写过，结果
+  # 在"刚创建完立刻重启"，正好撞上 OpenClaw 的启动迁移。
+  if [[ "${_openclaw_started_before}" != "${_openclaw_started_after}" ]]; then
+    echo "   ℹ️  网关已在本次 up 中创建/重建，新配置已随启动生效，跳过多余重启"
+  else
+    echo "🔄 论文清单有变更（配置或代码），重启 OpenClaw 网关使其生效..."
+    if docker compose restart openclaw-gateway >/dev/null 2>&1; then
+      echo "   ✅ 网关已重启"
+    else
+      echo "   ⚠️  网关重启失败，请手动执行: docker compose restart openclaw-gateway"
+    fi
+  fi
+fi
 
 HERMES_BIN="/opt/hermes/.venv/bin/hermes"
 HERMES_CONFIG="${HOME}/.hermes/config.yaml"

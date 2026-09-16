@@ -127,6 +127,19 @@
       }
     }
   },
+  "mcp": {
+    "servers": {
+      "paper-queue": {
+        "command": "python3",
+        "args": ["/home/node/.openclaw/skills/paper-queue/mcp_server.py"]
+      }
+    }
+  },
+  "skills": {
+    "entries": {
+      "paper-fetch": { "enabled": false }
+    }
+  },
   "channels": {
     "discord": {
       "enabled": false,
