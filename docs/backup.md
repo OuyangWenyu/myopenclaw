@@ -32,7 +32,9 @@ backup-all-docker.sh
   └── tdai-memory/scripts/backup.sh → TDAI Memory 数据
 ```
 
-每个脚本做选择性 rsync 到时间戳快照目录，维护 `latest/` 软链接。失败跟踪：单步失败不中断，最终汇总退出码。
+每个脚本做选择性 rsync 到时间戳快照目录，维护 `latest/` **目录**（`rsync -a --delete` 同步，**不是软链接** —— 云盘本来就不同步符号链接）。失败跟踪：单步失败不中断，最终汇总退出码。
+
+跑完会写一份心跳到 `~/.myagentdata/agentops/backup-heartbeat.json`（逐服务成功/失败），供 AgentOps 判断备份新鲜度。心跳**不放云盘目录**：云盘对宿主进程的可见性按进程上下文分裂（launchd 能列目录却读不了文件，交互式 shell 反过来），放本地才两头都读得到。心跳写失败只告警，不影响备份本身。
 
 ## 备份内容
 
@@ -61,7 +63,7 @@ docker compose exec backup-cron /scripts/backup-all-docker.sh
 
 快照保存在：`<云盘路径>/myopenclaw-backups/<类别>/<时间戳>/`
 
-每个快照为独立时间戳目录，`latest/` 软链接指向最新。超过 `BACKUP_KEEP_DAYS`（默认 30 天）的旧快照自动清除。
+每个快照为独立时间戳目录，`latest/` 目录同步为最新一份的内容。超过 `BACKUP_KEEP_DAYS`（默认 30 天）的旧快照自动清除 —— 按**目录名里的时间戳**判定，不按文件系统 mtime（`rsync -a` 会把目标目录的 mtime 覆盖成源目录的）。
 
 ## 恢复
 

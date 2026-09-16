@@ -24,6 +24,7 @@ import subprocess
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import NamedTuple
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENTOPS_DATA_DIR = os.environ.get(
@@ -212,32 +213,145 @@ def detect_restarts(containers, threshold_hours=RESTART_THRESHOLD_HOURS):
 # =============================================================
 
 
-def _get_latest_backup_time(backup_root):
-    """Get the timestamp of the most recent backup across all services.
+# 探测有两个来源，优先级从高到低：
+#
+#   1. **心跳** —— backup-cron 每次跑完写一份（逐服务记成功/失败）。它刻意放在云盘
+#      目录**之外**：实测云盘目录对宿主进程的可见性是**按进程上下文分裂**的 ——
+#      launchd 能 readdir 云盘根目录、却读不了里面的文件（EPERM）；交互式 shell 恰好
+#      反过来（读得了文件、readdir 却 EPERM）。放在云盘里的信号总有一类宿主进程读不到，
+#      所以心跳落本地（~/.myagentdata/agentops/）。
+#
+#   2. **快照目录名** —— 退化路径。两条硬约束：
+#      · 判据是**目录名里的时间戳**，不是 mtime：`rsync -a` 的 -t 会把目标目录的 mtime
+#        覆盖成源目录的，mtime 根本不是备份时间（prune 逻辑早已因此改用目录名）。
+#      · **不要求 `latest` 是符号链接**。备份脚本用
+#        `rsync -a --delete "${DEST}/" "${LATEST}/"` 建 latest，那是**真实目录**；
+#        这里历史上判的是 `is_symlink()`，于是 5/5 服务全不匹配、恒定返回「无备份」——
+#        58 次运行 58 次误报（2026-09-16 修）。
+SNAPSHOT_DIR_RE = re.compile(r"^(\d{4}-\d{2}-\d{2})_(\d{6})$")
 
-    Returns datetime or None if no backups found.
+
+class BackupProbe(NamedTuple):
+    """备份新鲜度探测结果。
+
+    `unreadable=True` 表示**探测失败**（读不到），与「确实没有备份」是两回事 ——
+    混为一谈就会把「我不知道」说成「没有」，制造假警报。
     """
-    backup_path = Path(backup_root)
-    if not backup_path.exists():
-        return None
 
-    latest_time = None
+    last_success: "datetime | None"
+    source: str      # "heartbeat" | "snapshot" | "none"
+    unreadable: bool
+    ok: bool         # 最近一次运行是否全部成功（无心跳时为 True —— 无从证伪）
+    detail: str
+
+
+def _heartbeat_file():
+    return Path(os.environ.get(
+        "AGENTOPS_BACKUP_HEARTBEAT",
+        os.path.expanduser("~/.myagentdata/agentops/backup-heartbeat.json"),
+    ))
+
+
+def _read_heartbeat(path):
+    """→ (moment, ok, detail)。ok=None 表示「压根没读到心跳」，不是「备份失败」。"""
     try:
-        for service_dir in backup_path.iterdir():
+        raw = Path(path).read_text()
+    except FileNotFoundError:
+        return None, None, "心跳文件不存在"
+    except OSError as e:
+        return None, None, f"心跳文件不可读: {e}"
+
+    try:
+        data = json.loads(raw)
+    except ValueError as e:
+        return None, None, f"心跳文件不是合法 JSON: {e}"
+    if not isinstance(data, dict):
+        return None, None, "心跳文件不是 JSON 对象"
+
+    moment = None
+    # 优先取 epoch：容器可能跑在与宿主不同的时区（backup-cron 实测跑在 UTC），
+    # 字符串会被宿主按本地时区解释歪，绝对时刻只有 epoch 不会错。
+    epoch = data.get("epoch")
+    if isinstance(epoch, (int, float)) and not isinstance(epoch, bool):
+        try:
+            moment = datetime.fromtimestamp(epoch)
+        except (OverflowError, OSError, ValueError):
+            moment = None
+    if moment is None:
+        ts = data.get("timestamp")
+        if isinstance(ts, str):
+            try:
+                moment = datetime.fromisoformat(ts)
+            except ValueError:
+                moment = None
+            else:
+                if moment.tzinfo is not None:
+                    moment = moment.astimezone().replace(tzinfo=None)
+    if moment is None:
+        return None, None, "心跳文件没有可解析的时间戳"
+
+    failed = data.get("failed") or []
+    if not isinstance(failed, list):
+        failed = [str(failed)]
+    if data.get("status") == "ok" and not failed:
+        return moment, True, f"心跳 {moment:%Y-%m-%d %H:%M}（本次全部成功）"
+    return moment, False, (
+        f"心跳 {moment:%Y-%m-%d %H:%M}：本次未全部成功"
+        f"（status={data.get('status')!r}, failed={failed}）"
+    )
+
+
+def _scan_snapshot_dirs(backup_root):
+    """按快照**目录名**找最新时间。→ (moment|None, unreadable, detail)"""
+    root = Path(backup_root)
+    try:
+        service_dirs = list(root.iterdir())
+    except FileNotFoundError:
+        return None, False, f"备份目录不存在: {backup_root}"
+    except OSError as e:
+        return None, True, f"备份目录不可读（{e.strerror or e}）: {backup_root}"
+
+    latest = None
+    count = 0
+    for service_dir in service_dirs:
+        try:
             if not service_dir.is_dir():
                 continue
-            latest_link = service_dir / "latest"
-            if latest_link.is_symlink():
-                try:
-                    mtime = datetime.fromtimestamp(latest_link.stat().st_mtime)
-                    if latest_time is None or mtime > latest_time:
-                        latest_time = mtime
-                except OSError:
-                    continue
-    except (PermissionError, OSError) as e:
-        print(f"⚠️  Cannot read backup dir {backup_root}: {e}", file=sys.stderr)
+            entries = list(service_dir.iterdir())
+        except OSError:
+            continue
+        for entry in entries:
+            match = SNAPSHOT_DIR_RE.match(entry.name)
+            if not match:
+                continue
+            try:
+                moment = datetime.strptime(
+                    f"{match.group(1)}_{match.group(2)}", "%Y-%m-%d_%H%M%S"
+                )
+            except ValueError:
+                continue
+            count += 1
+            if latest is None or moment > latest:
+                latest = moment
 
-    return latest_time
+    if latest is None:
+        return None, False, f"备份目录中没有任何快照: {backup_root}"
+    return latest, False, f"最新快照 {latest:%Y-%m-%d %H:%M}（共 {count} 份）"
+
+
+def probe_backup(backup_root=BACKUP_ROOT, heartbeat=None):
+    """探测备份新鲜度：心跳优先，快照目录名兜底。"""
+    heartbeat = Path(heartbeat) if heartbeat is not None else _heartbeat_file()
+
+    moment, heartbeat_ok, heartbeat_detail = _read_heartbeat(heartbeat)
+    if moment is not None:
+        return BackupProbe(moment, "heartbeat", False, heartbeat_ok, heartbeat_detail)
+
+    snapshot_moment, unreadable, snapshot_detail = _scan_snapshot_dirs(backup_root)
+    detail = f"{snapshot_detail}（{heartbeat_detail}）"
+    if snapshot_moment is not None:
+        return BackupProbe(snapshot_moment, "snapshot", False, True, detail)
+    return BackupProbe(None, "none", unreadable, True, detail)
 
 
 def check_backup_freshness(backup_root=BACKUP_ROOT, threshold_hours=BACKUP_STALE_HOURS):
@@ -250,35 +364,58 @@ def check_backup_freshness(backup_root=BACKUP_ROOT, threshold_hours=BACKUP_STALE
     Returns:
         list of ledger item dicts
     """
-    latest = _get_latest_backup_time(backup_root)
+    probe = probe_backup(backup_root)
 
-    if latest is None:
-        return [{
-            "title": "备份未找到或从未执行",
+    def item(title, status, evidence, why, action):
+        return {
+            "title": title,
             "date": datetime.now().strftime("%Y-%m-%d"),
             "source": "auto | backup-cron",
-            "status": "new",
+            "status": status,
             "owner": "owen",
-            "evidence": f"备份目录 {backup_root} 中无 latest/ 符号链接",
-            "why_it_matters": "数据安全依赖定期备份，没有备份意味着容器配置和记忆面临丢失风险",
-            "suggested_next_action": "检查 backup-cron 容器日志，确认 BACKUP_ROOT 和云盘客户端配置正确",
+            "evidence": evidence,
+            "why_it_matters": why,
+            "suggested_next_action": action,
             "needs_human_decision": True,
-        }]
+        }
 
-    age = datetime.now() - latest
+    if not probe.ok:
+        return [item(
+            "备份失败",
+            "new",
+            probe.detail,
+            "最近一次备份没有全部成功，部分数据可能没有进入云端快照",
+            "查看 backup-cron 日志定位失败的服务: docker compose logs backup-cron --tail 50",
+        )]
+
+    if probe.last_success is None:
+        if probe.unreadable:
+            return [item(
+                "备份状态无法确认",
+                "watch",
+                probe.detail,
+                "探测不到备份，但原因是读不到目录（权限/IO）—— 不代表备份不存在，需人工确认，"
+                "不要据此判断数据有风险",
+                "在能读该目录的上下文里确认: ls \"${BACKUP_ROOT}\"",
+            )]
+        return [item(
+            "备份未找到或从未执行",
+            "new",
+            probe.detail,
+            "数据安全依赖定期备份，没有备份意味着容器配置和记忆面临丢失风险",
+            "检查 backup-cron 容器日志，确认 BACKUP_ROOT 和云盘客户端配置正确",
+        )]
+
+    age = datetime.now() - probe.last_success
     if age > timedelta(hours=threshold_hours):
         hours_ago = age.total_seconds() / 3600
-        return [{
-            "title": "备份过期",
-            "date": datetime.now().strftime("%Y-%m-%d"),
-            "source": "auto | backup-cron",
-            "status": "watch",
-            "owner": "owen",
-            "evidence": f"最新备份: {latest.strftime('%Y-%m-%d %H:%M')}（{hours_ago:.0f}h 前），阈值: {threshold_hours}h",
-            "why_it_matters": f"备份已过期 {hours_ago:.0f} 小时，超过 {threshold_hours}h 阈值。数据安全存在风险",
-            "suggested_next_action": "手动触发备份: docker compose exec backup-cron /scripts/backup-all-docker.sh",
-            "needs_human_decision": True,
-        }]
+        return [item(
+            "备份过期",
+            "watch",
+            f"{probe.detail}，即 {hours_ago:.0f}h 前，阈值: {threshold_hours}h",
+            f"备份已过期 {hours_ago:.0f} 小时，超过 {threshold_hours}h 阈值。数据安全存在风险",
+            "手动触发备份: docker compose exec backup-cron /scripts/backup-all-docker.sh",
+        )]
 
     return []
 

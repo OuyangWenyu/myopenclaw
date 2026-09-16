@@ -9,7 +9,7 @@
 | 信号 | 检测方式 | 阈值（可配置） |
 |------|----------|---------------|
 | 容器近期重启 | `docker compose ps --format json` 解析运行时间 | < 2h 内重启 |
-| 备份过期 | 检查 `latest/` 符号链接的修改时间 | > 24h 未更新 |
+| 备份新鲜度 | 读 backup-cron 写的心跳（`~/.myagentdata/agentops/backup-heartbeat.json`）；读不到才退回扫**快照目录名** | > 24h 未更新 |
 | 磁盘使用率 | `df -P /System/Volumes/Data` | > 85% |
 | 网关错误循环 | `scripts/check-gateway-errors.sh --json` | 检测到重复错误 |
 | 容器健康状态 | `docker compose ps` JSON 中的 `(unhealthy)` 状态 | 任何 unhealthy |
