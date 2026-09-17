@@ -1,15 +1,17 @@
-"""Behavioral guards for openclaw/skills/paper-queue/mcp_server.py.
+"""Behavioral guards for docker/paper-queue-mcp/server.py.
 
 Run: uv run --with pytest pytest tests/test_paper_queue_mcp.py -v
 
 Two layers:
-  * unit   — key derivation / window math / tool functions against a temp DB
-  * stdio  — spawn the real server and speak newline-delimited JSON-RPC, because that
-             is exactly what OpenClaw does; a unit test that skips the framing would
-             not catch a broken handshake.
+  * unit     — key derivation / window math / tool functions against a temp DB
+  * envelope — drive `handle()` with the same JSON-RPC envelopes OpenClaw sends
+               (`tools/call` with `params.name`/`params.arguments`), because the
+               business layer is reached through that dispatch, not directly.
 
-The module is pure stdlib on purpose (the openclaw image is stock and cannot take pip
-packages), so these tests run anywhere python3 does.
+Note: the server's transport is FastMCP (streamable HTTP), but `mcp` is imported
+**lazily inside `build_server()`** precisely so this file can import the module
+without it. The business layer above that point stays stdlib-only, so these tests
+run anywhere python3 does.
 """
 
 from __future__ import annotations
@@ -18,7 +20,6 @@ import importlib.util
 import json
 import os
 import sqlite3
-import subprocess
 import sys
 from pathlib import Path
 

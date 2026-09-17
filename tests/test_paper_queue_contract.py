@@ -1,4 +1,4 @@
-"""Behavioral guards for the paper-queue contract (openclaw/skills/paper-queue/schema.sql).
+"""Behavioral guards for the paper-queue contract (docker/paper-queue-mcp/schema.sql).
 
 Run: uv run --with pytest pytest tests/test_paper_queue_contract.py -v
 
