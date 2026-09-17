@@ -74,7 +74,10 @@ log "   👤 管理员用户 ID: ${USER_ID}"
 # ── 确保 docker_host 条目存在 ─────────────────────────────────
 DOCKER_HOST_EXISTS=$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM docker_host WHERE docker_type='socket' AND docker_daemon='/var/run/docker.sock';")
 if [[ "${DOCKER_HOST_EXISTS}" -eq 0 ]]; then
-    sqlite3 "${KUMA_DB}" "INSERT INTO docker_host (docker_type, docker_daemon, name) VALUES ('socket', '/var/run/docker.sock', 'Docker Socket');"
+    # user_id 是 NOT NULL —— 漏了它这条 INSERT 在**干净库**上必然失败
+    # （`NOT NULL constraint failed: docker_host.user_id`）。线上库因为早有一行
+    # 才一直没暴露，新装机器会直接卡在这里。
+    sqlite3 "${KUMA_DB}" "INSERT INTO docker_host (docker_type, docker_daemon, name, user_id) VALUES ('socket', '/var/run/docker.sock', 'Docker Socket', ${USER_ID});"
     log "   ✅ 已创建 docker_host 条目"
 else
     log "   ✅ docker_host 条目已存在"
