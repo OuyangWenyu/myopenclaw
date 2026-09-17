@@ -73,7 +73,7 @@
     "servers": {
       "repo-scanner": {
         "url": "http://repo-scanner-mcp:8001/mcp",
-        "transport": "sse",
+        "transport": "streamable-http",
         "connectionTimeoutMs": 10000,
         "requestTimeoutMs": 120000,
         "supportsParallelToolCalls": true
