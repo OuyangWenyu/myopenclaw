@@ -2,13 +2,15 @@
 
 Zotero 文献能力由 [mylibrary](https://github.com/OuyangWenyu/mylibrary) 提供，本项目通过 `zotero-mcp` Docker 服务消费。
 
+> 文件名 `zotero-cli-cc` 是历史遗留：旧的 zotero-cli-cc 方案已退役（镜像里既无 `zot` 二进制、也无 `zotero_cli_cc` 模块）。paper pipeline 与 `zotero-mcp` 的源码现已归 `~/code/mylibrary`（`hydrolitagent`），在镜像构建期安装。本文档描述的是**当前**系统。
+
 ## Zotero MCP 服务
 
 | 属性 | 值 |
 |------|-----|
 | 服务名 | `zotero-mcp` |
 | 端口 | 8002 |
-| Transport | SSE |
+| Transport | streamable HTTP（`POST /mcp`；`/sse` 返回 404） |
 | 端点 | `http://zotero-mcp:8002/mcp` |
 | 代码来源 | mylibrary（build-time rsync，本地优先 + git fallback） |
 
@@ -45,26 +47,27 @@ Zotero 文献能力由 [mylibrary](https://github.com/OuyangWenyu/mylibrary) 提
 
 ```bash
 # .env
-ZOTERO_API_KEY=xxxxxxxx          # 爱码士写权限
+ZOTERO_API_KEY=xxxxxxxx          # 注入 zotero-mcp / hermes / hermes-coder / hermes-finance
 ZOTERO_LIBRARY_ID=1234567
 ZOTERO_LIBRARY_TYPE=user
-
-# 道元只读（可选，使用独立 API key）
-# DAOYUAN_ZOTERO_API_KEY=xxxxxxxx  # 仅 Allow library access
 ```
+
+> 道元不需要单独的 API key —— 见下方「Agent 接入方式」。
 
 ## Agent 接入方式
 
-| Agent | 容器 | Zotero 权限 | 接入方式 |
-|-------|------|:----------:|----------|
-| 爱码士 (coder) | hermes-coder | 读写 | zotero-mcp + paper-to-zotero skill |
-| 道元 (daoyuan) | hermes-daoyuan | **只读** | zotero-mcp + zotero-query skill |
-| Hermes (default) | hermes | 读写 | zotero-mcp |
-| finance | hermes-finance | 只读 | zotero-mcp |
+| Agent | 容器 | 写入凭据（`ZOTERO_API_KEY`） | 接入方式 |
+|-------|------|:---------------------------:|----------|
+| 爱码士 (coder) | hermes-coder | 有 | zotero-mcp + paper-to-zotero skill |
+| 道元 (daoyuan) | hermes-daoyuan | **无（未注入）** | zotero-mcp + zotero-query skill |
+| Hermes (default) | hermes | 有 | zotero-mcp |
+| finance | hermes-finance | 有 | zotero-mcp |
 
+- **查询路径不区分 agent**：`zotero-mcp` 是共享服务，用它**自己容器里的** `ZOTERO_API_KEY` 访问文献库，且 12 个工具**全部是只读查询**——MCP 上不存在写操作，也没有 per-agent 的权限差别（`hermes-daoyuan` 实测连同一个服务、同样 12 个工具）。
+- **写入路径才分权限**：写入靠容器内注入的 `ZOTERO_API_KEY`（paper pipeline 用 pyzotero 直连 Web API）。默认 profile / 爱码士 / finance 注入了该 key；**道元未注入**，因此道元无法创建/修改条目。
 - **爱码士**独享论文注入管线（paper-fetch → rclone → paper-to-zotero），代码来自 mylibrary
-- **道元**只能查询文献库，不能创建/修改条目。权限由 Zotero API key 级别控制
 - 道元使用 mylibrary 提供的 `zotero-query` skill 进行 MCP 文献查询
+- ⚠️ 本文档旧版本提到的 `DAOYUAN_ZOTERO_API_KEY` 目前**没有接线**：该变量只存在于 `.env`，`docker-compose.yml`、`scripts/`、entrypoint 均未引用它。道元的只读实际是靠「不给它注入 `ZOTERO_API_KEY`」实现的。
 
 ## Paper Pipeline（仅爱码士）
 

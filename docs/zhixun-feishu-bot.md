@@ -29,10 +29,9 @@ Waterism API
 ```bash
 mkdir -p /srv/agents
 cd /srv/agents
-git clone git@github.com:CylenLC/myopenclaw.git
+git clone git@github.com:OuyangWenyu/myopenclaw.git
 git clone git@gitcode.com:dlut-water/zhixun-agent.git
 cd myopenclaw
-git switch feat/zhixun-feishu-bot
 ```
 
 要求：

@@ -6,7 +6,7 @@
 
 ```
 git-contribution-stats/ (独立仓库)
-  ├── scripts/collect.py        ← 每日采集 27 仓库 GitHub + GitCode 提交
+  ├── scripts/collect.py        ← 每日采集 32 仓库 GitHub + GitCode 提交
   ├── core/report.py            ← 日报数据查询
   └── docker/mcp-server/        ← MCP server (build context for repo-scanner-mcp)
         │
@@ -30,8 +30,10 @@ Hermes daily-dev-report skill
 ## 常用命令
 
 ```bash
-# 查看日报数据
-docker compose exec repo-scanner-mcp python3 -c "from core.report import daily_report_as_dict; print(daily_report_as_dict())"
+# 查看日报数据（必须带 readonly=True —— 容器里 /data 是只读挂载，
+# 默认的 daily_report_as_dict() 会执行 PRAGMA journal_mode=WAL 而报
+# "unable to open database file"；MCP server 自己也是用 readonly=True 调的）
+docker compose exec repo-scanner-mcp python3 -c "from core.report import daily_report_as_dict; print(daily_report_as_dict(readonly=True))"
 
 # 查看 MCP 连接
 docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp list | grep repo-scanner
@@ -45,4 +47,4 @@ cat /tmp/report.txt | docker compose exec -T hermes python3 /opt/hermes-skills/d
 
 ## 数据来源
 
-git-contribution-stats 采集 27 个仓库（GitHub + GitCode），数据存储在 `~/.myagentdata/repo-scanner/repos.sqlite`（只读挂载到 repo-scanner-mcp 容器）。
+git-contribution-stats 采集 32 个仓库（12 个 GitHub + 20 个 GitCode，见 `configs/repos.toml`），数据存储在 `~/.myagentdata/repo-scanner/repos.sqlite`（**只读**挂载到 repo-scanner-mcp 容器）。

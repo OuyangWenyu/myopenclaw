@@ -22,7 +22,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 07:45 | 宿主机 | launchd | **AgentOps 健康信号采集** | `install-all-schedulers.sh` |
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
-| 08:10 | Docker | Hermes cron | **yuque-daily-digest**（语雀知识库变更日报，需配置 `YUQUE_DAILY_PUSH_REPOS`） | `start.sh` 自动注册 |
+| 08:10 | Docker | Hermes cron | **yuque-daily-digest**（语雀知识库变更日报，需配置 `YUQUE_DAILY_PUSH_REPOS` + `YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY`） | `start.sh` 自动注册 |
 | 每天 02:00 | Docker | crond (backup-cron) | 快照备份到云盘（清理过期快照仅在此执行） | entrypoint 自动 |
 
 ## 时序依赖
@@ -55,7 +55,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 bash ${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh  # Git 数据采集
 ```
 
-Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。其中 yuque-daily-digest 需在 `.env` 配置 `YUQUE_DAILY_PUSH_REPOS` 后才会注册。
+Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。其中 yuque-daily-digest 需在 `.env` **同时**配置 `YUQUE_DAILY_PUSH_REPOS`、`YUQUE_MCP_URL`、`MCP_YUQUE_MCP_API_KEY` 三者后才会注册（缺任一项静默跳过，只留一行提示）。
 
 > backup-cron 的保留策略（删除超过 `BACKUP_KEEP_DAYS` 的快照）**只在 02:00 这个定时任务里执行**；容器启动时的初始备份带 `BACKUP_SKIP_PRUNE=1`，重启不会删任何快照。详见 [备份系统](backup.md)。
 
@@ -63,20 +63,25 @@ Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/st
 
 ```bash
 # 1. 检查所有 launchd 任务
-launchctl list | grep -E 'ai\.(dailyinfo|myopenclaw)'
+launchctl list | grep -E 'ai\.(dailyinfo|myopenclaw|git-contribution-stats)'
 
-# 预期输出（11 个 launchd 定时任务，ExitCode 0 或 1 均为正常）：
-# ai.dailyinfo.push-arxiv      0
-# ai.dailyinfo.push-early      0
-# ai.dailyinfo.push-papers     0
-# ai.dailyinfo.run-ai_news     0
-# ai.dailyinfo.run-arxiv       0
-# ai.dailyinfo.run-code        0
-# ai.dailyinfo.run-papers      0
-# ai.dailyinfo.run-resource    0
-# ai.git-contribution-stats.collect   0
-# ai.myopenclaw.collect-agentops      0
-# ai.myopenclaw.healthchecks-ping     0
+# 预期输出（11 个 launchd 定时任务；launchctl 输出是三列 PID/退出码/Label，
+# 第 2 列是上次退出码，0 或 1 均为正常）：
+# -	0	ai.dailyinfo.push-arxiv
+# -	0	ai.dailyinfo.push-early
+# -	0	ai.dailyinfo.push-papers
+# -	0	ai.dailyinfo.run-ai_news
+# -	0	ai.dailyinfo.run-arxiv
+# -	0	ai.dailyinfo.run-code
+# -	0	ai.dailyinfo.run-papers
+# -	0	ai.dailyinfo.run-resource
+# -	0	ai.git-contribution-stats.collect
+# -	0	ai.myopenclaw.collect-agentops
+# -	0	ai.myopenclaw.healthchecks-ping
+
+# ⚠️ grep 模式要带上 git-contribution-stats —— 它的 label 不在 dailyinfo/myopenclaw 下，
+# 漏掉会少一项。直接 grep 'ai\.' 则还会带出 ai.hermes.gateway
+#（宿主机上的 Hermes 网关常驻服务，不由本仓安装，不是定时任务）。
 
 # 2. 检查 backup-cron
 docker compose exec backup-cron crontab -l
@@ -93,7 +98,7 @@ docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list
 - [ ] `launchctl list | grep ai.` 输出包含全部已安装任务
 - [ ] `docker compose ps` 所有服务 Up
 - [ ] `docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list` 包含 "Daily Command Center"
-- [ ] 若配置了 `YUQUE_DAILY_PUSH_REPOS`，cron list 还应包含 "yuque-daily-digest"
+- [ ] 若 `.env` 里 `YUQUE_DAILY_PUSH_REPOS` + `YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY` 三者都已配置，cron list 还应包含 "yuque-daily-digest"
 - [ ] Healthchecks.io Dashboard 显示 "Last Ping: just now"（等 60s 后刷新）
 - [ ] 次日 07:50–08:10 检查飞书是否收到晨间四签推送（含 08:10 语雀日报）
 

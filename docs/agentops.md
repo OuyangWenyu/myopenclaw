@@ -48,7 +48,7 @@ tail -f logs/collect-agentops.log
 
 ### 在晨间四签中的使用
 
-morning-triage-v2 通过关键词搜索 TDAI 记忆来消费 AgentOps 信号。当采集到异常信号时，晨间四签报告会包含系统健康小结。
+morning-triage-v2 直接读 `inbox.md`（见 `skills/morning-triage-v2/SKILL.md` 的第 0 步）来消费 AgentOps 信号，不经过 TDAI 关键词搜索。当采集到异常信号时，晨间四签报告会包含系统健康小结。
 
 ## 配置
 

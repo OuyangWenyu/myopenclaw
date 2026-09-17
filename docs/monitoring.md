@@ -50,34 +50,28 @@ Layer 2: Healthchecks.io (云端)
 
 ### 添加监控目标
 
-**自动方式（推荐）**：运行自动发现脚本，从 `docker-compose.yml` 读取所有服务并批量创建：
+**自动方式（推荐）**：运行注册脚本，把脚本内置的监控项清单（HTTP + Docker 容器）批量写入 Uptime Kuma 的 SQLite：
 
 ```bash
 bash scripts/setup-uptime-kuma.sh
 ```
 
-脚本会提示输入 Uptime Kuma 用户名和密码，或通过环境变量传入：
-```bash
-UPK_USER=owen UPK_PASS=yourpass bash scripts/setup-uptime-kuma.sh
-```
+脚本**直接操作 `~/.uptime-kuma/kuma.db`，不需要 API 凭证**，也不会提示输入账号密码。前提是库里已有管理员账号——没有的话它会提示后退出，先去 http://localhost:3001 创建账号再重跑。`start.sh` 在主栈起来后会自动调用一次（`--quiet`）。
 
-幂等运行——已存在的监控会自动跳过。新增服务后重新运行即可。
+幂等运行——已存在的监控会自动跳过。**监控项清单是脚本里的 `MONITORS` 数组**（不是从 `docker-compose.yml` 动态读取），新增服务后要同步补一行再重跑。
 
 **手动方式**（备选）：在 Uptime Kuma Web UI 逐一添加。
 
-**HTTP 监控**（类型选择 "HTTP(s)"）：
+**HTTP 监控**（类型选择 "HTTP(s)"，脚本统一用 `interval=60`）：
 
-| 名称 | URL | 间隔 | 重试 | 说明 |
-|------|-----|------|------|------|
-| Hermes | `http://hermes:8642` | 60s | 3 | Hermes 网关 |
-| Hermes Coder | `http://hermes-coder:8642` | 60s | 3 | 爱码士 |
-| Hermes Finance | `http://hermes-finance:8642` | 60s | 3 | 财务 agent |
-| Hermes Dashboard | `http://hermes-dashboard:9119` | 60s | 3 | 监控面板 |
-| OpenClaw Gateway | `http://openclaw-gateway:18789/healthz` | 30s | 3 | 有 /healthz 端点 |
-| Claude Code | `http://claude-code:9090` | 60s | 3 | cc-connect 管理界面 |
-| aisecretary | `http://aisecretary:8000/health` | 60s | 3 | 事务数据库 MCP 服务 |
-| TDAI Memory | `http://tdai-memory:8420/health` | 60s | 3 | Agent 长期记忆 Gateway |
-| FreshRSS | `http://dailyinfo_freshrss:80` | 60s | 3 | RSS 聚合 |
+| 名称 | URL | 状态码 | 说明 |
+|------|-----|--------|------|
+| Hermes Dashboard | `http://hermes-dashboard:9119` | 200-299, 300-399 | 监控面板（basic auth admin/admin） |
+| OpenClaw Gateway | `http://openclaw-gateway:18789/healthz` | 200-299 | 有 /healthz 端点 |
+| aisecretary | `http://aisecretary:8000/health` | 200-299 | 事务数据库 MCP 服务 |
+| TDAI Memory | `http://tdai-memory:8420/health` | 200-299 | Agent 长期记忆 Gateway |
+| Repo Scanner MCP | `http://repo-scanner-mcp:8001/health` | 200-299 | 研发日报数据服务 |
+| FreshRSS | `http://dailyinfo_freshrss:80` | 200-399 | RSS 聚合 |
 
 > **注意**：URL 使用 Docker 内部 DNS（容器名），因为 Uptime Kuma 和所有服务在同一个 `myopenclaw-net` 网络上。
 
@@ -102,15 +96,19 @@ docker compose exec uptime-kuma sqlite3 /app/data/kuma.db \
 | Docker: hermes | hermes |
 | Docker: hermes-coder | hermes-coder |
 | Docker: hermes-finance | hermes-finance |
+| Docker: hermes-daoyuan | hermes-daoyuan |
 | Docker: hermes-dashboard | hermes-dashboard |
 | Docker: claude-code | claude-code |
 | Docker: openclaw-gateway | openclaw-gateway |
+| Docker: uptime-kuma | uptime-kuma |
+| Docker: backup-cron | backup-cron |
 | Docker: aisecretary | aisecretary |
 | Docker: tdai-memory | tdai-memory |
+| Docker: repo-scanner-mcp | repo-scanner-mcp |
+| Docker: zotero-mcp | zotero-mcp |
 | Docker: dailyinfo_freshrss | dailyinfo_freshrss |
-| Docker: backup-cron | backup-cron |
 
-**Ping 监控**（可选，监控宿主机可达性）：
+**Ping 监控**（可选，脚本不创建，需在 Web UI 手动添加）：
 
 | 名称 | 目标 |
 |------|------|

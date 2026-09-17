@@ -24,6 +24,7 @@ myopenclaw 用 Docker 运行三个 AI Agent 框架 — [Hermes Agent](https://gi
 - [可移植性](portability.md) — 换电脑需要准备什么
 - [Hermes 渠道](hermes-channels.md) — 飞书/钉钉/Discord 消息平台配置
 - [OpenClaw 渠道](openclaw-channels.md) — Discord/飞书渠道配置
+- [飞书 CLI](lark-cli.md) — lark-cli 飞书命令行工具
 - [TDAI 长期记忆](tdai-memory.md) — Agent 跨会话记忆系统
 - [zhixun 知汛助手](zhixun-feishu-bot.md) — 水文智能问答飞书机器人
 - [语雀知识库](yuque-mcp-hermes.md) — Hermes 接入远程语雀 MCP 服务（含每日变更推送 yuque-daily-digest）
@@ -32,8 +33,10 @@ myopenclaw 用 Docker 运行三个 AI Agent 框架 — [Hermes Agent](https://gi
 - [服务监控](monitoring.md) — Uptime Kuma + Healthchecks.io
 - [AgentOps 健康采集](agentops.md) — 系统健康信号自动采集
 - [Zotero 文献系统](zotero-cli-cc.md) — Zotero MCP 共享服务（mylibrary 提供）+ paper pipeline + 道元文献 Agent
+- [论文清单](paper-queue.md) — 论文请求只记不下（独立 MCP 容器）
 - [AI 秘书](aisecretary.md) — 事务数据库 MCP 服务
-- [研发日报](daily-dev-report.md) — 27 仓库每日采集 + 飞书推送
+- [研发日报](daily-dev-report.md) — 32 仓库每日采集 + 飞书推送
+- [dailyinfo 调度](dailyinfo.md) — AI 情报聚合与定时推送
 - [Google Drive](google-drive-rclone.md) — rclone 论文上传配置
 - [通讯录](contacts.md) — cardamum CLI 联系人管理
 - [邮件](email.md) — himalaya CLI 邮件客户端

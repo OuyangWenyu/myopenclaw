@@ -44,7 +44,7 @@ backup-all-docker.sh
 | Claude Code | `settings.json`、`projects/`、`skills/`、`plans/`、`tasks/`、cc-connect `config.toml` |
 | OpenClaw | `openclaw.json`、`agents/`、`flows/`、`extensions/`、`memory/main.sqlite`（热备份）、`memory-tdai/memories.sqlite`（虾酱记忆） |
 | TDAI Memory | `memories.sqlite`（sqlite3 热备）、`scene_blocks/`、`persona.md`、`checkpoint.json` |
-| Data | `~/.myagentdata/` 整目录 rsync |
+| Data | `~/.myagentdata/` 整目录 rsync（论文清单 `paper-queue/queue.sqlite` 与 `-wal`/`-shm` 除外 —— 它单独用 `sqlite3 .backup` 热备） |
 
 ## 不备份的内容
 

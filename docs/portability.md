@@ -11,7 +11,9 @@ myopenclaw (本仓库)
 │
 ├── [可选·硬依赖·build 时需要]
 │   ├── ~/code/aisecretary/          ← build context for aisecretary 服务
-│   └── ~/code/git-contribution-stats/ ← build context for repo-scanner-mcp
+│   ├── ~/code/git-contribution-stats/ ← build context for repo-scanner-mcp
+│   ├── ~/code/mylibrary/            ← 论文流水线代码（缺失时 build 从 GitHub clone）
+│   └── ../zhixun-agent/             ← zhixun 栈 MCP 镜像的额外 build context
 │
 ├── [可选·软依赖·运行时 graceful skip]
 │   └── ~/code/dailyinfo/            ← 宿主机 launchd 调度（每日论文/资讯抓取推送）
@@ -30,14 +32,16 @@ myopenclaw (本仓库)
 
 ## 硬依赖：build 时需要的仓库
 
-这两个仓库的 **build context 在 myopenclaw 仓库外**（`docker-compose.yml` 中 `context: ../xxx`）。`docker compose build` 时需要它们存在于同级目录：
+这些仓库的 **build context 在 myopenclaw 仓库外**（`docker-compose.yml` / `docker-compose.zhixun-bot.yml` 里写的是 `../xxx`）。`docker compose build` 时需要它们存在于指定路径：
 
 | 仓库 | 期望路径 | 用途 |
 |------|----------|------|
 | [aisecretary](https://github.com/iHeadWater/aisecretary) | `~/code/aisecretary` | aisecretary MCP 服务镜像构建 |
 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) | `~/code/git-contribution-stats` | repo-scanner-mcp 镜像构建 |
+| [mylibrary](https://github.com/OuyangWenyu/mylibrary) | `~/code/mylibrary` | hermes / zotero-mcp 镜像里的论文流水线（hydrolitagent + skills）。`start.sh` 先 rsync 进 build context；**本地没有时 Dockerfile 自动从 GitHub clone**，不会 build 失败 |
+| [zhixun-agent](https://github.com/OuyangWenyu/zhixun-agent) | `../zhixun-agent` | zhixun 栈 `zhixun-water-mcp` 镜像的 `additional_contexts.zhixun_src`（可用 `ZHIXUN_AGENT_PATH` 覆盖）。只有启动 zhixun 栈时才需要 |
 
-**不需要 build 的情况**（`./scripts/start.sh` 不加 `--build`）：使用已有的 Docker 镜像即可，这两个仓库不需要存在。
+**不需要 build 的情况**（`./scripts/start.sh` 不加 `--build`）：使用已有的 Docker 镜像即可，aisecretary / git-contribution-stats 这两个仓库不需要存在。
 
 ## 软依赖：运行时 graceful skip
 
@@ -53,7 +57,9 @@ myopenclaw (本仓库)
 ./scripts/clone-deps.sh
 ```
 
-此脚本克隆所有依赖仓库到正确路径。私有仓库需要 `gh auth login` 先。
+此脚本克隆 aisecretary / git-contribution-stats / dailyinfo 三个仓库到正确路径。私有仓库需要 `gh auth login` 先。
+
+`mylibrary` 与 `zhixun-agent` **不在**这个脚本里：前者缺失时 build 会自动从 GitHub clone；后者按需手动 clone（见[快速开始](setup.md)第 3 步）。
 
 ## 配置文件的机器差异
 
@@ -80,7 +86,7 @@ myopenclaw (本仓库)
 | Healthchecks.io 心跳 | systemd timer 或 cron |
 | collect-agentops 采集 | systemd timer 或 cron |
 
-> **注意**：Hermes cron 任务（Daily Command Center、daily-dev-report、工作日晨间简报、眼保健操提醒）运行在 Docker 容器内，不依赖 macOS launchd，Linux 上可直接使用。
+> **注意**：Hermes cron 任务（Daily Command Center、工作日晨间简报、daily-dev-report、yuque-daily-digest）运行在 Docker 容器内，不依赖 macOS launchd，Linux 上可直接使用。
 
 所有 launchd 任务依赖 macOS launchd。Linux 上的替代方案见 [调度系统](scheduling.md) 的 Linux 等价物说明。
 

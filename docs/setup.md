@@ -37,7 +37,7 @@ cp .env.example .env
 | `DISCORD_BOT_TOKEN` | 可选 | Hermes coder Discord Bot Token |
 | `DAOYUAN_FEISHU_APP_ID` / `SECRET` | 可选 | 道元·文献学者 飞书应用凭证 |
 | `FINANCE_FEISHU_APP_ID` / `SECRET` | 可选 | Finance 飞书应用凭证 |
-| `UPK_USER` / `UPK_PASS` | 可选 | Uptime Kuma 管理员账号 |
+| `UPK_USER` / `UPK_PASS` | 可选 | Uptime Kuma 账号占位（模板里有，但 `setup-uptime-kuma.sh` 不读取；实际账号在 Web UI 创建） |
 
 ### 配置云盘路径
 
@@ -83,7 +83,9 @@ git clone https://github.com/OuyangWenyu/zhixun-agent.git ../zhixun-agent
 | 创建 Claude Code 配置 | `~/.claude/settings.json` |
 | 创建 cc-connect 配置 | `~/.cc-connect/config.toml` |
 | 创建 OpenClaw 配置 | `~/.openclaw/openclaw.json` |
-| 安装 paper-fetch skill | `~/.openclaw/skills/paper-fetch` |
+| 安装 paper-fetch skill | `~/.openclaw/skills/paper-fetch`、`~/.hermes/skills/paper-fetch` |
+| 安装 paper-queue skill + 身份注入插件 | `~/.openclaw/skills/paper-queue`、`~/.openclaw/extensions/paper-queue-actor` |
+| 注册 Uptime Kuma 监控项 | `~/.uptime-kuma/kuma.db`（容器已 Up 时才执行） |
 | 物化黑名单 API Key | 容器内 `/opt/data/secrets/` |
 | 生成 himalaya 邮件配置 | `~/.hermes/.config/himalaya/config.toml` |
 | 生成 ortie Outlook OAuth 配置 | `~/.hermes/.config/ortie/config.toml`（首次授权需手动 `ortie auth get`） |
@@ -141,7 +143,38 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml logs 
 
 详见 [zhixun 知汛助手](zhixun-feishu-bot.md)。
 
-## 6. 从云盘恢复数据（可选）
+## 6. 启动 tianyi 天一研发助手（可选）
+
+tianyi 天一研发助手同样是独立 Compose 栈（`docker-compose.tianyi-bot.yml`），但它**共享主栈的 `myopenclaw-net` 网络**、复用主栈的 `repo-scanner-mcp`，所以必须先拉起主栈——`start-tianyi-bot.sh` 会检查 `repo-scanner-mcp` 是否在运行，不在就直接退出。
+
+```bash
+cp .env.tianyi-bot.example .env.tianyi-bot
+```
+
+编辑 `.env.tianyi-bot`，必填项（脚本只校验这三个，为空或仍是占位符会报错退出）：
+
+| 变量 | 说明 |
+|------|------|
+| `TIANYI_BOT_FEISHU_APP_ID` / `SECRET` | 飞书自建应用凭据 |
+| `TIANYI_BOT_MODEL_API_KEY` | DeepSeek API Key |
+
+启动：
+
+```bash
+./scripts/start-tianyi-bot.sh --build    # 首次启动
+./scripts/start-tianyi-bot.sh            # 后续启动（内部 --force-recreate）
+```
+
+查看状态：
+
+```bash
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml ps
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml logs -f openclaw-tianyi
+```
+
+数据目录 `~/.openclaw-tianyi`（可用 `TIANYI_BOT_DATA_DIR` 覆盖，但不能落在 `~/.openclaw` 内）。
+
+## 7. 从云盘恢复数据（可选）
 
 新机器首次部署可跳过。从旧机器迁移时：
 
@@ -153,7 +186,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml logs 
 
 如果恢复了 `~/.openclaw/openclaw.json` 或 `~/.cc-connect/config.toml`，start.sh 不会覆盖它们。
 
-## 7. 配置渠道
+## 8. 配置渠道
 
 按需配置：
 

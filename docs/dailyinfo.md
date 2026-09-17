@@ -6,11 +6,13 @@
 
 ## 前置条件
 
-dailyinfo 需要 FreshRSS 容器常驻。myopenclaw 的 `freshrss` 服务已包含。首次部署或停机后，启动 dailyinfo：
+dailyinfo 需要 FreshRSS 容器常驻，**主栈已包含该服务**（`docker-compose.yml` 的 `freshrss`，`container_name: dailyinfo_freshrss`，端口 8081，数据在 `~/.myagentdata/dailyinfo/freshrss/data`）。首次部署或停机后用主栈启动：
 
 ```bash
-cd ~/code/dailyinfo && uv run dailyinfo start
+cd ~/code/myopenclaw && docker compose up -d freshrss
 ```
+
+> ⚠️ **不要再跑 `dailyinfo start`**：dailyinfo 仓自己的 `docker-compose.yml` 用了**同一个 `container_name`**，而运行中的 `dailyinfo_freshrss` 已属于主栈的 compose 项目（2026-09-17 实测），两边会撞名。
 
 ## 调度表
 

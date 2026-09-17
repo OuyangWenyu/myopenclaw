@@ -59,6 +59,12 @@ sudo dscacheutil -flushcache
 sudo killall -HUP mDNSResponder
 ```
 
+> ⚠️ **脚本只增/改，不删**：`/etc/resolver/` 里可能残留脚本不再管理的域名（历史配置或手工加的），
+> 脚本每次只创建/更新上面这份名单（22 个），不会清理其它文件。2026-09-17 实测宿主机有 28 个，
+> 多出的 6 个是 `bilibili.com`、`bilicdn1.com`、`cdnbuild.net`、`huaweicloudwaf.com`、`kunluncan.com`、`queniuyk.co`
+> —— 仓库里没有任何配置引用它们。其中 `queniuyk.co` 疑为 `queniuyk.com` 的笔误（两者同时存在，内容相同）。
+> 确认无用后手工清理：`sudo rm /etc/resolver/<域名>`。
+
 ## 关键细节
 
 ### CNAME 链问题

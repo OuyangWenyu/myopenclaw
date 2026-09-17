@@ -1,8 +1,8 @@
 # OpenClaw 渠道配置（Discord / 飞书 / 钉钉）
 
-OpenClaw 的渠道配置在 `~/.openclaw/openclaw.json` 的 `channels` 段。`openclaw.json.example` 里的渠道段默认 `enabled: false`、凭证为 `__OPENCLAW_*__` 占位符 —— 由 `start.sh` 首次启动时从 `.env` 注入实际值并启用。
+OpenClaw 的渠道配置在 `~/.openclaw/openclaw.json` 的 `channels` 段。`openclaw.json.example` 里的渠道段默认 `enabled: false`、凭证为 `__OPENCLAW_*__` 占位符 —— `start.sh` 首次启动时会从 `.env` 注入实际凭据；`enabled` 开关不在脚本改动范围内（示例里是 `false`，需手动改成 `true`）。
 
-实际支持的渠道取决于已安装的扩展（extensions）。当前已安装 `dingtalk-connector` 插件支持钉钉，Discord / 飞书通过内置渠道配置。
+实际支持的渠道取决于已安装的插件。钉钉通过第三方 `dingtalk-connector` 插件接入；Discord / 飞书走官方**外部**插件 `@openclaw/discord` / `@openclaw/feishu`（不在核心包内，需 `openclaw plugins install` 装进数据目录）。官方插件与核心**同版本号配套发布**，升核心时必须一并升 —— 守卫 `tests/test-openclaw-plugin-versions.sh`。
 
 ## Discord Bot
 
@@ -64,7 +64,7 @@ docker compose restart openclaw-gateway
 
 ```bash
 docker compose logs --tail=20 openclaw-gateway
-# 看到 [discord] starting / [feishu] WebSocket client started 即成功
+# 看到 [discord] [default] starting provider / [feishu] feishu[default]: WebSocket client started 即成功
 ```
 
 ## 默认模型

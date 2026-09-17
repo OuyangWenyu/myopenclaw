@@ -23,7 +23,7 @@
 > 校验直接改库、甚至改掉服务端代码，签名整套形同虚设。现在它只能走 MCP 接口。
 
 并发约定：两边都必须 `PRAGMA journal_mode = WAL` + `PRAGMA busy_timeout = 5000`。
-写入方（虾酱）是短事务；读取方请只读打开：
+写入方（`paper-queue-mcp`）是短事务；读取方请只读打开：
 
 ```python
 import sqlite3
@@ -60,7 +60,7 @@ rows = conn.execute(
 | `requester` | **权威**：宿主注入的 Discord 用户 ID（雪花） |
 | `requester_name` | 显示名，非权威（会变） |
 | `channel_ref` / `message_ref` / `session_ref` | 溯源头：哪条消息、哪个频道 |
-| `attribution_source` | 归属可信度：`single`（本回合前只收到一条入站，能确定是谁触发的）/ `batched`（本回合前收到多条，取最新那条，可能张冠李戴）/ `NULL`（历史遗留，或未由用户消息触发的记录 —— 见 §6） |
+| `attribution_source` | 归属可信度：`single`（本回合前只收到一条入站，能确定是谁触发的）/ `batched`（本回合前收到多条，取最新那条，可能张冠李戴）/ `NULL`（历史遗留：v3 之前写入的行映射不到上面两档，如实置空 —— 见 §6） |
 | `attribution_ambiguous` | 1 = 该请求的归属**可能串台**，见 §6 |
 | `requested_at` | 加入时间，**严格 `YYYY-MM-DDTHH:MM:SSZ`**（UTC） |
 | `cancelled_at` / `cancelled_by` | 撤销时间与撤销人（成对出现） |

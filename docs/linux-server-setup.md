@@ -2,10 +2,15 @@
 
 > 服务器：`10.48.0.81` | 部署用户：`gaoyu` | 项目路径：`/home/gaoyu/source_code/myopenclaw`
 
+> ⚠️ **本页是那台服务器上早期部署的记录，不是仓库现状。** 仓库当前的 `docker-compose.yml` 是
+> 15 个服务 + profile-gated `openclaw-cli`（另有 zhixun / tianyi 两个独立 bot 栈），下面几节的
+> 挂载表、`gc` 挂载、MCP 脚本目录都来自旧版本，`git pull` 后对不上 —— 排查时以仓库里的
+> `docker-compose.yml` 为准。
+
 ## 服务架构
 
 ```
-docker-compose.yml 启动四个服务（myopenclaw-net 桥接网络）：
+早先部署时 docker-compose.yml 启动四个服务（myopenclaw-net 桥接网络）：
 
 hermes            :8642   自定义镜像，AI agent gateway
 hermes-dashboard  :9119   只读 dashboard，监控 hermes（depends_on hermes）
@@ -25,7 +30,7 @@ backup-cron       -       定时快照备份（默认每天凌晨 2:00）
 | `/home/gaoyu/.config/gh` | `/opt/gh-config` | gh CLI 认证信息 |
 | `/home/gaoyu/.config/opencode` | `/opt/opencode-config` | opencode 配置 |
 | `/home/gaoyu/.claude` | `/opt/claude-config` | Claude Code 配置 |
-| `./hermes/mcp/` | `/opt/mcp`（只读） | MCP server 脚本 |
+| `./hermes/mcp/` | `/opt/mcp`（只读） | MCP server 脚本（**仓库里已无此目录**，见下方 MCP 一节） |
 
 ### openclaw-gateway 容器挂载
 
@@ -81,9 +86,9 @@ docker compose logs -f hermes
 
 - `~/.config/opencode/opencode.json`
 - `~/.claude/settings.json`
-- `~/.hermes/config.yaml`
+- `~/.hermes/config.yaml`（**不由 `start.sh` 创建**：仓库里没有它的模板，这个文件由 Hermes 容器自己生成；`start.sh` 只在它已存在时追加 zotero-mcp、mylibrary-skills 等配置）
 
-**注意**：`start.sh` 在 `.cloud.conf` 不存在时会直接退出报错，必须先运行 `setup-cloud.sh`。
+**注意**：`start.sh` 在 `.cloud.conf` 不存在时**只告警、不中断**（Linux 兼容的降级路径），但跳过云盘配置后备份会落到 `/tmp`（`backup-cron` 缺哨兵文件会拒绝启动）—— 所以仍应先运行 `setup-cloud.sh`。
 
 ---
 
@@ -146,6 +151,11 @@ docker restart hermes
 
 ## MCP Server 配置
 
+> ⚠️ 仓库里**已没有** `hermes/mcp/` 目录，`docker-compose.yml` 也不再挂 `/opt/mcp`。
+> 当前做法是把 MCP 服务做成独立容器（`zotero-mcp` / `repo-scanner-mcp` / `aisecretary` /
+> `paper-queue-mcp`，SSE 或 streamable HTTP），在 `~/.hermes/config.yaml` 的 `mcp_servers`
+> 里按 `url:` 注册。下面这套「脚本挂进容器 + stdio」的写法只在旧版本上成立。
+
 MCP server 脚本放在 `hermes/mcp/<name>/server.py`，容器内挂载为 `/opt/mcp/<name>/server.py`。
 
 ### 在 `~/.hermes/config.yaml` 中注册
@@ -200,6 +210,13 @@ MCP server 通过 `os.environ` 读取配置（如 `HYDRO_API_BASE_URL`）。透�
 
 ## GitCode CLI 配置
 
+> ⚠️ **本章已过时**：现在不需要外部提供 `gc` —— `docker/hermes/Dockerfile` 里
+> `npm install -g opencode-ai gitcode-cli` 已把它装进镜像（实测容器内 `/usr/local/bin/gc`），
+> claude-code 镜像同样自带；GitCode 写入能力现在由 **tianyi bot 栈**承担（其 entrypoint 启动时
+> `npm install -g gitcode-cli`）。本仓的 `docker-compose.yml` 里**没有**任何 `gc` 挂载，
+> 也没有把 `~/.openclaw/bin` 加进 `PATH`（主网关容器内实测 `gc` 不存在）。
+> 下面这套「源码编译 + 挂载」只在早于该改动的版本上成立。
+
 **1. 编译 GitCode CLI**
 
 在服务器上从源码编译：
@@ -249,7 +266,7 @@ gc issue create
 gc pr diff
 ```
 
-如果 GitCode 请求来自飞书等 Hermes 渠道，Hermes 容器也要能找到 `gc`。本仓的 `docker-compose.yml` 已额外挂载：
+如果 GitCode 请求来自飞书等 Hermes 渠道，Hermes 容器也要能找到 `gc` —— 现在的镜像是自带的（见本章开头），无需挂载。早期版本靠下面这几行（**本仓 `docker-compose.yml` 现已不含**）：
 
 ```yaml
 volumes:
@@ -259,7 +276,7 @@ environment:
   - GITCODE_TOKEN=${GITCODE_TOKEN:-}
 ```
 
-这样 Hermes 自己的 terminal/shell 也能直接运行 `gc`。
+`GITCODE_TOKEN` 现在仍由 `.env` → compose 注入 hermes / hermes-coder / claude-code；`gc` 二进制则来自镜像。
 
 **3. 配置认证**
 
@@ -391,4 +408,4 @@ git pull
 | `config.yaml` / `auth.json` 无法直接编辑 | 文件 owner 是 UID 10000 或 root（容器进程创建） | 用 `sudo` 操作，或写 Python 脚本 scp 到服务器执行 |
 | DeepSeek v4 多轮对话 400 错误 | 推理模型返回 `reasoning_content`，Hermes 重发时 API 报错 | 使用 ZAI GLM 等标准模型，避免 DeepSeek 推理模型 |
 | `/model` 命令更改不持久 | 仅改当前 CLI session，不影响 gateway | 必须修改 `config.yaml` + `docker restart hermes` |
-| `start.sh` 报 `.cloud.conf` 不存在 | 跳过了 `setup-cloud.sh` 步骤 | 先执行 `./scripts/setup-cloud.sh` 配置云盘路径 |
+| `start.sh` 提示未找到 `.cloud.conf` | 跳过了 `setup-cloud.sh` 步骤（当前版本只告警不中断） | 执行 `./scripts/setup-cloud.sh` 配置云盘路径；否则备份落到 `/tmp`，`backup-cron` 会因缺哨兵文件拒绝启动 |

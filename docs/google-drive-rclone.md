@@ -63,7 +63,7 @@ docker compose exec hermes rclone ls gdrive:
 
 ## Docker 侧配置
 
-`docker-compose.yml` 中三个 hermes 容器都设置了：
+`docker-compose.yml` 中四个 hermes 容器（`hermes` / `hermes-coder` / `hermes-finance` / `hermes-daoyuan`）都设置了：
 
 ```yaml
 environment:

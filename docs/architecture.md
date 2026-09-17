@@ -1,6 +1,6 @@
 # 架构
 
-myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务 + tianyi 独立栈 1 个服务组成（不含 profile-gated 的 openclaw-cli）。主栈运行在共享的 `myopenclaw-net` 桥接网络上，zhixun 栈运行在独立的 `zhixun-bot-net` 上；tianyi 栈为独立 Compose 但**共享主栈 `myopenclaw-net`**（复用 repo-scanner-mcp）。
+myopenclaw 由主栈 15 个 Docker 服务 + zhixun 独立栈 2 个服务 + tianyi 独立栈 1 个服务组成（不含 profile-gated 的 openclaw-cli）。主栈运行在共享的 `myopenclaw-net` 桥接网络上，zhixun 栈运行在独立的 `zhixun-bot-net` 上；tianyi 栈为独立 Compose 但**共享主栈 `myopenclaw-net`**（复用 repo-scanner-mcp）。
 
 ## 服务拓扑
 
@@ -24,6 +24,7 @@ myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | tdai-memory | 8420 | Agent 长期记忆 Gateway，L0→L3 分层管线 |
 | aisecretary | 8000 | 事务数据库 MCP 服务，7 个 tools，SQLite 持久化 |
 | repo-scanner-mcp | 8001 | 研发日报 MCP 数据服务，来自 git-contribution-stats |
+| paper-queue-mcp | 8003 | 论文清单 MCP（FastMCP + streamable HTTP）。**独立容器是刻意的**：队列目录 `~/.myagentdata/paper-queue` 只挂给它，openclaw-gateway 够不着 |
 | freshrss | 8081 | RSS 聚合，dailyinfo 数据源 |
 | uptime-kuma | 3001 | 服务监控面板，HTTP + Docker 容器状态 |
 | backup-cron | — | 定时快照备份 |
@@ -54,6 +55,7 @@ myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | `~/.myagentdata/tdai-memory` | `/opt/data/tdai-memory` | tdai-memory | L0→L3 记忆数据 |
 | `~/.myagentdata/aisecretary` | `/data` | aisecretary | 事务 SQLite |
 | `~/.myagentdata/repo-scanner` | `/data` | repo-scanner-mcp | 研发日报 SQLite（只读） |
+| `~/.myagentdata/paper-queue` | `/data` | paper-queue-mcp | 论文清单 SQLite（**只挂给它**，openclaw-gateway 不挂） |
 | `~/.myagentdata/dailyinfo` | — | freshrss | RSS 数据 |
 | `~/.config/gh` | `/opt/gh-config` | hermes, claude-code | GitHub CLI 认证 |
 | `~/.config/opencode` | `/opt/opencode-config` | hermes | opencode 配置 |
@@ -61,6 +63,7 @@ myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | `~/.uptime-kuma` | `/app/data` | uptime-kuma | 监控 SQLite + 配置 |
 | `~/.openclaw-zhixun` | `/home/node/.openclaw` | openclaw-zhixun | zhixun bot 配置和插件 |
 | `~/.openclaw-zhixun-mcp` | `/var/lib/zhixun-water-mcp` | zhixun-water-mcp | 水文站点名称索引缓存 |
+| `~/.openclaw-tianyi` | `/home/node/.openclaw` | openclaw-tianyi | tianyi bot 配置和插件 |
 | `~/code` + `~/Code` | `/home/node/code` + `/home/node/Code` | claude-code | 代码仓库 |
 
 ## 安全边界
@@ -89,7 +92,7 @@ myopenclaw 由主栈 14 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 
 ## 网络
 
-主栈所有服务在 `myopenclaw-net` 桥接网络上，通过 Docker DNS（容器名）互相访问。zhixun 栈使用独立的 `zhixun-bot-net` 桥接网络，与主栈物理隔离。部分服务需要访问外部 Chinese 域名时，可能需要配置 DNS —— 详见 [DNS 配置](dns-setup.md)。
+主栈所有服务在 `myopenclaw-net` 桥接网络上，通过 Docker DNS（容器名）互相访问。zhixun 栈使用独立的 `zhixun-bot-net` 桥接网络，与主栈物理隔离。tianyi 栈虽是独立 Compose，但把 `myopenclaw-net` 声明为外部网络复用，因此能按容器名直连 `repo-scanner-mcp`。部分服务需要访问外部 Chinese 域名时，可能需要配置 DNS —— 详见 [DNS 配置](dns-setup.md)。
 
 ## 容器内路径注意事项
 

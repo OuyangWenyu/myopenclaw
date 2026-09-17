@@ -1,6 +1,6 @@
 # 语雀 MCP 接入（Hermes）
 
-> 最后更新：2026-08-31
+> 最后更新：2026-09-17
 
 本机通过远程 SSE 接入语雀 MCP 服务（服务端为 `yuque_mcp_server` 的 `RUN_MODE=cloud` 部署），读取、搜索、备份语雀知识库并查询服务端生成的变更报告。
 
@@ -11,7 +11,7 @@
 
 ## 架构边界
 
-- 服务端：`yuque_mcp_server` 以 `RUN_MODE=cloud` 部署在服务器上，持有 `YUQUE_TOKEN`，端口 18000。
+- 服务端：`yuque_mcp_server` 以 `RUN_MODE=cloud` 部署在服务器上，持有 `YUQUE_TOKEN`，端口 18001（由 `PORT` 决定；代码默认值 18000，部署侧显式配成 18001，客户端 `YUQUE_MCP_URL` 也指向 18001）。
 - 客户端：本机只需远程 SSE 地址（`YUQUE_MCP_URL`）和访问 key（`MCP_YUQUE_MCP_API_KEY`），**不需要** `YUQUE_TOKEN`。
 - 本机配置由 `scripts/bootstrap_hermes.sh` 写入 `~/.hermes/config.yaml`、`~/.hermes/.env`；skill 由 docker-compose 只读挂载（`./skills/yuque-knowledge` → `/opt/hermes-skills/yuque-knowledge`）。
 
@@ -20,7 +20,8 @@
 在仓库根目录 `.env` 中填写：
 
 ```env
-YUQUE_MCP_URL=https://服务器/sse
+# 只给形状：当前部署是内网明文 http（未启用 TLS），scheme/host/端口以服务端实际地址为准
+YUQUE_MCP_URL=http://服务器/sse
 MCP_YUQUE_MCP_API_KEY=服务端下发的访问 key
 ```
 

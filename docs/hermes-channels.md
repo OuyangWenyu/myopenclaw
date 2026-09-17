@@ -9,7 +9,7 @@ Hermes 的四个 profile（default、coder、daoyuan、finance）各自可以接
 | 飞书 | 全部（default / coder / daoyuan / finance） | 各自飞书应用凭据 | 主消息平台，走 WebSocket 长连接 |
 | Discord | coder（爱码士） | 项目 `.env` + `docker-compose.yml` | 独立 Discord Bot，仅限个人使用 |
 
-**飞书应用隔离**：四个 profile 使用四个独立的飞书应用，互不影响：
+**飞书应用隔离**：default 与 coder 共享一个飞书应用，daoyuan / finance 各用独立的飞书应用，互不影响：
 - 爱玛士（default）：`FEISHU_APP_ID` — 主飞书 bot
 - 爱码士（coder）：同 `FEISHU_APP_ID` — 与爱玛士共享飞书应用
 - 道元（daoyuan）：`DAOYUAN_FEISHU_APP_ID` — 文献学者专用飞书 bot，群内开放访问
@@ -19,7 +19,7 @@ Hermes 的四个 profile（default、coder、daoyuan、finance）各自可以接
 
 ## 飞书
 
-飞书是 Hermes 的主要消息平台，三个 profile 都支持。配置在 `~/.hermes/.env` 中：
+飞书是 Hermes 的主要消息平台，四个 profile 都支持。配置在 `~/.hermes/.env` 中：
 
 ```bash
 FEISHU_APP_ID=cli_xxxx
