@@ -205,9 +205,9 @@ nav:
 
 | Location | Path | Fix |
 |----------|------|-----|
-| `README.md:578,585,606,630,638` | `/Users/owen/code/dailyinfo` | Already being moved to docs; use `$HOME` or `~/code/dailyinfo` |
+| `README.md:578,585,606,630,638` | `/Users/<user>/code/dailyinfo` | Already being moved to docs; use `$HOME` or `~/code/dailyinfo` |
 | `scripts/launchd/install-collect-agentops.sh:72` | `~/code/myloop/...` | Already uses `~`, acceptable |
-| `openclaw/scripts/fix-host-paths.sh:4` | `/Users/owen/...` | Already handles host paths at runtime |
+| `openclaw/scripts/fix-host-paths.sh:4` | `/Users/<user>/...` | Already handles host paths at runtime |
 
 ### Things that work on any machine (no local state needed)
 

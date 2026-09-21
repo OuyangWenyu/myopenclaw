@@ -58,9 +58,46 @@ for dir in hooks cron .contacts .config/himalaya .config/ortie; do
     # "mkdir ... No such file or directory" 并因 set -e 终止整个备份。
     # （macOS 的 openrsync 会替我们补父目录，所以本地跑不出这个问题。）
     mkdir -p "${DEST}/${dir}"
-    rsync -a "${HERMES_DATA}/${dir}/" "${DEST}/${dir}/"
+    # cron 下的活库交给下面的热备（executions.db 是 WAL、notepad.db 回滚模式）；
+    # 这两个排除式对其它目录无匹配，无害。
+    rsync -a --exclude="executions.db*" --exclude="notepad.db*" \
+      "${HERMES_DATA}/${dir}/" "${DEST}/${dir}/"
   fi
 done
+
+# ── cron 下的活库：热备，不裸 rsync（理由见 scripts/backup-data.sh）────
+# executions.db 是 WAL —— 读者要写 `-shm`，靠 compose 给 ~/.hermes/cron 的窄 rw
+# 嵌套挂载；notepad.db 回滚模式，`-readonly` 打开即可。统一先写 .tmp、成功才 mv。
+if ! command -v sqlite3 &>/dev/null; then
+  echo "   ❌ sqlite3 未安装，无法安全备份 cron 活库（不 cp 兜底）" >&2
+  exit 1
+fi
+
+hot_copy() {   # hot_copy <rw|readonly> <相对 HERMES_DATA 的路径>
+  # ⚠️ 别写成一行自引用（local src="${HERMES_DATA}/${rel}"）—— set -u 下会
+  # "rel: unbound variable"（声明与赋值不同步）。拆开写。
+  local mode="$1" rel="$2" failed=0 src tmp
+  src="${HERMES_DATA}/${rel}"
+  tmp="${DEST}/${rel}.tmp"
+  [[ -f "${src}" ]] || return 0
+  mkdir -p "$(dirname "${tmp}")"
+  rm -f "${tmp}"
+  if [[ "${mode}" == "readonly" ]]; then
+    sqlite3 -readonly -cmd ".timeout 5000" "${src}" ".backup '${tmp}'" || failed=1
+  else
+    sqlite3 -cmd ".timeout 5000" "${src}" ".backup '${tmp}'" || failed=1
+  fi
+  if [[ ${failed} -ne 0 ]]; then
+    rm -f "${tmp}"
+    echo "   ❌ SQLite 热备失败: ${rel}" >&2
+    exit 1
+  fi
+  mv -f "${tmp}" "${DEST}/${rel}"
+  echo "   ✅ SQLite 热备完成 (${rel})"
+}
+
+hot_copy rw "cron/executions.db"
+hot_copy readonly "cron/notepad.db"
 
 echo "   ✅ 快照完成: ${DEST}"
 

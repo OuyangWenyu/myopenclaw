@@ -39,6 +39,8 @@ fi
 # ── agents/（排除运行时临时文件和 session）─────────────────────
 # 会话库 openclaw-agent.sqlite（146MB 级、回滚模式、活库）**不裸 rsync**：
 # 撞上写事务会拷到没有 journal 可回滚的半写状态。它改由下面的 .backup 热备。
+# 同目录的 0 字节 *.lock.sqlite 与 4KB generation-writer（实测无表、空库）是
+# 占位文件，裸 rsync 就是对它们状态的忠实还原，不另行热备。
 if [[ -d "${OPENCLAW_DATA}/agents" ]]; then
   rsync -a \
     --exclude="*/agent/*.tmp" \
@@ -49,28 +51,41 @@ if [[ -d "${OPENCLAW_DATA}/agents" ]]; then
     "${OPENCLAW_DATA}/agents/" "${DEST}/agents/"
 fi
 
-# ── 会话库热备（先写 .tmp、成功才 mv，理由同 backup-data.sh）────
-# `-readonly` 即可（挂 ro 上也能 .backup，实测）。读事务会短暂挡住写入者
-# （回滚模式下整段拷贝一个读锁）—— 02:00 虾酱空闲，可接受。
-if command -v sqlite3 &>/dev/null; then
-  shopt -s nullglob
-  for src in "${OPENCLAW_DATA}"/agents/*/agent/openclaw-agent.sqlite; do
-    rel="${src#"${OPENCLAW_DATA}"/}"
-    tmp="${DEST}/${rel}.tmp"
-    mkdir -p "$(dirname "${tmp}")"
-    rm -f "${tmp}"
-    if ! sqlite3 -readonly -cmd ".timeout 5000" "${src}" ".backup '${tmp}'"; then
-      rm -f "${tmp}"
-      echo "   ❌ SQLite 热备失败: ${rel}" >&2
-      exit 1
-    fi
-    mv -f "${tmp}" "${DEST}/${rel}"
-    echo "   ✅ SQLite 热备完成 (${rel})"
-  done
-else
-  echo "   ❌ sqlite3 未安装，无法安全备份会话库" >&2
+# ── 活库热备（先写 .tmp、成功才 mv，理由同 backup-data.sh）────
+# 会话库是回滚模式，`-readonly` 即可（挂 ro 上也能 .backup，实测）。读事务会
+# 短暂挡住写入者 —— 02:00 虾酱空闲，可接受。memory/ 两库若出现同样处理；若将来
+# 发现它们是 WAL（`-readonly` 会 CANTOPEN），按 backup-data.sh 的先例给对应子
+# 目录加一条窄 rw 挂载再改用普通打开。
+if ! command -v sqlite3 &>/dev/null; then
+  echo "   ❌ sqlite3 未安装，无法安全备份 OpenClaw 活库（不 cp 兜底）" >&2
   exit 1
 fi
+
+hot_copy() {   # hot_copy <rw|readonly> <相对 OPENCLAW_DATA 的路径模式>
+  local mode="$1" rel="$2" failed=0 src rel_actual tmp
+  shopt -s nullglob
+  for src in "${OPENCLAW_DATA}"/${rel}; do
+    [[ -f "${src}" ]] || continue
+    rel_actual="${src#"${OPENCLAW_DATA}"/}"
+    tmp="${DEST}/${rel_actual}.tmp"
+    mkdir -p "$(dirname "${tmp}")"
+    rm -f "${tmp}"
+    if [[ "${mode}" == "readonly" ]]; then
+      sqlite3 -readonly -cmd ".timeout 5000" "${src}" ".backup '${tmp}'" || failed=1
+    else
+      sqlite3 -cmd ".timeout 5000" "${src}" ".backup '${tmp}'" || failed=1
+    fi
+    if [[ ${failed} -ne 0 ]]; then
+      rm -f "${tmp}"
+      echo "   ❌ SQLite 热备失败: ${rel_actual}" >&2
+      exit 1
+    fi
+    mv -f "${tmp}" "${DEST}/${rel_actual}"
+    echo "   ✅ SQLite 热备完成 (${rel_actual})"
+  done
+}
+
+hot_copy readonly "agents/*/agent/openclaw-agent.sqlite"
 
 # ── flows/ 和 extensions/（用户自定义配置）────────────────────
 for dir in flows extensions; do
@@ -79,33 +94,13 @@ for dir in flows extensions; do
   fi
 done
 
-# ── memory/main.sqlite（用 sqlite3 热备，避免备份写中副本）───────
-SQLITE_SRC="${OPENCLAW_DATA}/memory/main.sqlite"
-if [[ -f "${SQLITE_SRC}" ]]; then
-  mkdir -p "${DEST}/memory"
-  if command -v sqlite3 &>/dev/null; then
-    sqlite3 "${SQLITE_SRC}" ".backup '${DEST}/memory/main.sqlite'"
-    echo "   ✅ SQLite 热备完成 (Hermes memory)"
-  else
-    # sqlite3 不可用时 fallback 到 cp
-    cp "${SQLITE_SRC}" "${DEST}/memory/main.sqlite"
-    echo "   ✅ SQLite 文件复制（sqlite3 未安装，使用 cp fallback）"
-  fi
-fi
-
-# ── memory-tdai/memories.sqlite（虾酱 TencentDB Agent Memory）─────
-# 独立于 Hermes 内置 memory/main.sqlite，物理隔离
-TDAI_SQLITE_SRC="${OPENCLAW_DATA}/memory-tdai/memories.sqlite"
-if [[ -f "${TDAI_SQLITE_SRC}" ]]; then
-  mkdir -p "${DEST}/memory-tdai"
-  if command -v sqlite3 &>/dev/null; then
-    sqlite3 "${TDAI_SQLITE_SRC}" ".backup '${DEST}/memory-tdai/memories.sqlite'"
-    echo "   ✅ SQLite 热备完成 (虾酱 memory-tdai)"
-  else
-    echo "   ❌ sqlite3 未安装，无法安全备份 虾酱 memory 数据库" >&2
-    exit 1
-  fi
-fi
+# ── memory 库（Hermes 内置 + 虾酱 TencentDB Agent Memory）────────
+# 物理隔离的两库，走同一套热备。本机 2.0 迁移后它们已不存在（main.sqlite 只剩
+# 一个 .migrated 残留、memory-tdai/ 目录都没有）—— 存在即热备、不存在即跳过。
+# ⚠️ 旧写法是 cp 兜底 + 普通打开，两处都错：前者静默降级成半写副本（CLAUDE.md
+# 明文禁 cp 兜底），后者在 :ro 挂载上连打开都做不到。
+hot_copy readonly "memory/main.sqlite"
+hot_copy readonly "memory-tdai/memories.sqlite"
 
 echo "   ✅ 快照完成: ${DEST}"
 

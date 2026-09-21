@@ -1,7 +1,7 @@
 #!/bin/sh
 # Fix macOS host paths in OpenClaw config files that leak into the container
 # via bind-mounted ~/.openclaw directory.
-# The host OpenClaw CLI writes paths like /Users/owen/... but inside the
+# The host OpenClaw CLI writes paths like /Users/<user>/... but inside the
 # container the home is /home/node, so those paths cause EACCES errors.
 
 set -e

@@ -50,7 +50,7 @@ VALID_ROW = {
     "input_kind": "title",
     "raw_input": "Attention Is All You Need",
     "title": "Attention Is All You Need",
-    "requester": "1297756995834609676",
+    "requester": "111111111111111111",
     "requested_at": "2026-09-16T00:20:24Z",
 }
 
@@ -150,10 +150,10 @@ class TestCancelConsistency:
 
     def test_rejects_cancelled_by_without_at(self, conn):
         with pytest.raises(sqlite3.IntegrityError):
-            insert(conn, cancelled_by="1297756995834609676")
+            insert(conn, cancelled_by="111111111111111111")
 
     def test_accepts_both_together(self, conn):
-        insert(conn, cancelled_at="2026-09-16T01:00:00Z", cancelled_by="1297756995834609676")
+        insert(conn, cancelled_at="2026-09-16T01:00:00Z", cancelled_by="111111111111111111")
         assert conn.execute("SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 1
 
 

@@ -28,7 +28,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SERVER = REPO_ROOT / "docker" / "paper-queue-mcp" / "server.py"
 
-ACTOR = "1297756995834609676"          # Owen 的 Discord 用户 ID（雪花）
+ACTOR = "111111111111111111"           # 合成雪花 ID（公开仓库，勿填真实账号）
 OTHER = "987654321098765432"           # 另一位群成员
 SECRET = "test-secret"
 
@@ -79,7 +79,7 @@ def pq(tmp_path, monkeypatch):
 
 
 def actor(**overrides) -> dict:
-    base = {"actor_id": ACTOR, "actor_name": "Owen"}
+    base = {"actor_id": ACTOR, "actor_name": "Tester"}
     base.update(overrides)
     return base
 
@@ -544,7 +544,7 @@ class TestActorSignature:
     """
 
     SESSION = "agent:main:discord:channel:1"
-    MESSAGE = "1549589564275032150"
+    MESSAGE = "1600000000000000000"
 
     @pytest.fixture()
     def signer(self, tmp_path, monkeypatch):
@@ -698,8 +698,8 @@ class TestActorSignature:
     """
 
     SESSION = "agent:main:discord:channel:1"
-    MESSAGE = "1549589564275032150"
-    ADD = {"items": [{"title": "X"}], "actor_id": ACTOR, "actor_name": "Owen"}
+    MESSAGE = "1600000000000000000"
+    ADD = {"items": [{"title": "X"}], "actor_id": ACTOR, "actor_name": "Tester"}
 
     def _args(self, **over):
         return {**self.ADD, "session_ref": self.SESSION, "actor_message": self.MESSAGE, **over}

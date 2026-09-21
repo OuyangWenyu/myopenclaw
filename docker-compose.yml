@@ -506,6 +506,8 @@ services:
       - ${HOME}/.myagentdata/paper-queue:/.myagentdata/paper-queue:rw
       - ${HOME}/.myagentdata/tdai-memory:/.myagentdata/tdai-memory:rw
       - ${HOME}/.myagentdata/repo-scanner:/.myagentdata/repo-scanner:rw
+      # hermes 的 cron 活库（executions.db，WAL）同款：父目录 ~/.hermes 保持只读
+      - ${HOME}/.hermes/cron:/root/.hermes/cron:rw
       - ${BACKUP_ROOT:-/tmp/myopenclaw-backups}:/backup:rw
       - ./hermes/scripts:/hermes-scripts:ro
       - ./openclaw/scripts:/openclaw-scripts:ro

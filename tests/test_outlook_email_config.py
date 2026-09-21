@@ -59,8 +59,8 @@ class TestDeviceGrantDefaults:
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
-                "EMAIL_OUTLOOK_DISPLAY_NAME": "Owen",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
+                "EMAIL_OUTLOOK_DISPLAY_NAME": "Tester",
             },
         )
         assert result.returncode == 0, result.stderr + result.stdout
@@ -88,8 +88,8 @@ class TestDeviceGrantDefaults:
         cfg = _load_toml(generated / ".config" / "himalaya" / "config.toml")
         acct = cfg["accounts"]["outlook"]
         assert acct["default"] is True
-        assert acct["email"] == "owen@outlook.com"
-        assert acct["display-name"] == "Owen"
+        assert acct["email"] == "tester@outlook.com"
+        assert acct["display-name"] == "Tester"
         backend = acct["backend"]
         assert backend["type"] == "imap"
         assert backend["host"] == "outlook.office365.com"
@@ -123,7 +123,7 @@ class TestDeviceGrantDefaults:
         """Fresh generation without a token must print the auth hint."""
         result = _run_configure(
             tmp_path,
-            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+            {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"},
         )
         assert result.returncode == 0, result.stderr + result.stdout
         token = tmp_path / ".config" / "ortie" / "tokens" / "outlook.json"
@@ -149,13 +149,13 @@ backend.type = "imap"
 """)
         result = _run_configure(
             tmp_path,
-            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+            {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"},
         )
         assert result.returncode == 0, result.stderr
         cfg = _load_toml(himalaya)
         assert cfg["accounts"]["default"]["default"] is True
         assert cfg["accounts"]["outlook"]["default"] is False
-        assert cfg["accounts"]["outlook"]["email"] == "owen@outlook.com"
+        assert cfg["accounts"]["outlook"]["email"] == "tester@outlook.com"
 
     def test_existing_qq_section_untouched(self, tmp_path: Path):
         """Appending Outlook must not modify existing password accounts."""
@@ -169,7 +169,7 @@ backend.type = "imap"
         himalaya.write_text(original)
         result = _run_configure(
             tmp_path,
-            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+            {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"},
         )
         assert result.returncode == 0, result.stderr
         assert himalaya.read_text().startswith(original)
@@ -179,7 +179,7 @@ class TestIdempotency:
     """A second run must not duplicate account sections."""
 
     def test_rerun_does_not_duplicate(self, tmp_path: Path):
-        env = {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"}
+        env = {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"}
         first = _run_configure(tmp_path, env)
         second = _run_configure(tmp_path, env)
         assert first.returncode == 0
@@ -198,7 +198,7 @@ class TestAuthorizationCodeGrant:
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
                 "EMAIL_OUTLOOK_GRANT": "authorization-code",
             },
         )
@@ -218,7 +218,7 @@ class TestValidation:
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
                 "EMAIL_OUTLOOK_ACCOUNT_NAME": "foo bar",
             },
         )
@@ -228,7 +228,7 @@ class TestValidation:
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
                 "EMAIL_OUTLOOK_GRANT": "client-credentials",
             },
         )
@@ -238,7 +238,7 @@ class TestValidation:
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@contoso.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@contoso.com",
                 "EMAIL_OUTLOOK_ACCOUNT_NAME": "ms365",
             },
         )
@@ -266,7 +266,7 @@ backend.auth.type = "password"
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
                 "EMAIL_OUTLOOK_ACCOUNT_NAME": "dlut",
             },
         )
@@ -289,7 +289,7 @@ backend.auth.type = "password"
 """)
         result = _run_configure(
             tmp_path,
-            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+            {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"},
         )
         assert result.returncode != 0
         assert "collision" in result.stderr
@@ -304,7 +304,7 @@ class TestTomlSafety:
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
                 "EMAIL_OUTLOOK_DISPLAY_NAME": 'Owen "Wenyu"',
             },
         )
@@ -315,7 +315,7 @@ class TestTomlSafety:
     def test_rejects_newline_in_address(self, tmp_path: Path):
         result = _run_configure(
             tmp_path,
-            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com\nextra"},
+            {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com\nextra"},
         )
         assert result.returncode != 0
 
@@ -323,7 +323,7 @@ class TestTomlSafety:
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
                 "EMAIL_OUTLOOK_IMAP_PORT": "not-a-port",
             },
         )
@@ -333,7 +333,7 @@ class TestTomlSafety:
         result = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
                 "EMAIL_OUTLOOK_IMAP_HOST": 'evil.com"; ignored = true',
             },
         )
@@ -344,7 +344,7 @@ class TestConcurrency:
     """Parallel Hermes profile startups must not duplicate TOML sections."""
 
     def test_parallel_runs_write_one_section(self, tmp_path: Path):
-        env = {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"}
+        env = {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"}
         procs = [
             subprocess.Popen(
                 ["bash", str(CONFIGURE_SCRIPT)],
@@ -556,7 +556,7 @@ class TestStaleLock:
         lock = self._backdate_lock(tmp_path)
         result = _run_configure(
             tmp_path,
-            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+            {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"},
         )
         assert result.returncode == 0, result.stderr + result.stdout
         assert "过期" in result.stdout
@@ -567,7 +567,7 @@ class TestStaleLock:
         lock.mkdir(parents=True)
         result = _run_configure(
             tmp_path,
-            {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"},
+            {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"},
         )
         assert result.returncode != 0
         assert "timed out" in result.stderr
@@ -579,13 +579,13 @@ class TestDriftWarning:
 
     def test_warns_and_keeps_old_values(self, tmp_path: Path):
         first = _run_configure(
-            tmp_path, {"EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com"}
+            tmp_path, {"EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com"}
         )
         assert first.returncode == 0, first.stderr + first.stdout
         second = _run_configure(
             tmp_path,
             {
-                "EMAIL_OUTLOOK_ADDRESS": "owen@outlook.com",
+                "EMAIL_OUTLOOK_ADDRESS": "tester@outlook.com",
                 "EMAIL_OUTLOOK_IMAP_HOST": "alt.office365.com",
             },
         )

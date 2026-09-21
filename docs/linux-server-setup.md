@@ -51,6 +51,7 @@ backup-cron       -       定时快照备份（默认每天凌晨 2:00）
 | 宿主机路径 | 容器内路径 | 说明 |
 |-----------|-----------|------|
 | `/home/gaoyu/.hermes` | `/root/.hermes`（只读） | Hermes 数据快照源 |
+| `/home/gaoyu/.hermes/cron` | `/root/.hermes/cron`（可写） | cron 活库热备：executions.db 是 WAL，读者要写 `-shm` |
 | `/home/gaoyu/.openclaw` | `/root/.openclaw`（只读） | OpenClaw 数据快照源 |
 | `/home/gaoyu/.myagentdata` | `/.myagentdata`（只读） | agent 附加数据快照源 |
 | `/home/gaoyu/.myagentdata/`{paper-queue,tdai-memory,repo-scanner} | `/.myagentdata/<同名>`（可写） | WAL 库热备：读者也要写 `-shm`，只读挂载连 SELECT 都打不开 |

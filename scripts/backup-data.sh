@@ -40,6 +40,8 @@ echo "   📂 备份目标: ${DEST}"
 HOT_DBS_RW=(
   "paper-queue/queue.sqlite"                    # WAL —— 虾酱论文清单
   "tdai-memory/vectors.db"                      # WAL —— TDAI 向量库
+  "tdai-memory/memories.sqlite"                 # WAL —— TDAI 记忆（尚未出现，先收编，
+                                                #  否则它一诞生就会被这份 rsync 裸拷）
   "repo-scanner/repos.sqlite"                   # WAL —— 研发日报
 )
 HOT_DBS_RO=(

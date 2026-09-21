@@ -197,6 +197,11 @@ class TestPaperQueueWiring:
         assert "- ${HOME}/.myagentdata:/.myagentdata:ro" in block, (
             "父目录必须保持只读 —— 只放开热备需要的子目录"
         )
+        # hermes 的 cron 活库（executions.db，WAL）同样要一条窄 rw 嵌套挂载
+        assert "- ${HOME}/.hermes/cron:/root/.hermes/cron:rw" in block
+        assert "- ${HOME}/.hermes:/root/.hermes:ro" in block, (
+            "~/.hermes 父目录必须保持只读 —— 只放开 cron 这一个子目录"
+        )
         # 挂载点必须落在 backup-data.sh 实际读的 DATA_ROOT 之下 —— 两边各自改动会
         # **静默**错位（挂载看着还在，热备照样 CANTOPEN）。backup-all-docker.sh 传的
         # 是 DATA_ROOT=/.myagentdata，脚本读 ${DATA_ROOT}/<库路径>。
@@ -235,7 +240,7 @@ class TestBackupHotDbs:
     """
 
     WAL_DBS = ("paper-queue/queue.sqlite", "tdai-memory/vectors.db",
-               "repo-scanner/repos.sqlite")
+               "repo-scanner/repos.sqlite", "tdai-memory/memories.sqlite")
     ROLLBACK_DBS = ("aisecretary/transactions.sqlite",
                     "dailyinfo/freshrss/data/users/*/db.sqlite")
 
@@ -303,8 +308,21 @@ class TestOpenclawAgentDbHotCopy:
     def test_hot_copied_readonly_write_then_move(self):
         script = self.SCRIPT.read_text()
         assert "sqlite3 -readonly" in script
-        assert 'tmp="${DEST}/${rel}.tmp"' in script, "先写 .tmp，成功才 mv"
+        assert 'tmp="${DEST}/${rel_actual}.tmp"' in script, "先写 .tmp，成功才 mv"
         assert "mv -f" in script
+
+    def test_memory_dbs_use_the_same_hot_copy(self):
+        """memory/main.sqlite 与 虾酱 memory-tdai 走同一套热备（不能退回裸拷）。"""
+        script = self.SCRIPT.read_text()
+        assert 'hot_copy readonly "memory/main.sqlite"' in script
+        assert 'hot_copy readonly "memory-tdai/memories.sqlite"' in script
+
+    def test_no_cp_fallback(self):
+        """CLAUDE.md 明文：热备不得有 cp 兜底 —— 拷到半写状态且静默降级。"""
+        script = self.SCRIPT.read_text()
+        assert 'cp "' not in script, (
+            "活库备份不得回退到 cp —— 拷到的是半写副本，缺 sqlite3 时应当直接失败"
+        )
 
     def test_behavioral_copy_is_valid_and_journal_free(self, tmp_path):
         agents = tmp_path / ".openclaw" / "agents" / "main" / "agent"
@@ -325,6 +343,57 @@ class TestOpenclawAgentDbHotCopy:
         assert rows.stdout.strip() == "1", "热备副本读不出数据"
         assert (snap / "agents" / "main" / "agent" / "models.json").exists()
         assert not list(snap.rglob("*-journal")), "热备的 -journal 残影不该进快照"
+
+
+@pytest.mark.skipif(shutil.which("sqlite3") is None,
+                    reason="宿主没有 sqlite3 CLI —— 本测试真跑 backup-data.sh 的热备路径")
+class TestHermesCronDbHotCopy:
+    """hermes 的 cron 活库同样热备：WAL 的 executions.db + 回滚的 notepad.db。
+
+    2026-09-21 审计收尾：executions.db 是 WAL —— 读者要写 `-shm`，靠 compose 给
+    `~/.hermes/cron` 的窄 rw 嵌套挂载；notepad.db 回滚模式，`-readonly` 即可。
+    """
+
+    SCRIPT = REPO_ROOT / "hermes" / "scripts" / "backup.sh"
+    TIMESTAMP = "2026-09-21_120000"
+
+    def test_excluded_from_raw_rsync(self):
+        script = self.SCRIPT.read_text()
+        assert '--exclude="executions.db*"' in script
+        assert '--exclude="notepad.db*"' in script
+
+    def test_open_modes_and_write_then_move(self):
+        script = self.SCRIPT.read_text()
+        assert 'hot_copy rw "cron/executions.db"' in script, "WAL 库要普通打开（rw 挂载）"
+        assert 'hot_copy readonly "cron/notepad.db"' in script, "回滚模式用 -readonly"
+        assert '-cmd ".timeout' in script
+        assert 'tmp="${DEST}/${rel}.tmp"' in script and "mv -f" in script
+
+    def test_behavioral_copy_is_valid(self, tmp_path):
+        cron = tmp_path / ".hermes" / "cron"
+        cron.mkdir(parents=True)
+        wal = tmp_path / "_seed_wal.sqlite"
+        subprocess.run(["sqlite3", str(wal),
+                        "PRAGMA journal_mode=WAL; CREATE TABLE t (x); INSERT INTO t VALUES (1);"],
+                       check=True, capture_output=True)
+        (cron / "executions.db").write_bytes(wal.read_bytes())
+        plain = tmp_path / "_seed_plain.sqlite"
+        subprocess.run(["sqlite3", str(plain), "CREATE TABLE t (x); INSERT INTO t VALUES (1);"],
+                       check=True, capture_output=True)
+        (cron / "notepad.db").write_bytes(plain.read_bytes())
+        env = {**os.environ, "HOME": str(tmp_path),
+               "BACKUP_ROOT": str(tmp_path / "bk"), "BACKUP_SKIP_PRUNE": "1"}
+        proc = subprocess.run(["bash", str(self.SCRIPT), self.TIMESTAMP],
+                              env=env, capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
+        snap = tmp_path / "bk" / "hermes" / self.TIMESTAMP
+        for rel in ("cron/executions.db", "cron/notepad.db"):
+            copy = snap / rel
+            assert copy.stat().st_size > 0, f"{rel} 热备产物是 0 字节"
+            rows = subprocess.run(["sqlite3", str(copy), "SELECT count(*) FROM t;"],
+                                  capture_output=True, text=True, check=True)
+            assert rows.stdout.strip() == "1", f"{rel} 的热备副本读不出数据"
+        assert not (snap / "cron" / "executions.db-wal").exists(), "sidecar 不该进快照"
 
 
 @pytest.mark.skipif(shutil.which("sqlite3") is None,
