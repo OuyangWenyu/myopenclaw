@@ -6,7 +6,12 @@ Run: uv run --with pytest --with pyyaml pytest tests/test_ops_defaults.py -v
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 from pathlib import Path
+
+import pytest
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 START_SH = (REPO_ROOT / "scripts" / "start.sh").read_text()
@@ -186,6 +191,84 @@ class TestPaperQueueWiring:
             "缺 sqlite3 时必须失败退出（不 cp 兜底）—— 否则备份静默不可用"
         )
 
+    def test_backup_cron_mounts_the_queue_rw(self):
+        """备份容器必须能**写**队列目录 —— WAL 库在只读挂载上连打开都会失败。
+
+        2026-09-18~21 每天 02:00 的 data 备份连续失败：MCP server 是「每次调用现开
+        现关」，凌晨无人调用时 `-shm` 必然不存在，而 `:ro` 挂载建不了它 → CANTOPEN，
+        连普通 SELECT 都打不开（不只是 `.backup`）。同 agentops 心跳的套路：
+        只放开这一个子目录，父目录保持只读。
+        """
+        block = compose_service_block("backup-cron")
+        assert "- ${HOME}/.myagentdata/paper-queue:/.myagentdata/paper-queue:rw" in block
+        assert "- ${HOME}/.myagentdata:/.myagentdata:ro" in block, (
+            "父目录必须保持只读 —— 只放开 paper-queue 这一个子目录"
+        )
+        # 挂载点必须落在 backup-data.sh 实际读的 DATA_ROOT 之下 —— 两边各自改动会
+        # **静默**错位（挂载看着还在，热备照样 CANTOPEN）。backup-all-docker.sh 传的
+        # 是 DATA_ROOT=/.myagentdata，脚本读 ${DATA_ROOT}/paper-queue/queue.sqlite。
+        assert "DATA_ROOT=/.myagentdata" in BACKUP_ALL
+
+
+@pytest.mark.skipif(shutil.which("sqlite3") is None,
+                    reason="宿主没有 sqlite3 CLI —— 本测试真跑 backup-data.sh 的热备路径")
+class TestBackupDataHotCopy:
+    """热备必须「先写 .tmp、成功才 mv」—— 失败时不能在快照里留下 0 字节的假库。
+
+    真跑一次 scripts/backup-data.sh，不做字符串匹配 —— 要验的是行为。
+    2026-09-18~21 的四个云盘快照里 `paper-queue/queue.sqlite` 都是 0 字节：`.backup`
+    会**先把目标文件建出来**再去读源，源读不了时假文件已经落下了（线上触发条件是
+    只读挂载上的 WAL 库 CANTOPEN，宿主复现不了，这里用「源不是数据库」触发同一
+    性质 —— 实测旧脚本在此触发下确实留下 0 字节文件）。0 字节比缺文件更阴险：
+    恢复方会把它读成「清单是空的」。
+    """
+
+    TIMESTAMP = "2026-09-21_000000"
+
+    def _run(self, tmp_path, db_bytes: bytes):
+        src = tmp_path / "src" / "paper-queue"
+        src.mkdir(parents=True)
+        (src / "queue.sqlite").write_bytes(db_bytes)
+        env = {**os.environ,
+               "DATA_ROOT": str(tmp_path / "src"),
+               "BACKUP_ROOT": str(tmp_path / "bk"),
+               "BACKUP_SKIP_PRUNE": "1"}
+        proc = subprocess.run(
+            ["bash", str(REPO_ROOT / "scripts" / "backup-data.sh"), self.TIMESTAMP],
+            env=env, capture_output=True, text=True)
+        return proc, tmp_path / "bk" / "data" / self.TIMESTAMP / "paper-queue"
+
+    @staticmethod
+    def _wal_db_bytes(tmp_path) -> bytes:
+        """生产同款：建好、写入、关掉 —— 落盘就是 WAL 模式且 -wal/-shm 已清。"""
+        seed = tmp_path / "_seed.sqlite"
+        subprocess.run(
+            ["sqlite3", str(seed),
+             "PRAGMA journal_mode=WAL; CREATE TABLE t (x); INSERT INTO t VALUES (1);"],
+            check=True, capture_output=True)
+        data = seed.read_bytes()
+        seed.unlink()
+        return data
+
+    def test_success_path_writes_a_valid_copy_and_leaves_no_tmp(self, tmp_path):
+        proc, dest = self._run(tmp_path, self._wal_db_bytes(tmp_path))
+        assert proc.returncode == 0, proc.stderr
+        copy = dest / "queue.sqlite"
+        assert copy.stat().st_size > 0, "热备产物是 0 字节"
+        rows = subprocess.run(["sqlite3", str(copy), "SELECT count(*) FROM t;"],
+                              capture_output=True, text=True, check=True)
+        assert rows.stdout.strip() == "1", "热备副本读不出原始数据"
+        assert not (dest / "queue.sqlite.tmp").exists(), "热备的 .tmp 没被清掉"
+
+    def test_failure_path_leaves_no_lying_empty_db(self, tmp_path):
+        proc, dest = self._run(tmp_path, b"not a database")
+        assert proc.returncode != 0, "源打不开时脚本竟然成功返回"
+        assert not (dest / "queue.sqlite").exists(), (
+            "热备失败却在快照里留下了 queue.sqlite —— 0 字节是假库，恢复方会读成"
+            "「清单是空的」，比缺文件更阴险"
+        )
+        assert not (dest / "queue.sqlite.tmp").exists()
+
 
 class TestBackupCronTimezone:
     """compose 声明了 TZ，而 Alpine 不带 zoneinfo —— 缺 tzdata 时 musl 会**静默**
@@ -218,7 +301,8 @@ class TestBackupHeartbeatWiring:
     """
 
     def test_compose_exposes_a_narrow_rw_heartbeat_dir(self):
-        """只放开 agentops 这一个子目录；整个 ~/.myagentdata 必须仍是只读。
+        """rw 只以「窄子目录挂载」的形式存在（agentops / paper-queue 各一条）；
+        整个 ~/.myagentdata 必须仍是只读。
 
         心跳不能放云盘目录：实测云盘对宿主进程的可见性按进程上下文分裂 ——
         launchd 能 readdir 云盘根目录却读不了里面的文件（EPERM），交互式 shell
@@ -227,7 +311,7 @@ class TestBackupHeartbeatWiring:
         block = compose_service_block("backup-cron")
         assert "- ${HOME}/.myagentdata/agentops:/.agentops:rw" in block
         assert "- ${HOME}/.myagentdata:/.myagentdata:ro" in block, (
-            "整个 ~/.myagentdata 必须保持只读 —— 心跳只需要 agentops 这一个子目录可写"
+            "整个 ~/.myagentdata 必须保持只读 —— 只允许子目录级的窄 rw 例外"
         )
 
     def test_mount_point_exists_before_compose_up(self):

@@ -24,7 +24,7 @@ myopenclaw 由主栈 15 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | tdai-memory | 8420 | Agent 长期记忆 Gateway，L0→L3 分层管线 |
 | aisecretary | 8000 | 事务数据库 MCP 服务，7 个 tools，SQLite 持久化 |
 | repo-scanner-mcp | 8001 | 研发日报 MCP 数据服务，来自 git-contribution-stats |
-| paper-queue-mcp | 8003 | 论文清单 MCP（FastMCP + streamable HTTP）。**独立容器是刻意的**：队列目录 `~/.myagentdata/paper-queue` 只挂给它，openclaw-gateway 够不着 |
+| paper-queue-mcp | 8003 | 论文清单 MCP（FastMCP + streamable HTTP）。**独立容器是刻意的**：队列目录 `~/.myagentdata/paper-queue` 不挂给 openclaw-gateway（另有 backup-cron 的窄 rw 热备挂载） |
 | freshrss | 8081 | RSS 聚合，dailyinfo 数据源 |
 | uptime-kuma | 3001 | 服务监控面板，HTTP + Docker 容器状态 |
 | backup-cron | — | 定时快照备份 |
@@ -55,7 +55,7 @@ myopenclaw 由主栈 15 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | `~/.myagentdata/tdai-memory` | `/opt/data/tdai-memory` | tdai-memory | L0→L3 记忆数据 |
 | `~/.myagentdata/aisecretary` | `/data` | aisecretary | 事务 SQLite |
 | `~/.myagentdata/repo-scanner` | `/data` | repo-scanner-mcp | 研发日报 SQLite（只读） |
-| `~/.myagentdata/paper-queue` | `/data` | paper-queue-mcp | 论文清单 SQLite（**只挂给它**，openclaw-gateway 不挂） |
+| `~/.myagentdata/paper-queue` | `/data` | paper-queue-mcp | 论文清单 SQLite（openclaw-gateway 不挂；backup-cron 另有窄 rw 热备挂载） |
 | `~/.myagentdata/dailyinfo` | — | freshrss | RSS 数据 |
 | `~/.config/gh` | `/opt/gh-config` | hermes, claude-code | GitHub CLI 认证 |
 | `~/.config/opencode` | `/opt/opencode-config` | hermes | opencode 配置 |

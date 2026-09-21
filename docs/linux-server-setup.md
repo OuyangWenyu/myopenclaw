@@ -53,6 +53,7 @@ backup-cron       -       定时快照备份（默认每天凌晨 2:00）
 | `/home/gaoyu/.hermes` | `/root/.hermes`（只读） | Hermes 数据快照源 |
 | `/home/gaoyu/.openclaw` | `/root/.openclaw`（只读） | OpenClaw 数据快照源 |
 | `/home/gaoyu/.myagentdata` | `/.myagentdata`（只读） | agent 附加数据快照源 |
+| `/home/gaoyu/.myagentdata/paper-queue` | `/.myagentdata/paper-queue`（可写） | 论文清单库热备：WAL 库需建 `-shm`，只读挂载连 SELECT 都打不开 |
 | `${BACKUP_ROOT}` | `/backup` | 快照写入目标（云盘挂载点） |
 
 **重要**：必须以 `gaoyu` 身份运行 `docker compose`，否则 `${HOME}` 变为 `/root`，导致数据挂载到错误目录。

@@ -495,8 +495,14 @@ services:
       # 写一份心跳供宿主的 collect_agentops.py 读 —— 心跳**不能**放云盘目录：
       # 实测云盘对宿主进程的可见性按进程上下文分裂（launchd 能 readdir 云盘根却
       # 读不了文件，交互式 shell 反过来），只有本地路径两边都读得到。
-      # 只放开这一个子目录，不把整个 agent 数据目录变成可写。
+      # 每个 RW 例外都必须是这样的窄子目录挂载，不把整个 agent 数据目录变成可写。
       - ${HOME}/.myagentdata/agentops:/.agentops:rw
+      # 论文清单库：**嵌套 RW**（父目录是上面那条 /.myagentdata:ro）。WAL 模式下
+      # SQLite 打开库必须先能建/开 `-shm`，只读挂载上连普通 SELECT 都报 CANTOPEN；
+      # 而 MCP server 是「每次调用现开现关」，凌晨无人调用时 `-shm` 必然不在 ——
+      # 2026-09-18~21 每晚 02:00 的 data 备份因此连续失败，快照里只剩 0 字节假文件。
+      # Docker 对嵌套挂载按「子路径后应用」覆盖父路径（2026-09-21 实测）。
+      - ${HOME}/.myagentdata/paper-queue:/.myagentdata/paper-queue:rw
       - ${BACKUP_ROOT:-/tmp/myopenclaw-backups}:/backup:rw
       - ./hermes/scripts:/hermes-scripts:ro
       - ./openclaw/scripts:/openclaw-scripts:ro

@@ -40,7 +40,18 @@ PQ_SQLITE_SRC="${DATA_ROOT}/paper-queue/queue.sqlite"
 if [[ -f "${PQ_SQLITE_SRC}" ]]; then
   mkdir -p "${DEST}/paper-queue"
   if command -v sqlite3 &>/dev/null; then
-    sqlite3 "${PQ_SQLITE_SRC}" ".backup '${DEST}/paper-queue/queue.sqlite'"
+    # 先写 .tmp、成功才 mv 到最终名：`.backup` 会**先把目标文件建出来**再去读源，
+    # 源读不了时假文件已经落下了（2026-09-18~21 实测：只读挂载上的 WAL 库 CANTOPEN，
+    # 四个快照里各留一个 0 字节的 queue.sqlite）。0 字节比缺文件更阴险 —— 恢复方会
+    # 把它读成「清单是空的」，而不是「没备份到」。
+    PQ_SQLITE_TMP="${DEST}/paper-queue/queue.sqlite.tmp"
+    rm -f "${PQ_SQLITE_TMP}"
+    if ! sqlite3 "${PQ_SQLITE_SRC}" ".backup '${PQ_SQLITE_TMP}'"; then
+      rm -f "${PQ_SQLITE_TMP}"
+      echo "   ❌ SQLite 热备失败 (paper-queue)" >&2
+      exit 1
+    fi
+    mv -f "${PQ_SQLITE_TMP}" "${DEST}/paper-queue/queue.sqlite"
     echo "   ✅ SQLite 热备完成 (paper-queue)"
   else
     echo "   ❌ sqlite3 未安装，无法安全备份论文清单库" >&2

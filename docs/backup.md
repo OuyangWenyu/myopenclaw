@@ -46,6 +46,12 @@ backup-all-docker.sh
 | TDAI Memory | `memories.sqlite`（sqlite3 热备）、`scene_blocks/`、`persona.md`、`checkpoint.json` |
 | Data | `~/.myagentdata/` 整目录 rsync（论文清单 `paper-queue/queue.sqlite` 与 `-wal`/`-shm` 除外 —— 它单独用 `sqlite3 .backup` 热备） |
 
+> **论文清单热备的两个前提**（2026-09-21 事故固化）：① backup-cron 对
+> `~/.myagentdata/paper-queue` 有一条**窄 rw 嵌套挂载** —— WAL 库打开需建 `-shm`，
+> 只读挂载上连 SELECT 都 CANTOPEN；② 热备**先写 `.tmp`、成功才 `mv`** ——
+> `.backup` 会先建目标文件再读源，失败时直接写最终名会在快照里留下 0 字节的
+> `queue.sqlite`（恢复方会读成「清单是空的」，比缺文件更阴险）。
+
 ## 不备份的内容
 
 - 大型缓存、临时会话、日志
@@ -63,7 +69,7 @@ docker compose exec backup-cron /scripts/backup-all-docker.sh
 
 快照保存在：`<云盘路径>/myopenclaw-backups/<类别>/<时间戳>/`
 
-每个快照为独立时间戳目录，`latest/` 目录同步为最新一份的内容。超过 `BACKUP_KEEP_DAYS`（默认 30 天）的旧快照自动清除 —— 按**目录名里的时间戳**判定，不按文件系统 mtime（`rsync -a` 会把目标目录的 mtime 覆盖成源目录的）。
+每个快照为独立时间戳目录，`latest/` 目录同步为最新一份的内容（**某个服务失败时它不推进** —— 保留上一份完整快照，与时间戳目录存在时间差，以心跳/退出码为准）。超过 `BACKUP_KEEP_DAYS`（默认 30 天）的旧快照自动清除 —— 按**目录名里的时间戳**判定，不按文件系统 mtime（`rsync -a` 会把目标目录的 mtime 覆盖成源目录的）。
 
 ## 恢复
 
