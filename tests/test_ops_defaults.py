@@ -181,15 +181,26 @@ class TestPaperQueueWiring:
         skills = json.loads(OPENCLAW_EXAMPLE.read_text()).get("skills", {}).get("entries", {})
         assert skills.get("paper-fetch") == {"enabled": False}
 
-    def test_backup_hot_copies_the_queue_db(self):
-        """WAL 下直接 rsync 会拷到撕裂副本 —— 必须 .backup，且缺 sqlite3 要失败退出。"""
-        backup = (REPO_ROOT / "scripts" / "backup-data.sh").read_text()
-        assert "--exclude='paper-queue/queue.sqlite*'" in backup
-        assert 'sqlite3 "${PQ_SQLITE_SRC}" ".backup' in backup
-        block = backup[backup.index("PQ_SQLITE_SRC"):]
-        assert "exit 1" in block, (
-            "缺 sqlite3 时必须失败退出（不 cp 兜底）—— 否则备份静默不可用"
+    def test_backup_cron_mounts_the_wal_dbs_rw(self):
+        """备份容器必须能**写** WAL 库所在目录 —— 只读挂载上连 SELECT 都 CANTOPEN。
+
+        2026-09-18~21 每天 02:00 的 data 备份连续失败就是这么来的（读者要在
+        wal-index 里加锁，`:ro` 建不了/写不了 `-shm`；`-shm` 已存在也救不了）。
+        2026-09-21 审计后又补两条同类窄挂载：vectors.db 与 repos.sqlite 也是 WAL。
+        同 agentops 心跳的套路：只放开这些子目录，父目录保持只读。
+        """
+        block = compose_service_block("backup-cron")
+        for sub in ("paper-queue", "tdai-memory", "repo-scanner"):
+            assert f"- ${{HOME}}/.myagentdata/{sub}:/.myagentdata/{sub}:rw" in block, (
+                f"{sub} 的窄 rw 挂载缺失 —— 它的 WAL 库在只读挂载上打不开"
+            )
+        assert "- ${HOME}/.myagentdata:/.myagentdata:ro" in block, (
+            "父目录必须保持只读 —— 只放开热备需要的子目录"
         )
+        # 挂载点必须落在 backup-data.sh 实际读的 DATA_ROOT 之下 —— 两边各自改动会
+        # **静默**错位（挂载看着还在，热备照样 CANTOPEN）。backup-all-docker.sh 传的
+        # 是 DATA_ROOT=/.myagentdata，脚本读 ${DATA_ROOT}/<库路径>。
+        assert "DATA_ROOT=/.myagentdata" in BACKUP_ALL
 
     def test_backup_cron_mounts_the_queue_rw(self):
         """备份容器必须能**写**队列目录 —— WAL 库在只读挂载上连打开都会失败。
@@ -212,6 +223,112 @@ class TestPaperQueueWiring:
 
 @pytest.mark.skipif(shutil.which("sqlite3") is None,
                     reason="宿主没有 sqlite3 CLI —— 本测试真跑 backup-data.sh 的热备路径")
+class TestBackupHotDbs:
+    """活着的 SQLite 一律热备、不裸 rsync —— 覆盖面和机制都钉住。
+
+    2026-09-21 审计发现 ~/.myagentdata 下还有 4 个活库被裸 rsync：WAL 的
+    vectors.db（4.1MB 数据只在 `-wal` 里）与 repos.sqlite；回滚模式的 freshrss
+    （每 15 分钟刷新）与 transactions.sqlite（撞上写事务会拷到不可回滚的半写态）。
+    修法与 paper-queue 统一：rsync 排除裸库及 sidecar → sqlite3 .backup 到 .tmp
+    → 成功才 mv。WAL 库的读者要写 `-shm` ⇒ 需要窄 rw 挂载；回滚模式的库
+    `-readonly` 打开即可（实测：挂 ro 上也能 .backup），不需要挂载。
+    """
+
+    WAL_DBS = ("paper-queue/queue.sqlite", "tdai-memory/vectors.db",
+               "repo-scanner/repos.sqlite")
+    ROLLBACK_DBS = ("aisecretary/transactions.sqlite",
+                    "dailyinfo/freshrss/data/users/*/db.sqlite")
+
+    @staticmethod
+    def _script() -> str:
+        return (REPO_ROOT / "scripts" / "backup-data.sh").read_text()
+
+    def test_every_live_db_is_in_the_hot_list(self):
+        script = self._script()
+        for rel in self.WAL_DBS + self.ROLLBACK_DBS:
+            assert f'"{rel}"' in script, f"热备清单缺 {rel} —— 它会退化成裸 rsync"
+
+    def test_rsync_excludes_derive_from_the_hot_list(self):
+        """排除式必须由清单推导 —— 手写第二份清单就会漂移。"""
+        script = self._script()
+        assert 'RSYNC_EXCLUDES+=(--exclude="${_db}*")' in script
+        assert '"${RSYNC_EXCLUDES[@]}" "${DATA_ROOT}/" "${DEST}/"' in script
+
+    def test_wal_dbs_writable_open_rollback_dbs_readonly(self):
+        script = self._script()
+        wal = script[script.index("HOT_DBS_RW=("):script.index("HOT_DBS_RO=(")]
+        for rel in self.WAL_DBS:
+            assert f'"{rel}"' in wal, f"{rel} 是 WAL 库，必须在 HOT_DBS_RW（普通打开）"
+        rollback = script[script.index("HOT_DBS_RO=("):script.index("RSYNC_EXCLUDES=")]
+        for rel in self.ROLLBACK_DBS:
+            assert f'"{rel}"' in rollback, f"{rel} 是回滚模式，应在 HOT_DBS_RO"
+        assert 'hot_copy readonly "${_rel}"' in script, (
+            "回滚模式的库要用 -readonly 热备 —— 它们挂在 ro 上"
+        )
+        assert "sqlite3 -readonly" in script
+        assert '-cmd ".timeout' in script, (
+            "拿读锁要带 busy timeout —— 写事务提交的瞬间硬失败会让整晚备份挂掉"
+        )
+
+    def test_hot_copy_writes_then_moves(self):
+        script = self._script()
+        assert ".tmp" in script and "mv -f" in script, (
+            "热备必须先写 .tmp、成功才 mv（失败不留 0 字节假库）"
+        )
+
+    def test_missing_sqlite3_fails_loud(self):
+        script = self._script()
+        assert "❌ sqlite3 未安装" in script and "exit 1" in script, (
+            "缺 sqlite3 时必须失败退出（不 cp 兜底）—— 否则备份静默不可用"
+        )
+
+
+class TestOpenclawAgentDbHotCopy:
+    """openclaw 的 146MB 会话库（回滚模式、活库）必须热备 —— 裸 rsync 会拷到半写态。
+
+    2026-09-21 审计：它每晚上云 146MB（30 天 ≈ 4.4GB 稳态），且撞上写事务时得到的
+    副本没有 journal 可回滚。回滚模式的库挂在 ro 上也能 `-readonly` 热备（实测），
+    不需要新增挂载。
+    """
+
+    SCRIPT = REPO_ROOT / "openclaw" / "scripts" / "backup.sh"
+    TIMESTAMP = "2026-09-21_120000"
+
+    def test_excluded_from_raw_rsync(self):
+        script = self.SCRIPT.read_text()
+        assert '--exclude="*/agent/openclaw-agent.sqlite"' in script, (
+            "146MB 的会话库不能再被裸 rsync —— 要么热备、要么明确不备"
+        )
+
+    def test_hot_copied_readonly_write_then_move(self):
+        script = self.SCRIPT.read_text()
+        assert "sqlite3 -readonly" in script
+        assert 'tmp="${DEST}/${rel}.tmp"' in script, "先写 .tmp，成功才 mv"
+        assert "mv -f" in script
+
+    def test_behavioral_copy_is_valid_and_journal_free(self, tmp_path):
+        agents = tmp_path / ".openclaw" / "agents" / "main" / "agent"
+        agents.mkdir(parents=True)
+        db = agents / "openclaw-agent.sqlite"
+        subprocess.run(["sqlite3", str(db), "CREATE TABLE t (x); INSERT INTO t VALUES (1);"],
+                       check=True, capture_output=True)
+        (agents / "models.json").write_text("{}")     # 证明 rsync 部分照常工作
+        env = {**os.environ, "HOME": str(tmp_path), "BACKUP_ROOT": str(tmp_path / "bk"),
+               "BACKUP_SKIP_PRUNE": "1"}
+        proc = subprocess.run(["bash", str(self.SCRIPT), self.TIMESTAMP],
+                              env=env, capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stderr
+        snap = tmp_path / "bk" / "openclaw" / self.TIMESTAMP
+        copy = snap / "agents" / "main" / "agent" / "openclaw-agent.sqlite"
+        rows = subprocess.run(["sqlite3", str(copy), "SELECT count(*) FROM t;"],
+                              capture_output=True, text=True, check=True)
+        assert rows.stdout.strip() == "1", "热备副本读不出数据"
+        assert (snap / "agents" / "main" / "agent" / "models.json").exists()
+        assert not list(snap.rglob("*-journal")), "热备的 -journal 残影不该进快照"
+
+
+@pytest.mark.skipif(shutil.which("sqlite3") is None,
+                    reason="宿主没有 sqlite3 CLI —— 本测试真跑 backup-data.sh 的热备路径")
 class TestBackupDataHotCopy:
     """热备必须「先写 .tmp、成功才 mv」—— 失败时不能在快照里留下 0 字节的假库。
 
@@ -225,10 +342,11 @@ class TestBackupDataHotCopy:
 
     TIMESTAMP = "2026-09-21_000000"
 
-    def _run(self, tmp_path, db_bytes: bytes):
-        src = tmp_path / "src" / "paper-queue"
-        src.mkdir(parents=True)
-        (src / "queue.sqlite").write_bytes(db_bytes)
+    def _run(self, tmp_path, dbs: dict):
+        for rel, data in dbs.items():
+            src = tmp_path / "src" / rel
+            src.parent.mkdir(parents=True, exist_ok=True)
+            src.write_bytes(data)
         env = {**os.environ,
                "DATA_ROOT": str(tmp_path / "src"),
                "BACKUP_ROOT": str(tmp_path / "bk"),
@@ -236,7 +354,7 @@ class TestBackupDataHotCopy:
         proc = subprocess.run(
             ["bash", str(REPO_ROOT / "scripts" / "backup-data.sh"), self.TIMESTAMP],
             env=env, capture_output=True, text=True)
-        return proc, tmp_path / "bk" / "data" / self.TIMESTAMP / "paper-queue"
+        return proc, tmp_path / "bk" / "data" / self.TIMESTAMP
 
     @staticmethod
     def _wal_db_bytes(tmp_path) -> bytes:
@@ -250,24 +368,68 @@ class TestBackupDataHotCopy:
         seed.unlink()
         return data
 
+    @staticmethod
+    def _plain_db_bytes(tmp_path, name="_plain.sqlite") -> bytes:
+        """回滚模式（默认 journal）的小库 —— 走 -readonly 那条路。"""
+        seed = tmp_path / name
+        subprocess.run(["sqlite3", str(seed),
+                        "CREATE TABLE t (x); INSERT INTO t VALUES (1);"],
+                       check=True, capture_output=True)
+        data = seed.read_bytes()
+        seed.unlink()
+        return data
+
     def test_success_path_writes_a_valid_copy_and_leaves_no_tmp(self, tmp_path):
-        proc, dest = self._run(tmp_path, self._wal_db_bytes(tmp_path))
+        proc, snap = self._run(tmp_path,
+                               {"paper-queue/queue.sqlite": self._wal_db_bytes(tmp_path)})
         assert proc.returncode == 0, proc.stderr
-        copy = dest / "queue.sqlite"
+        copy = snap / "paper-queue" / "queue.sqlite"
         assert copy.stat().st_size > 0, "热备产物是 0 字节"
         rows = subprocess.run(["sqlite3", str(copy), "SELECT count(*) FROM t;"],
                               capture_output=True, text=True, check=True)
         assert rows.stdout.strip() == "1", "热备副本读不出原始数据"
-        assert not (dest / "queue.sqlite.tmp").exists(), "热备的 .tmp 没被清掉"
+        assert not (snap / "paper-queue" / "queue.sqlite.tmp").exists(), "热备的 .tmp 没被清掉"
 
     def test_failure_path_leaves_no_lying_empty_db(self, tmp_path):
-        proc, dest = self._run(tmp_path, b"not a database")
+        proc, snap = self._run(tmp_path, {"paper-queue/queue.sqlite": b"not a database"})
         assert proc.returncode != 0, "源打不开时脚本竟然成功返回"
-        assert not (dest / "queue.sqlite").exists(), (
+        assert not (snap / "paper-queue" / "queue.sqlite").exists(), (
             "热备失败却在快照里留下了 queue.sqlite —— 0 字节是假库，恢复方会读成"
             "「清单是空的」，比缺文件更阴险"
         )
-        assert not (dest / "queue.sqlite.tmp").exists()
+        assert not (snap / "paper-queue" / "queue.sqlite.tmp").exists()
+
+    def test_every_configured_db_is_hot_copied_and_sidecars_stay_out(self, tmp_path):
+        """WAL 与回滚两种打开方式都要过；sidecar 残影不得进快照。
+
+        ⚠️ 垃圾 sidecar 要按库的模式配对放：WAL 库不读 `-journal`、回滚库不读
+        `-wal`/`-shm`，放反了会让 SQLite 在打开源库时试图处理它 —— 回滚库 + 真
+        `-journal` 会以「attempt to write a readonly database」响亮失败（实测踩过）。
+        """
+        proc, snap = self._run(tmp_path, {
+            "paper-queue/queue.sqlite": self._wal_db_bytes(tmp_path),   # WAL → 普通打开
+            "paper-queue/queue.sqlite-journal": b"sidecar junk",        # 不得进快照
+            "aisecretary/transactions.sqlite": self._plain_db_bytes(tmp_path),  # 回滚 → -readonly
+            "aisecretary/transactions.sqlite-wal": b"sidecar junk",     # 不得进快照
+            "aisecretary/transactions.sqlite-shm": b"sidecar junk",
+        })
+        assert proc.returncode == 0, proc.stderr
+        # ⚠️ 文件清单必须先于「打开副本」取好：SQLite 连接会在打开时顺手 unlink
+        # 旁边的陈旧 `-journal`（非 hot journal 的正常清理），先读库再查清单会让
+        # 这条断言恒真 —— 实测踩过。
+        snap_files = {str(p.relative_to(snap)) for p in snap.rglob("*") if p.is_file()}
+        for rel in ("paper-queue/queue.sqlite", "aisecretary/transactions.sqlite"):
+            copy = snap / rel
+            assert copy.stat().st_size > 0, f"{rel} 热备产物是 0 字节"
+            rows = subprocess.run(["sqlite3", str(copy), "SELECT count(*) FROM t;"],
+                                  capture_output=True, text=True, check=True)
+            assert rows.stdout.strip() == "1", f"{rel} 的热备副本读不出数据"
+        for leftover in ("paper-queue/queue.sqlite-journal",
+                         "aisecretary/transactions.sqlite-wal",
+                         "aisecretary/transactions.sqlite-shm"):
+            assert leftover not in snap_files, (
+                f"sidecar 残影 {leftover} 进了快照 —— 它是某一瞬间的中间态"
+            )
 
 
 class TestBackupCronTimezone:

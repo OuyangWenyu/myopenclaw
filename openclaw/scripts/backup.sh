@@ -37,12 +37,39 @@ if [[ -f "${OPENCLAW_DATA}/openclaw.json" ]]; then
 fi
 
 # ── agents/（排除运行时临时文件和 session）─────────────────────
+# 会话库 openclaw-agent.sqlite（146MB 级、回滚模式、活库）**不裸 rsync**：
+# 撞上写事务会拷到没有 journal 可回滚的半写状态。它改由下面的 .backup 热备。
 if [[ -d "${OPENCLAW_DATA}/agents" ]]; then
   rsync -a \
     --exclude="*/agent/*.tmp" \
     --exclude="*/agent/auth-state.json" \
     --exclude="*/sessions/" \
+    --exclude="*/agent/openclaw-agent.sqlite" \
+    --exclude="*/agent/openclaw-agent.sqlite-journal" \
     "${OPENCLAW_DATA}/agents/" "${DEST}/agents/"
+fi
+
+# ── 会话库热备（先写 .tmp、成功才 mv，理由同 backup-data.sh）────
+# `-readonly` 即可（挂 ro 上也能 .backup，实测）。读事务会短暂挡住写入者
+# （回滚模式下整段拷贝一个读锁）—— 02:00 虾酱空闲，可接受。
+if command -v sqlite3 &>/dev/null; then
+  shopt -s nullglob
+  for src in "${OPENCLAW_DATA}"/agents/*/agent/openclaw-agent.sqlite; do
+    rel="${src#"${OPENCLAW_DATA}"/}"
+    tmp="${DEST}/${rel}.tmp"
+    mkdir -p "$(dirname "${tmp}")"
+    rm -f "${tmp}"
+    if ! sqlite3 -readonly -cmd ".timeout 5000" "${src}" ".backup '${tmp}'"; then
+      rm -f "${tmp}"
+      echo "   ❌ SQLite 热备失败: ${rel}" >&2
+      exit 1
+    fi
+    mv -f "${tmp}" "${DEST}/${rel}"
+    echo "   ✅ SQLite 热备完成 (${rel})"
+  done
+else
+  echo "   ❌ sqlite3 未安装，无法安全备份会话库" >&2
+  exit 1
 fi
 
 # ── flows/ 和 extensions/（用户自定义配置）────────────────────

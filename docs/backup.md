@@ -46,11 +46,18 @@ backup-all-docker.sh
 | TDAI Memory | `memories.sqlite`（sqlite3 热备）、`scene_blocks/`、`persona.md`、`checkpoint.json` |
 | Data | `~/.myagentdata/` 整目录 rsync（论文清单 `paper-queue/queue.sqlite` 与 `-wal`/`-shm` 除外 —— 它单独用 `sqlite3 .backup` 热备） |
 
-> **论文清单热备的两个前提**（2026-09-21 事故固化）：① backup-cron 对
-> `~/.myagentdata/paper-queue` 有一条**窄 rw 嵌套挂载** —— WAL 库打开需建 `-shm`，
-> 只读挂载上连 SELECT 都 CANTOPEN；② 热备**先写 `.tmp`、成功才 `mv`** ——
-> `.backup` 会先建目标文件再读源，失败时直接写最终名会在快照里留下 0 字节的
-> `queue.sqlite`（恢复方会读成「清单是空的」，比缺文件更阴险）。
+> **活库热备**（2026-09-21 事故 + 全量审计固化）：`~/.myagentdata` 下所有活着的
+> SQLite 都由 `backup-data.sh` 的热备清单接管（rsync 排除裸库与 sidecar）：
+> - `HOT_DBS_RW`（WAL 模式，读者也要写 `-shm` ⇒ 各有一条 compose 窄 rw 挂载）：
+>   `paper-queue/queue.sqlite`、`tdai-memory/vectors.db`、`repo-scanner/repos.sqlite`
+> - `HOT_DBS_RO`（回滚模式，`-readonly` 打开即可 —— 挂在 ro 上也能 `.backup`）：
+>   `aisecretary/transactions.sqlite`、`dailyinfo/freshrss/data/users/*/db.sqlite`
+>
+> openclaw 的 146MB 会话库（`agents/*/agent/openclaw-agent.sqlite`，回滚模式）同法热备。
+> 三条规则：① 热备**先写 `.tmp`、成功才 `mv`** —— `.backup` 会先建目标文件再读源，
+> 失败时直接写最终名会留下 0 字节假库（恢复方读成「是空的」，比缺文件更阴险）；
+> ② 带 `-cmd .timeout 5000` 拿锁，撞上写事务提交不硬失败；③ 源库旁边若躺着**真的**
+> hot journal（上次写崩留下的），只读热备会响亮拒绝 —— fail-loud，别改成静默跳过。
 
 ## 不备份的内容
 

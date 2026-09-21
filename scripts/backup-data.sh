@@ -30,34 +30,73 @@ LATEST="${BACKUP_ROOT}/data/latest"
 mkdir -p "${DEST}"
 echo "   📂 备份目标: ${DEST}"
 
-# 排除 paper-queue 的裸 SQLite 及其 -wal/-shm：WAL 模式下最新提交可能还在 -wal 里，
-# rsync 只是某一瞬间的文件视图，直接拷会得到不一致的副本。下面用 sqlite3 .backup 热备。
-rsync -a --delete --exclude='paper-queue/queue.sqlite*' "${DATA_ROOT}/" "${DEST}/"
+# ── 活库清单：只热备，不裸 rsync ────────────────────────────────
+# 活着的 SQLite 直接 rsync 只能得到「某一瞬间的文件视图」：
+#   · WAL 模式：最新提交可能还在 -wal 里（甚至整库 4MB 级的数据只住在那里）；
+#   · 回滚模式：写事务进行中会存在半写状态，副本没有 journal 可回滚。
+# 两组分开是因为打开方式不同，也决定是否需要 compose 里的窄 rw 挂载：
+#   HOT_DBS_RW —— WAL 库的读者也要在 wal-index 里加锁（写 -shm），必须挂 rw；
+#   HOT_DBS_RO —— 回滚模式的库 `-readonly` 打开即可（挂 ro 上也能 .backup，实测）。
+HOT_DBS_RW=(
+  "paper-queue/queue.sqlite"                    # WAL —— 虾酱论文清单
+  "tdai-memory/vectors.db"                      # WAL —— TDAI 向量库
+  "repo-scanner/repos.sqlite"                   # WAL —— 研发日报
+)
+HOT_DBS_RO=(
+  "aisecretary/transactions.sqlite"             # 回滚模式 —— 事务库
+  "dailyinfo/freshrss/data/users/*/db.sqlite"   # 回滚模式 —— 每用户一个
+)
+HOT_DBS=("${HOT_DBS_RW[@]}" "${HOT_DBS_RO[@]}")
+
+# rsync 排除式由清单推导（手写第二份就会漂移）：裸库与 sidecar 都不进快照 ——
+# sidecar 是某一瞬间的残影，进快照只会误导恢复方。
+RSYNC_EXCLUDES=()
+for _db in "${HOT_DBS[@]}"; do
+  RSYNC_EXCLUDES+=(--exclude="${_db}*")
+done
+rsync -a --delete "${RSYNC_EXCLUDES[@]}" "${DATA_ROOT}/" "${DEST}/"
 echo "   ✅ 快照完成: ${DEST}"
 
-# ── paper-queue/queue.sqlite（论文清单，虾酱写 / mylibrary 读）──────
-PQ_SQLITE_SRC="${DATA_ROOT}/paper-queue/queue.sqlite"
-if [[ -f "${PQ_SQLITE_SRC}" ]]; then
-  mkdir -p "${DEST}/paper-queue"
-  if command -v sqlite3 &>/dev/null; then
-    # 先写 .tmp、成功才 mv 到最终名：`.backup` 会**先把目标文件建出来**再去读源，
-    # 源读不了时假文件已经落下了（2026-09-18~21 实测：只读挂载上的 WAL 库 CANTOPEN，
-    # 四个快照里各留一个 0 字节的 queue.sqlite）。0 字节比缺文件更阴险 —— 恢复方会
-    # 把它读成「清单是空的」，而不是「没备份到」。
-    PQ_SQLITE_TMP="${DEST}/paper-queue/queue.sqlite.tmp"
-    rm -f "${PQ_SQLITE_TMP}"
-    if ! sqlite3 "${PQ_SQLITE_SRC}" ".backup '${PQ_SQLITE_TMP}'"; then
-      rm -f "${PQ_SQLITE_TMP}"
-      echo "   ❌ SQLite 热备失败 (paper-queue)" >&2
+# ── 逐个热备：先写 .tmp、成功才 mv ──────────────────────────────
+# `.backup` 会**先把目标文件建出来**再去读源，源读不了时假文件已经落下了
+# （2026-09-18~21 实测：只读挂载上的 WAL 库 CANTOPEN，四个快照里各留一个 0 字节的
+# queue.sqlite）。0 字节比缺文件更阴险 —— 恢复方会把它读成「是空的」，而不是
+# 「没备份到」。`-cmd .timeout` 是拿读锁时的等待：撞上写事务提交的瞬间不硬失败。
+# ⚠️ 源库旁边若躺着**真的** hot journal（上次写到一半崩了），只读热备会响亮地拒绝
+# （attempt to write a readonly database）—— 这是 fail-loud，别改成静默跳过或 cp 兜底。
+if ! command -v sqlite3 &>/dev/null; then
+  echo "   ❌ sqlite3 未安装，无法安全备份 SQLite 库（不 cp 兜底）" >&2
+  exit 1
+fi
+
+hot_copy() {   # hot_copy <rw|readonly> <相对 DATA_ROOT 的路径模式>
+  local mode="$1" rel="$2" src rel_actual tmp failed=0
+  shopt -s nullglob
+  for src in "${DATA_ROOT}"/${rel}; do
+    # 不含通配符的字面路径不会"匹配失败"，nullglob 管不着它 —— 得自己挡：
+    # 库还不存在（新部署还没写过）时要跳过，而不是拿一个不存在的路径去 sqlite3。
+    [[ -f "${src}" ]] || continue
+    rel_actual="${src#"${DATA_ROOT}"/}"
+    tmp="${DEST}/${rel_actual}.tmp"
+    mkdir -p "$(dirname "${tmp}")"
+    rm -f "${tmp}"
+    if [[ "${mode}" == "readonly" ]]; then
+      sqlite3 -readonly -cmd ".timeout 5000" "${src}" ".backup '${tmp}'" || failed=1
+    else
+      sqlite3 -cmd ".timeout 5000" "${src}" ".backup '${tmp}'" || failed=1
+    fi
+    if [[ ${failed} -ne 0 ]]; then
+      rm -f "${tmp}"
+      echo "   ❌ SQLite 热备失败: ${rel_actual}" >&2
       exit 1
     fi
-    mv -f "${PQ_SQLITE_TMP}" "${DEST}/paper-queue/queue.sqlite"
-    echo "   ✅ SQLite 热备完成 (paper-queue)"
-  else
-    echo "   ❌ sqlite3 未安装，无法安全备份论文清单库" >&2
-    exit 1
-  fi
-fi
+    mv -f "${tmp}" "${DEST}/${rel_actual}"
+    echo "   ✅ SQLite 热备完成 (${rel_actual})"
+  done
+}
+
+for _rel in "${HOT_DBS_RW[@]}"; do hot_copy rw "${_rel}"; done
+for _rel in "${HOT_DBS_RO[@]}"; do hot_copy readonly "${_rel}"; done
 
 # ── 同步到 latest/ ───────────────────────────────────────────
 rsync -a --delete "${DEST}/" "${LATEST}/"
