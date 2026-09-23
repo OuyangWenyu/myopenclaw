@@ -35,7 +35,7 @@ myopenclaw 用 Docker 运行三个 AI Agent 框架 — [Hermes Agent](https://gi
 - [Zotero 文献系统](zotero-cli-cc.md) — Zotero MCP 共享服务（mylibrary 提供）+ paper pipeline + 道元文献 Agent
 - [论文清单](paper-queue.md) — 论文请求只记不下（独立 MCP 容器）
 - [AI 秘书](aisecretary.md) — 事务数据库 MCP 服务
-- [研发日报](daily-dev-report.md) — 32 仓库每日采集 + 飞书推送
+- [研发日报](daily-dev-report.md) — 35 仓库每日采集 + 飞书推送
 - [dailyinfo 调度](dailyinfo.md) — AI 情报聚合与定时推送
 - [Google Drive](google-drive-rclone.md) — rclone 论文上传配置
 - [通讯录](contacts.md) — cardamum CLI 联系人管理

@@ -6,7 +6,7 @@
 
 ```
 git-contribution-stats/ (独立仓库)
-  ├── scripts/collect.py        ← 每日采集 32 仓库 GitHub + GitCode 提交
+  ├── scripts/collect.py        ← 每日采集 35 仓库 GitHub + GitCode 提交
   ├── core/report.py            ← 日报数据查询
   └── docker/mcp-server/        ← MCP server (build context for repo-scanner-mcp)
         │
@@ -47,4 +47,4 @@ cat /tmp/report.txt | docker compose exec -T hermes python3 /opt/hermes-skills/d
 
 ## 数据来源
 
-git-contribution-stats 采集 32 个仓库（12 个 GitHub + 20 个 GitCode，见 `configs/repos.toml`），数据存储在 `~/.myagentdata/repo-scanner/repos.sqlite`（**只读**挂载到 repo-scanner-mcp 容器）。
+git-contribution-stats 采集 35 个仓库（15 个 GitHub + 20 个 GitCode，见 `configs/repos.toml`），数据存储在 `~/.myagentdata/repo-scanner/repos.sqlite`（**只读**挂载到 repo-scanner-mcp 容器）。
