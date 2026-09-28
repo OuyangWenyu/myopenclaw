@@ -44,7 +44,7 @@ macOS 支持 `/etc/resolver/` 机制，可以按域名指定 DNS 服务器。脚
 # /etc/resolver/ 下的每个文件对应一个域名及其子域名
 # 文件名 = 域名，内容 = nameserver 指令
 
-DOMAINS="alibabadns.com aliyunddos1022.com bigmodel.cn bytedns1.com cdngslb.com deepseek.com dingtalk.com eo.dnse1.com eo.dnse5.com feishu.cn gitcode.com gtm-a4b8.com moonshot.cn open.bigmodel.cn qq.com queniuyk.com queniuck.com xiaomimimo.com xiaomi.com workbuddy.cn yundunwaf3.com zhipu.ai"
+DOMAINS="alibabadns.com aliyunddos1022.com bigmodel.cn bytedns1.com cdnbuild.net cdngslb.com deepseek.com dingtalk.com eo.dnse1.com eo.dnse5.com feishu.cn gitcode.com gtm-a4b8.com kunluncan.com moonshot.cn open.bigmodel.cn qq.com queniuiq.com queniurc.com queniuyk.com queniuck.com xiaomimimo.com xiaomi.com workbuddy.cn yundunwaf3.com zhipu.ai"
 
 # 先确认该 DNS 在当前网络可用（校园网/部分运营商会拦 53 端口）
 DNS=223.5.5.5          # 或路由器地址，如 192.168.3.1
@@ -60,10 +60,14 @@ sudo killall -HUP mDNSResponder
 ```
 
 > ⚠️ **脚本只增/改，不删**：`/etc/resolver/` 里可能残留脚本不再管理的域名（历史配置或手工加的），
-> 脚本每次只创建/更新上面这份名单（22 个），不会清理其它文件。2026-09-17 实测宿主机有 28 个，
-> 多出的 6 个是 `bilibili.com`、`bilicdn1.com`、`cdnbuild.net`、`huaweicloudwaf.com`、`kunluncan.com`、`queniuyk.co`
+> 脚本每次只创建/更新上面这份名单（26 个），不会清理其它文件。2026-09-28 实测宿主机有 28 个，
+> 多出的 4 个是 `bilibili.com`、`bilicdn1.com`、`huaweicloudwaf.com`、`queniuyk.co`
 > —— 仓库里没有任何配置引用它们。其中 `queniuyk.co` 疑为 `queniuyk.com` 的笔误（两者同时存在，内容相同）。
 > 确认无用后手工清理：`sudo rm /etc/resolver/<域名>`。
+>
+> 反向的坑更隐蔽：**磁盘上有、仓库里没有**的域，换机器时会静默丢失。`cdnbuild.net` 和
+> `kunluncan.com` 曾经就是这种状态（只存在于这台机器的 `/etc/resolver/`，飞书文件链接依赖它们），
+> 2026-09-28 已收编进 `RESOLVER_DOMAINS`。
 
 ## 关键细节
 
@@ -77,6 +81,9 @@ sudo killall -HUP mDNSResponder
 | DeepSeek api.deepseek.com | `eo.dnse1.com` | 火山引擎 CDN |
 | WorkBuddy workbuddy.cn | `eo.dnse5.com` | 腾讯 EdgeOne CDN（与 DeepSeek 的 dnse1 是两条独立链） |
 | 飞书 open.feishu.cn | `bytedns1.com` → `cdngslb.com` → `queniuyk.com` | 字节 CDN → GSLB → 金山云 CNAME 终端 |
+| 飞书 accounts/www.feishu.cn | `bytedns1.com` → `cdngslb.com` → `queniurc.com` | 登录页与官网的终端域（2026-09-28 补配） |
+| 飞书 help/passport/okr.feishu.cn | `cdngslb.com` → `queniuiq.com` | 另一支终端域（与 `queniurc.com` 不同，2026-09-28 补配） |
+| 飞书文件链接 `*.feishu.cn` | `bytedns1.com` → `kunluncan.com`（部分地理为 `cdnbuild.net`） | 文件 CDN 终端（通配），如 `drive.feishu.cn` |
 | 飞书 msg-frontier.feishu.cn | `queniuck.com` | 飞书长连接 CNAME 终端 |
 | 小米 MiMo api.xiaomimimo.com | `xiaomi.com` | `mimo-pri-alisgp.alb.xiaomi.com` |
 | Moonshot api.moonshot.cn | `aliyunddos1022.com` | 阿里云 DDoS 防护 |

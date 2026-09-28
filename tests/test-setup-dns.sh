@@ -69,6 +69,45 @@ rc=$?
 check "未知参数退出码为 2" \
     "[[ ${rc} -eq 2 ]]"
 
+# 5. 关键域名的 CNAME 终端域必须都在 RESOLVER_DOMAINS 清单里
+#    背景（2026-09-28 飞书登录页事故）：CNAME 链末端的外域（queniurc.com / queniuiq.com）
+#    不在清单里时，解析**不会失败** —— 它静默回落到默认 DNS（境外 VPN 场景是 1.1.1.3），
+#    拿到海外 CDN 节点，流量被 VPN 隧道吸走。所以必须逐链核对终端域。
+#    DNS 无应答（离线/被拦）时跳过该域名，不算失败 —— --dry-run 那部分已覆盖 DNS 选择逻辑。
+echo ""
+echo "--- CNAME 终端域是否被 RESOLVER_DOMAINS 覆盖 ---"
+
+resolver_list="$(awk '/^RESOLVER_DOMAINS=\(/,/^\)/' "${SCRIPT}" | sed -n 's/^  \([a-z0-9.-]*\)$/\1/p')"
+selected_ns="$(bash "${SCRIPT}" --dry-run 2>/dev/null | sed -n 's/.*选定 DNS: \([0-9.][0-9.]*\).*/\1/p' | head -1)"
+
+if [[ -z "${selected_ns}" ]]; then
+    check "能从 --dry-run 取到可用 DNS（CNAME 终端检查的前提）" "false"
+else
+    for host in accounts.feishu.cn www.feishu.cn help.feishu.cn open.feishu.cn drive.feishu.cn; do
+        chain="$(dig +short +time=3 "${host}" "@${selected_ns}" 2>/dev/null || true)"
+        if [[ -z "${chain}" ]]; then
+            echo "  - 跳过 ${host}（${selected_ns} 无应答，不计失败）"
+            continue
+        fi
+        missing=""
+        # 取链上每个 FQDN，归约到末两段（本机所有 CNAME 链外域都是 .com 单后缀）
+        for tok in $(printf '%s\n' "${chain}" | grep -oE '[A-Za-z0-9._-]+\.[A-Za-z]{2,}'); do
+            case "${tok}" in
+                *[!0-9.]*)
+                    base="$(printf '%s' "${tok}" | awk -F. '{print $(NF-1)"."$NF}')"
+                    printf '%s\n' "${resolver_list}" | grep -qx "${base}" || missing="${missing} ${base}"
+                    ;;
+            esac
+        done
+        missing="$(printf '%s\n' ${missing} | sort -u | tr '\n' ' ' | sed 's/ *$//')"
+        if [[ -n "${missing}" ]]; then
+            check "${host} 的 CNAME 终端域在 RESOLVER_DOMAINS 里（缺: ${missing}）" "false"
+        else
+            check "${host} 的 CNAME 终端域在 RESOLVER_DOMAINS 里" "true"
+        fi
+    done
+fi
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 if [ "$FAIL" -gt 0 ]; then

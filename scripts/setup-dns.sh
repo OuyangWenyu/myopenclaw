@@ -34,14 +34,23 @@ set -euo pipefail
 #   gtm-a4b8.com    — 智谱 GTM 跳转
 #   queniuyk.com    — 飞书 open.feishu.cn CNAME 终端（金山云 CDN）
 #   queniuck.com    — 飞书 msg-frontier.feishu.cn CNAME 终端
+#   queniurc.com    — 飞书 accounts/www.feishu.cn CNAME 终端（2026-09-28 新增）
+#   queniuiq.com    — 飞书 help/passport/okr.feishu.cn CNAME 终端（2026-09-28 新增）
+#   kunluncan.com   — 飞书文件 CDN：all.feishu.cn CNAME 终端（所有 *.feishu.cn 文件/分享链接）
+#   cdnbuild.net    — 飞书文件 CDN：部分地理返回 all.feishu.cn.c.dsa.cdnbuild.net 链路
 #   xiaomimimo.com  — 小米 MiMo api.xiaomimimo.com（虾酱 TTS 语音回复依赖此域）
 #   xiaomi.com      — 小米 MiMo CNAME 链 (mimo-pri-alisgp.alb.xiaomi.com)
 #   workbuddy.cn    — WorkBuddy 主域（www.workbuddy.cn 官网）
+#   ⚠️ 漏配的后果不是"解析失败"，而是**静默回落到默认 DNS**（境外 VPN 场景下是 1.1.1.3），
+#      拿到海外 CDN 节点 → 流量被 VPN 隧道吸走 → 飞书登录页/文件下载变慢甚至不通。
+#      2026-09-28 实测：queniurc.com 漏配时 accounts.feishu.cn 解析到 155.102.54.x（走 utun4），
+#      钉住后拿到 222.192.187.x（走 en1 直连）。守卫见 tests/test-setup-dns.sh。
 RESOLVER_DOMAINS=(
   alibabadns.com
   aliyunddos1022.com
   bigmodel.cn
   bytedns1.com
+  cdnbuild.net
   cdngslb.com
   deepseek.com
   dingtalk.com
@@ -50,12 +59,15 @@ RESOLVER_DOMAINS=(
   feishu.cn
   gitcode.com
   gtm-a4b8.com
+  kunluncan.com
   moonshot.cn
   open.bigmodel.cn
   yundunwaf3.com
   zhipu.ai
   # 邮箱
   qq.com
+  queniuiq.com
+  queniurc.com
   queniuyk.com
   queniuck.com
   xiaomimimo.com
@@ -83,6 +95,8 @@ VERIFY_DOMAINS=(
   api.dingtalk.com
   wss-open-connection.dingtalk.com
   open.feishu.cn
+  accounts.feishu.cn
+  help.feishu.cn
   api.moonshot.cn
   api.xiaomimimo.com
   workbuddy.cn
