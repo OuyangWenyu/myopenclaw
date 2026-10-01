@@ -329,9 +329,11 @@ if command -v himalaya &>/dev/null && [[ -f "${HIMALAYA_CONFIG}" ]]; then
     if [[ -z "${H_FOLDERS}" ]]; then
       continue
     fi
-    H_SENT="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'sent')"
-    H_DRAFTS="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'draft')"
-    H_TRASH="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'trash\|deleted')"
+    # best-effort 探测：无匹配属正常（账户可能没有 drafts/trash），
+    # 但 grep 无匹配返回 1 会经 pipefail 触发 set -e（同 AB_ID 事故一类），必须兜底
+    H_SENT="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'sent' || true)"
+    H_DRAFTS="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'draft' || true)"
+    H_TRASH="$(echo "${H_FOLDERS}" | awk -F'|' 'NR>1 {gsub(/^[ \t]+|[ \t]+$/, "", $2); print $2}' | grep -i -m1 'trash\|deleted' || true)"
     if [[ -n "${H_SENT}" ]]; then
       # Append folder.aliases as dotted keys after the account section.
       # Find the section header AFTER this account's own header — the naive
@@ -457,8 +459,15 @@ rm -rf /opt/data/.config/cardamum 2>/dev/null || true
 # cardamum addressbook create generates a UUID directory; we capture it
 # and write it as addressbook.default so Hermes can use `card list`
 # without hardcoding the ID.
-if ! grep -q "^addressbook.default" "${CARDAMUM_CONFIG}" 2>/dev/null && \
-   command -v cardamum &>/dev/null; then
+#
+# Reconcile semantics: the config is rewritten ONLY when it disagrees with
+# the vdir. 2026-10-01 事故：旧实现每次启动都无条件重写（检测只认点分键
+# `addressbook.default`，而写的是 [addressbook] 段，永远检测不到"已配置"），
+# 四个 profile 容器共享同一份配置并发 sed → 重复 [addressbook] 段（TOML
+# invalid）→ cardamum list 解析失败 → 下方未设防的 AB_ID 管道在 set -e 下
+# 返回 1 → entrypoint 退出 1 → 四容器崩溃循环。回归测试：
+# tests/test_entrypoint_cardamum.py。
+if command -v cardamum &>/dev/null; then
   # Check if any addressbook already exists in the vdir
   EXISTING_AB="$(ls -d "${CONTACTS_DIR}"/*/displayname 2>/dev/null || true)"
   if [[ -z "${EXISTING_AB}" ]]; then
@@ -466,27 +475,32 @@ if ! grep -q "^addressbook.default" "${CARDAMUM_CONFIG}" 2>/dev/null && \
     AB_CREATE_OUT="$(cardamum -c "${CARDAMUM_CONFIG}" addressbook create "contacts" 2>&1 || true)"
     echo "   📇 ${AB_CREATE_OUT}"
   fi
-  # Discover the addressbook UUID and persist it as the default
-  AB_ID="$(cardamum -c "${CARDAMUM_CONFIG}" addressbook list 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1)"
-  if [[ -n "${AB_ID}" ]]; then
-    if grep -q "^\[addressbook\]" "${CARDAMUM_CONFIG}" 2>/dev/null; then
-      # Check for existing default under [addressbook] only (not [accounts.default])
-      if sed -n '/^\[addressbook\]/,/^\[/p' "${CARDAMUM_CONFIG}" | grep -q "^default = "; then
-        # Replace existing default under [addressbook] only (handles UUID changes)
-        sed -i "/^\[addressbook\]/,/^\[/ s/^default = .*/default = \"${AB_ID}\"/" "${CARDAMUM_CONFIG}"
-        echo "   📇 cardamum addressbook.default → ${AB_ID}"
-      else
-        sed -i "/^\[addressbook\]/a default = \"${AB_ID}\"" "${CARDAMUM_CONFIG}"
-        echo "   📇 cardamum addressbook.default = ${AB_ID}"
-      fi
+  # Discover the addressbook UUID. `|| true` is load-bearing: a corrupt
+  # config must not kill the entrypoint (set -euo pipefail exits on the
+  # failed pipeline otherwise — the 2026-10-01 crash loop).
+  AB_ID="$(cardamum -c "${CARDAMUM_CONFIG}" addressbook list 2>/dev/null | grep -oE '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' | head -1 || true)"
+  # Current default under [addressbook] only (not [accounts.default])
+  CURRENT_DEFAULT="$(sed -n '/^\[addressbook\]/,/^\[/p' "${CARDAMUM_CONFIG}" 2>/dev/null | grep -m1 '^default = ' || true)"
+  if [[ -z "${AB_ID}" ]]; then
+    echo "   ⚠️  cardamum addressbook 未能识别（list 失败 / 配置损坏？）— 跳过自动配置，检查 ${CARDAMUM_CONFIG}"
+  elif [ "${CURRENT_DEFAULT}" = "default = \"${AB_ID}\"" ]; then
+    : # 配置与 vdir 一致 — 不重写（并发写竞态的源头）
+  elif grep -q "^\[addressbook\]" "${CARDAMUM_CONFIG}" 2>/dev/null; then
+    if [[ -n "${CURRENT_DEFAULT}" ]]; then
+      # Replace existing default under [addressbook] only (handles UUID changes)
+      sed -i "/^\[addressbook\]/,/^\[/ s/^default = .*/default = \"${AB_ID}\"/" "${CARDAMUM_CONFIG}"
+      echo "   📇 cardamum addressbook.default → ${AB_ID}"
     else
-      cat >> "${CARDAMUM_CONFIG}" << TOML
+      sed -i "/^\[addressbook\]/a default = \"${AB_ID}\"" "${CARDAMUM_CONFIG}"
+      echo "   📇 cardamum addressbook.default = ${AB_ID}"
+    fi
+  else
+    cat >> "${CARDAMUM_CONFIG}" << TOML
 
 [addressbook]
 default = "${AB_ID}"
 TOML
-      echo "   📇 cardamum addressbook.default = ${AB_ID}"
-    fi
+    echo "   📇 cardamum addressbook.default = ${AB_ID}"
   fi
 fi
 
