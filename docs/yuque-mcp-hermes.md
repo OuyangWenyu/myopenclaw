@@ -6,7 +6,7 @@
 
 **当前消费者**（2026-08-29 双端 E2E 验证通过：`hermes mcp test yuque-mcp` Connected / 7 tools；天一 probe + `list_repos` 真实调用）：
 
-- **Hermes 侧**：`hermes` / `hermes-coder` / `hermes-daoyuan` / `hermes-finance` 四个容器共享 `~/.hermes` 配置，MCP 注册全部生效（`skills/yuque-knowledge` 仅挂载前两者）
+- **Hermes 侧**：注册在**默认 profile（爱玛士）**生效；yuque-daily-digest cron 同样运行在 `hermes`（默认 profile）容器（`skills/yuque-knowledge` 挂载于 hermes / hermes-coder）。⚠️ 2026-10-09 更正：此前「四个容器共享 `~/.hermes` 配置，MCP 注册全部生效」的说法不准确 —— 四个 profile 是隔离实例，coder/daoyuan/finance 各有独立的 `profiles/<name>/config.yaml`，实际不含此注册；验证须 `hermes -p <profile> mcp list`（机制详见 [千问办公 AI听记](qwennote-mcp-hermes.md) 的 Profile 隔离一节）
 - **天一（openclaw-tianyi）**：经 `docker/tianyi-bot/openclaw.json.template` 独立注册（SSE + Bearer，凭据 `TIANYI_BOT_YUQUE_MCP_URL` / `TIANYI_BOT_MCP_YUQUE_MCP_API_KEY` 来自 `.env.tianyi-bot`，compose 以无前缀 `MCP_YUQUE_MCP_API_KEY` 注入容器环境供 OpenClaw 运行时展开）
 
 ## 架构边界

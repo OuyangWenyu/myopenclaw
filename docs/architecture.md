@@ -78,6 +78,8 @@ myopenclaw 由主栈 15 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 
 - **OpenClaw 知汛 = 独立水文 bot**。完全隔离的 Compose 栈，独立网络、独立飞书应用凭据、独立模型 API Key。不接入主栈的 Hermes、长期记忆或任何其他共享服务。仅开放 MCP 查询工具，写工具默认关闭。
 
+- **Hermes profile 内部隔离**：四个 profile（爱玛士 / 爱码士 / 道元 / finance）是隔离实例 —— 默认 profile 的 home 就是 `~/.hermes`（配置 = 根 `config.yaml`），其余 profile 在 `~/.hermes/profiles/<name>/` 各有独立配置与 token 目录。个人数据类接入（如千问办公 AI听记 MCP）刻意只注册默认 profile。验证某 profile 的真实视图必须 `hermes -p <profile> mcp list`（裸 `hermes mcp list` 读到的是默认 profile 的配置）。详见 [千问办公 AI听记](qwennote-mcp-hermes.md)。
+
 **简言之：需要你的 key 的 → Hermes / Claude Code；可以给别人用的 → OpenClaw 虾酱；查水文数据的 → OpenClaw 知汛。**
 
 ## 密钥传递机制
