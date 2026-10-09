@@ -75,6 +75,8 @@ myopenclaw (本仓库)
 
 可以通过云盘备份恢复的数据见 [备份系统](backup.md)。
 
+另外，`~/.hermes/mcp-tokens/`（如千问办公 AI听记 MCP 的 OAuth token）**不在备份清单**：换机后需要重跑一次授权（见 [千问办公 AI听记](qwennote-mcp-hermes.md)）。
+
 ## macOS 特定
 
 以下功能依赖 macOS launchd，在 Linux 上不可用：
