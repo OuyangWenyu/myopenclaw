@@ -121,6 +121,13 @@ docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep yuque-d
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>                    # 手动触发，飞书私聊收日报
 bash skills/yuque-daily-digest/test-cron-config.sh                                           # cron 配置静态断言
 
+# 千问办公 AI听记 MCP（qwennote，仅默认 profile 爱玛士 —— 其余 profile 刻意不注册）
+./scripts/bootstrap_hermes_qwennote.py                           # 幂等注册（--dry-run 预览 / --disable 移除）
+docker compose cp scripts/qwennote_oauth_login.py hermes:/tmp/ && \
+  docker compose exec hermes /opt/hermes/.venv/bin/python3 /tmp/qwennote_oauth_login.py   # 一次性 OAuth（浏览器授权后粘贴回调 URL）
+docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp test qwennote                 # 验证（16 tools）
+docker compose exec hermes-coder /opt/hermes/.venv/bin/hermes -p coder mcp list           # 隔离自检：不应出现 qwennote
+
 # Hermes web_search (ddgs, no API key)
 docker compose exec hermes /opt/hermes/.venv/bin/python3 -c "import ddgs; print('ok')"
 docker compose exec hermes /opt/hermes/.venv/bin/hermes tools | grep -i search
