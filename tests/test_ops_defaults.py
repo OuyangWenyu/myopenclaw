@@ -237,12 +237,15 @@ class TestBackupHotDbs:
     修法与 paper-queue 统一：rsync 排除裸库及 sidecar → sqlite3 .backup 到 .tmp
     → 成功才 mv。WAL 库的读者要写 `-shm` ⇒ 需要窄 rw 挂载；回滚模式的库
     `-readonly` 打开即可（实测：挂 ro 上也能 .backup），不需要挂载。
+
+    2026-10-09 语雀 MCP 本机化（issue #79）后同样收编 change_summary.db。
     """
 
     WAL_DBS = ("paper-queue/queue.sqlite", "tdai-memory/vectors.db",
                "repo-scanner/repos.sqlite", "tdai-memory/memories.sqlite")
     ROLLBACK_DBS = ("aisecretary/transactions.sqlite",
-                    "dailyinfo/freshrss/data/users/*/db.sqlite")
+                    "dailyinfo/freshrss/data/users/*/db.sqlite",
+                    "yuque-mcp/change_data/change_summary.db")
 
     @staticmethod
     def _script() -> str:

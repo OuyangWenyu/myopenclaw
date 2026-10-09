@@ -97,6 +97,10 @@ declare -a MONITORS=(
     "TDAI Memory|http|http://tdai-memory:8420/health||[\"200-299\"]"
     "Repo Scanner MCP|http|http://repo-scanner-mcp:8001/health||[\"200-299\"]"
     "FreshRSS|http|http://dailyinfo_freshrss:80||[\"200-399\"]"
+    # 不带 token 探 /sse 得到 401 —— "活着 + key 已配置"的双重信号。只接受 401：
+    # key 意外为空时上游是无认证直通（200），接受 2xx 会让这个 fail-open 状态
+    # 永远显示绿 —— 恰好瞎掉最该报警的故障模式
+    "Yuque MCP|http|http://yuque-mcp:18001/sse||[\"401\"]"
 
     # ── Docker 容器监控 ────────────────────────────────────
     "Docker: hermes|docker||hermes|"
@@ -112,6 +116,7 @@ declare -a MONITORS=(
     "Docker: tdai-memory|docker||tdai-memory|"
     "Docker: repo-scanner-mcp|docker||repo-scanner-mcp|"
     "Docker: zotero-mcp|docker||zotero-mcp|"
+    "Docker: yuque-mcp|docker||yuque-mcp|"
     "Docker: dailyinfo_freshrss|docker||dailyinfo_freshrss|"
 )
 
