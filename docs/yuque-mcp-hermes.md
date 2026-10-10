@@ -5,7 +5,7 @@
 本机通过**本机 docker 服务** `yuque-mcp`（`yuque_mcp_server` 的 `RUN_MODE=cloud`/SSE 部署）接入语雀知识库：读取、搜索、备份知识库并查询服务端生成的变更报告。服务端自持语雀只读 token、与消费方同在 `myopenclaw-net`，**不依赖 UniVPN**；校内服务器 `10.48.0.81` 那套继续给团队成员走 UniVPN，两边互不影响。
 
 **当前消费者**：
-- **Hermes 侧**：注册在**默认 profile（爱玛士）**生效；yuque-daily-digest cron 同样运行在 `hermes`（默认 profile）容器（`skills/yuque-knowledge` 挂载于 hermes / hermes-coder）。⚠️ 2026-10-09 更正：四个 profile 是隔离实例，coder/daoyuan/finance 各有独立 `profiles/<name>/config.yaml`，不含此注册；验证须 `hermes -p <profile> mcp list`（机制详见 [千问办公 AI听记](qwennote-mcp-hermes.md) 的 Profile 隔离一节）。**其余 profile 不需要语雀接入 —— 已确认的边界，保持现状。**
+- **Hermes 侧**：注册在**默认 profile（爱玛士）**生效；yuque-daily-digest cron 同样运行在 `hermes`（默认 profile）容器。⚠️ 2026-10-09 更正：四个 profile 是隔离实例，coder/daoyuan/finance 各有独立 `profiles/<name>/config.yaml`，不含此注册；验证须 `hermes -p <profile> mcp list`（机制详见 [千问办公 AI听记](qwennote-mcp-hermes.md) 的 Profile 隔离一节）。**其余 profile 不需要语雀接入 —— 已确认的边界，保持现状。** skill 的加载与执行源见 [Hermes Skill 机制](hermes-skills.md)（live = `~/.hermes/skills` 原生副本，仓库 `skills/` 不参与加载）。
 - **天一（openclaw-tianyi）**：经 `docker/tianyi-bot/openclaw.json.template` 独立注册（SSE + Bearer）；URL/key 来自 `.env.tianyi-bot` 的 `TIANYI_BOT_YUQUE_MCP_URL` / `TIANYI_BOT_MCP_YUQUE_MCP_API_KEY`，compose 同时以无前缀 `MCP_YUQUE_MCP_API_KEY` 注入容器供运行时展开。⚠️ 天一的 key 是**第二份拷贝**（主 `.env` 的 `MCP_YUQUE_MCP_API_KEY`），轮换必须两处同改（守卫 `tests/test_yuque_mcp_local.py::TestLiveEnvSwitched`）。
 
 ## 架构边界
@@ -96,7 +96,7 @@ Uptime Kuma 监控项「Yuque MCP」（HTTP，**只接受 401**：探得 2xx 即
 | 返回 `not_available` | 本机服务端尚未完成调度生成（如当天 07:00 前查询）；看 `docker compose logs yuque-mcp` 的 scheduler 日志 |
 | 快照/日报断档 | 机器休眠或容器停过；唤醒/重启后自动补。连续断档查 `sync_issue`/`error` 日志 |
 | `YUQUE_TOKEN 未设置` 警告 | 语雀后台创建只读 token 写入 `.env` 后重跑 `./scripts/start.sh` |
-| skill 未生效 | 确认 `docker compose config` 中有 `./skills/yuque-knowledge` 挂载，且容器已重建 |
+| skill 未生效 | 先 `hermes skills list` 看真实加载面与 source（**挂载存在 ≠ 被加载**）；同名撞名会让 cron 静默跳过（run 输出顶部有 `Skill(s) not found and skipped`）——机制与排查见 [Hermes Skill 机制](hermes-skills.md) |
 
 ## 每日变更推送（yuque-daily-digest）
 
@@ -120,8 +120,8 @@ Uptime Kuma 监控项「Yuque MCP」（HTTP，**只接受 401**：探得 2xx 即
 # cron job 已注册（每日 8:10 北京）
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep yuque-daily-digest
 
-# 手动触发（⚠️ cron run 是 direct 进程、无飞书适配器 —— 会执行业务逻辑但不会真投递；
-#   投递链路的真实验证以次日 08:10 自然触发为准）
+# 手动触发：会**真实投递**（2026-10-10 实测，direct run 的 delivery_outcome=delivered）
+#   ⚠️ 同一 job 有 in-flight run 时会被拒（"Job is already being fired"），先等它收尾
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron run <job_id>
 
 # skill 静态断言（skill 自包含，无外部脚本）
@@ -133,7 +133,7 @@ bash skills/yuque-daily-digest/test-cron-config.sh
 
 - 仅推送**飞书私聊**（复用 `LARK_USER_OPEN_ID` / `FEISHU_HOME_CHANNEL`）；群推送不在本期范围（见 issue #60 三Agent群推送定调）
 - 摘要由 Hermes agent 主模型生成，skill 不指定模型
-- skill 挂载于 `hermes` / `hermes-coder`（`./skills/yuque-daily-digest` → `/opt/hermes-skills/yuque-daily-digest`），cron 注册在 `hermes` 容器
+- **skill 执行源 = 原生副本** `~/.hermes/skills/productivity/yuque-daily-digest/`（v1.2.0，agent 维护的作战手册式 SKILL.md + `scripts/daily_digest.py` 直连 SSE 的 fallback，其 HOST 已指向逻辑地址 `yuque-mcp`）。仓库 `skills/yuque-daily-digest`（自包含、无脚本）经 `./skills/yuque-daily-digest` → `/opt/hermes-skills/...` 只读挂载提供，**当前不参与 Hermes 的 skill 加载**——"改仓库版 ≠ 改线上行为"，详见 [Hermes Skill 机制](hermes-skills.md)。cron 注册在 `hermes` 容器
 - 天一复用此能力延后至 issue #60 统一处理
 
 ## 备份
