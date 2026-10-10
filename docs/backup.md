@@ -44,7 +44,7 @@ backup-all-docker.sh
 | Claude Code | `settings.json`、`projects/`、`skills/`、`plans/`、`tasks/`、cc-connect `config.toml` |
 | OpenClaw | `openclaw.json`、`agents/`（会话库热备）、`flows/`、`extensions/`、`memory/main.sqlite` + `memory-tdai/memories.sqlite`（热备份；2.0 迁移后本机已不存在） |
 | TDAI Memory | `memories.sqlite`（sqlite3 热备）、`scene_blocks/`、`persona.md`、`checkpoint.json` |
-| Data | `~/.myagentdata/` 整目录 rsync（论文清单 `paper-queue/queue.sqlite` 与 `-wal`/`-shm` 除外 —— 它单独用 `sqlite3 .backup` 热备） |
+| Data | `~/.myagentdata/` 整目录 rsync（论文清单 `paper-queue/queue.sqlite` 与 `-wal`/`-shm` 除外 —— 它单独用 `sqlite3 .backup` 热备；语雀 `yuque-mcp/change_data/` 的正文快照随 rsync 上云、`change_summary.db` 同样走热备） |
 
 > **活库热备**（2026-09-21 事故 + 全量审计固化）：所有被备份的活 SQLite 都走热备
 > 清单（所在脚本的 rsync 里排除裸库与 sidecar）：
@@ -52,7 +52,8 @@ backup-all-docker.sh
 >   compose 窄 rw 挂载）：`paper-queue/queue.sqlite`、`tdai-memory/vectors.db`、
 >   `tdai-memory/memories.sqlite`（尚未出现，先收编）、`repo-scanner/repos.sqlite`；
 >   `HOT_DBS_RO`（回滚模式，`-readonly` 即可）：`aisecretary/transactions.sqlite`、
->   `dailyinfo/freshrss/data/users/*/db.sqlite`
+>   `dailyinfo/freshrss/data/users/*/db.sqlite`、`yuque-mcp/change_data/change_summary.db`
+>   （2026-10-09 语雀 MCP 本机化收编；正文快照 `snapshots/` 与 `backup/` 随 rsync 上云）
 > - `hermes`：`cron/executions.db`（WAL ⇒ `~/.hermes/cron` 一条窄 rw 挂载）、
 >   `cron/notepad.db`（`-readonly`）
 > - `openclaw`：`agents/*/agent/openclaw-agent.sqlite`（146MB 级）、`memory/main.sqlite`

@@ -72,6 +72,7 @@ bash scripts/setup-uptime-kuma.sh
 | TDAI Memory | `http://tdai-memory:8420/health` | 200-299 | Agent 长期记忆 Gateway |
 | Repo Scanner MCP | `http://repo-scanner-mcp:8001/health` | 200-299 | 研发日报数据服务 |
 | FreshRSS | `http://dailyinfo_freshrss:80` | 200-399 | RSS 聚合 |
+| Yuque MCP | `http://yuque-mcp:18001/sse` | **仅 401** | 语雀知识库 MCP（本机 SSE）。不带 token 探针得到 401 —— "容器活着 + key 已配置"的双重信号。**刻意不接受 2xx**：key 为空时上游是无认证直通（200），接受 2xx 会让这个 fail-open 状态永远显示绿 |
 
 > **注意**：URL 使用 Docker 内部 DNS（容器名），因为 Uptime Kuma 和所有服务在同一个 `myopenclaw-net` 网络上。
 
@@ -106,6 +107,7 @@ docker compose exec uptime-kuma sqlite3 /app/data/kuma.db \
 | Docker: tdai-memory | tdai-memory |
 | Docker: repo-scanner-mcp | repo-scanner-mcp |
 | Docker: zotero-mcp | zotero-mcp |
+| Docker: yuque-mcp | yuque-mcp |
 | Docker: dailyinfo_freshrss | dailyinfo_freshrss |
 
 **Ping 监控**（可选，脚本不创建，需在 Web UI 手动添加）：

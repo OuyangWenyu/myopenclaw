@@ -566,6 +566,52 @@ services:
           memory: 256M
           cpus: "0.5"
 
+  # ── 语雀 MCP（本机自持只读 token 的快照/变更服务）─────────────
+  # 上游 gitcode.com/dlut-water/yuque_mcp_server（无 tag，pin bfc55d7，守卫
+  # tests/test_yuque_mcp_local.py 钉兄弟仓 HEAD）。校内 10.48.0.81 那套继续给
+  # 团队成员走 UniVPN；本机这套只服务本机消费者（hermes 默认 profile + 天一）。
+  # 镜像默认 uid 10001 写不进 macOS 宿主目录；只持只读语雀 token，无本地安全
+  # 边界，root 运行（tianyi compose 先例；Linux 侧会生 root-owned 文件，见文档）。
+  # 不发布宿主端口：仅 myopenclaw-net 内可达（Uptime Kuma / Hermes / 天一按容器名直连）
+  # —— 网络边界即"全 net 可达"，Bearer key（MCP_API_KEY）是唯一门；key 为空 = 无
+  # 认证直通（上游行为），故 start.sh 缺键警告 + Uptime Kuma 只接受 401 探针。
+  yuque-mcp:
+    build:
+      context: ../yuque_mcp_server
+      dockerfile: Dockerfile
+    image: myopenclaw/yuque-mcp:latest
+    container_name: yuque-mcp
+    restart: unless-stopped
+    user: root
+    volumes:
+      # 快照 + change_summary.db + snapshots/ 正文（代码默认路径，无需 env 覆盖）
+      - ${HOME}/.myagentdata/yuque-mcp/change_data:/app/yuque/change_data
+      # backup_repo 工具输出根（server.py 里 _BACKUP_ROOT 硬编码，无 env 可覆盖）
+      - ${HOME}/.myagentdata/yuque-mcp/backup:/app/yuque/backup
+    environment:
+      - RUN_MODE=cloud
+      - PORT=18001
+      # 服务端消费的 key 与客户端同源：.env 一处定义（不一致 ⇒ 每次请求 401）
+      - MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
+      # 语雀只读 token（repo:read + doc:read；要编辑者姓名再加 group:read）——唯一人工前置
+      - YUQUE_TOKEN=${YUQUE_TOKEN:-}
+      # 监控知识库（缺省时服务端回退到内置两库，会静默丢掉「建设方案」）
+      - YUQUE_CHANGE_REPOS_JSON=${YUQUE_CHANGE_REPOS_JSON:-}
+      - YUQUE_CHANGE_SNAPSHOT_TIME=${YUQUE_CHANGE_SNAPSHOT_TIME:-06:00}
+      - YUQUE_CHANGE_REPORT_TIME=${YUQUE_CHANGE_REPORT_TIME:-07:00}
+      - YUQUE_CHANGE_TIMEZONE=${YUQUE_CHANGE_TIMEZONE:-Asia/Shanghai}
+      # 快照保留期：显式钉 90 天（旧版仅遗留函数里硬编码 30、调度路径从不 prune；
+      # bfc55d7 起每轮采集后真正清理，默认 90 —— 不钉就跟着上游默认漂）。
+      # cleanup 永远保护每库最近 2 个完整 run（与保留期无关），change_reports 不删。
+      - YUQUE_CHANGE_RETENTION_DAYS=${YUQUE_CHANGE_RETENTION_DAYS:-90}
+    networks:
+      - myopenclaw-net
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+          cpus: "1.0"
+
   # ── TDAI Memory Gateway（Agent 长期记忆 L0→L3 分层管线）───────
   tdai-memory:
     build:

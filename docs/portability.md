@@ -12,6 +12,7 @@ myopenclaw (本仓库)
 ├── [可选·硬依赖·build 时需要]
 │   ├── ~/code/aisecretary/          ← build context for aisecretary 服务
 │   ├── ~/code/git-contribution-stats/ ← build context for repo-scanner-mcp
+│   ├── ~/code/yuque_mcp_server/     ← build context for 本机语雀 MCP 服务（无 tag，按 commit pin）
 │   ├── ~/code/mylibrary/            ← 论文流水线代码（缺失时 build 从 GitHub clone）
 │   └── ../zhixun-agent/             ← zhixun 栈 MCP 镜像的额外 build context
 │
@@ -38,10 +39,11 @@ myopenclaw (本仓库)
 |------|----------|------|
 | [aisecretary](https://github.com/iHeadWater/aisecretary) | `~/code/aisecretary` | aisecretary MCP 服务镜像构建 |
 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) | `~/code/git-contribution-stats` | repo-scanner-mcp 镜像构建 |
+| [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) | `~/code/yuque_mcp_server` | 本机语雀 MCP 服务（yuque-mcp）镜像构建。上游**无 tag**，镜像按 commit pin（守卫 `tests/test_yuque_mcp_local.py`）；升级 = 审查 diff 后改 pin + 重建 |
 | [mylibrary](https://github.com/OuyangWenyu/mylibrary) | `~/code/mylibrary` | hermes / zotero-mcp 镜像里的论文流水线（hydrolitagent + skills）。`start.sh` 先 rsync 进 build context；**本地没有时 Dockerfile 自动从 GitHub clone**，不会 build 失败 |
 | [zhixun-agent](https://github.com/OuyangWenyu/zhixun-agent) | `../zhixun-agent` | zhixun 栈 `zhixun-water-mcp` 镜像的 `additional_contexts.zhixun_src`（可用 `ZHIXUN_AGENT_PATH` 覆盖）。只有启动 zhixun 栈时才需要 |
 
-**不需要 build 的情况**（`./scripts/start.sh` 不加 `--build`）：使用已有的 Docker 镜像即可，aisecretary / git-contribution-stats 这两个仓库不需要存在。
+**不需要 build 的情况**（`./scripts/start.sh` 不加 `--build`）：使用已有的 Docker 镜像即可，aisecretary / git-contribution-stats / yuque_mcp_server 这些仓库不需要存在。
 
 ## 软依赖：运行时 graceful skip
 
@@ -57,7 +59,7 @@ myopenclaw (本仓库)
 ./scripts/clone-deps.sh
 ```
 
-此脚本克隆 aisecretary / git-contribution-stats / dailyinfo 三个仓库到正确路径。私有仓库需要 `gh auth login` 先。
+此脚本克隆 aisecretary / git-contribution-stats / yuque_mcp_server / dailyinfo 四个仓库到正确路径。GitHub 私有仓库需要 `gh auth login` 先；yuque_mcp_server 在 GitCode 且公开，免认证。
 
 `mylibrary` 与 `zhixun-agent` **不在**这个脚本里：前者缺失时 build 会自动从 GitHub clone；后者按需手动 clone（见[快速开始](setup.md)第 3 步）。
 
@@ -103,3 +105,4 @@ myopenclaw (本仓库)
 - dailyinfo 的 secret、数据源、业务逻辑 → dailyinfo 仓
 - git-contribution-stats 的采集逻辑、SQLite schema → git-contribution-stats 仓
 - aisecretary 的 MCP tools 实现 → aisecretary 仓
+- yuque_mcp_server 的 MCP tools 实现、快照/变更报告逻辑 → yuque_mcp_server 仓（本仓库只做 compose 集成，按 commit pin）

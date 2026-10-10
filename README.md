@@ -20,7 +20,7 @@
 | 邮件 | himalaya CLI 邮件客户端（IMAP/SMTP 多账户；Outlook 走 ortie OAuth；仅爱玛士可用，其余 agent 拒绝访问） | — |
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |
 | Google Drive | rclone 直连云端上传论文 PDF | — |
-| 语雀知识库 | Hermes + 天一 远程 MCP（读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
+| 语雀知识库 | 本机 yuque-mcp 服务（Hermes + 天一接入；读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
 | 千问办公 AI听记 | 爱玛士远程 MCP（OAuth，仅默认 profile）：听记列表 / AI 摘要 / 待办 / 转写查询与整理 | — |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 + AgentOps 健康采集 | — |
@@ -31,6 +31,7 @@
 dailyinfo/                 ← AI 情报聚合（RSS + AI 摘要）
 aisecretary/               ← 事务数据库 MCP
 git-contribution-stats/    ← 多仓库 Git 贡献统计
+yuque_mcp_server/          ← 语雀 MCP 服务端（yuque-mcp 构建依赖）
 zhixun-agent/              ← 水文 MCP（zhixun 知汛 bot 构建依赖）
 mylibrary/                 ← Zotero 文献工具（zotero-mcp 源码）
     │
@@ -46,6 +47,7 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     ├─ zotero-mcp    (文献查询 MCP，mylibrary 源码)
     ├─ repo-scanner-mcp (研发日报 MCP)
     ├─ aisecretary   (事务数据库 MCP)
+    ├─ yuque-mcp     (语雀知识库 MCP，本机 SSE)
     ├─ tdai-memory   (Agent 长期记忆)
     ├─ freshrss      (RSS 聚合，dailyinfo 数据源)
     ├─ backup-cron   (定时备份)
@@ -111,6 +113,7 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 | tdai-memory | 8420 | 主栈 | Agent 长期记忆 Gateway（L0→L3） |
 | aisecretary | 8000 | 主栈 | 事务数据库 MCP 服务 |
 | repo-scanner-mcp | 8001 | 主栈 | 研发日报 MCP 数据服务 |
+| yuque-mcp | —（仅容器网络） | 主栈 | 语雀知识库 MCP（本机 SSE，自持只读 token，不发布宿主端口；Hermes/天一接入；日报 skill 的 live 副本为 `~/.hermes/skills` 原生副本，见 [Hermes Skill 机制](docs/hermes-skills.md)） |
 | paper-queue-mcp | 8003 | 主栈 | 论文清单 MCP（独立容器，队列目录只挂给它） |
 | freshrss | 8081 | 主栈 | RSS 聚合（dailyinfo 数据源） |
 | uptime-kuma | 3001 | 主栈 | 服务监控面板 |
@@ -118,12 +121,6 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 | zhixun-water-mcp | 18201 | zhixun 栈 | 水文 MCP（43 tools），兼容 zhixun-core v2 |
 | openclaw-zhixun | 18791 | zhixun 栈 | 知汛助手 — OpenClaw 飞书 bot（独立网络 + 数据目录） |
 | openclaw-tianyi | 18792 | tianyi 栈 | 天一研发助手 — OpenClaw 飞书 bot（共享主栈网络，复用 repo-scanner-mcp，gh/gc 写 GitHub/GitCode issue） |
-
-外部接入服务：
-
-| 服务 | 接入方式 | 说明 |
-|------|----------|------|
-| yuque-mcp | 远程 SSE（Hermes 经 `scripts/bootstrap_hermes.sh` 注册；天一经 `docker/tianyi-bot/openclaw.json.template` 注册） | 语雀知识库 MCP，服务端部署在服务器，通过 Bearer key 访问，skill 由 `skills/yuque-knowledge/` 挂载；每日变更日报由 `skills/yuque-daily-digest/` + Hermes cron 推送飞书私聊 |
 
 ## 目录结构
 
@@ -152,7 +149,7 @@ myopenclaw/
 ├── claude/                           # Claude Code / cc-connect 配置模板 + 备份脚本
 ├── openclaw/                         # OpenClaw 配置模板 + 备份脚本
 ├── scripts/                          # 运维脚本（启动/停止/备份/恢复/调度/监控/zhixun bot/tianyi bot）
-├── skills/                           # 执行层 skill（morning-triage-v2 等）
+├── skills/                           # 执行层 skill 版本源（live 为 ~/.hermes/skills 原生副本，见 docs/hermes-skills.md）
 └── tests/                            # 集成测试
 ```
 
@@ -165,9 +162,10 @@ myopenclaw/
 - [服务](https://ouyangwenyu.github.io/myopenclaw/hermes-channels/) — Hermes / OpenClaw 渠道、邮件、联系人、飞书 CLI
 - [集成](https://ouyangwenyu.github.io/myopenclaw/dailyinfo/) — dailyinfo 调度、研发日报、zhixun 飞书机器人
 - [运维](https://ouyangwenyu.github.io/myopenclaw/scheduling/) — 调度、备份、监控、AgentOps、DNS
+- [Hermes Skill 机制](https://ouyangwenyu.github.io/myopenclaw/hermes-skills/) — live 执行源（原生副本）与仓库版本源的关系、接线现状与治理待决
 - [可移植性](https://ouyangwenyu.github.io/myopenclaw/portability/) — 换电脑需要准备什么
 - [备份系统](https://ouyangwenyu.github.io/myopenclaw/backup/) — 备份内容、恢复流程
-- [语雀知识库接入](https://ouyangwenyu.github.io/myopenclaw/yuque-mcp-hermes/) — Hermes 接入远程语雀 MCP 服务（含每日变更推送 yuque-daily-digest）
+- [语雀知识库接入](https://ouyangwenyu.github.io/myopenclaw/yuque-mcp-hermes/) — Hermes 接入本机语雀 MCP 服务（含每日变更推送 yuque-daily-digest）
 
 本地预览文档：
 
