@@ -567,7 +567,7 @@ services:
           cpus: "0.5"
 
   # ── 语雀 MCP（本机自持只读 token 的快照/变更服务）─────────────
-  # 上游 gitcode.com/dlut-water/yuque_mcp_server（无 tag，pin 3945bce，守卫
+  # 上游 gitcode.com/dlut-water/yuque_mcp_server（无 tag，pin bfc55d7，守卫
   # tests/test_yuque_mcp_local.py 钉兄弟仓 HEAD）。校内 10.48.0.81 那套继续给
   # 团队成员走 UniVPN；本机这套只服务本机消费者（hermes 默认 profile + 天一）。
   # 镜像默认 uid 10001 写不进 macOS 宿主目录；只持只读语雀 token，无本地安全
@@ -600,6 +600,10 @@ services:
       - YUQUE_CHANGE_SNAPSHOT_TIME=${YUQUE_CHANGE_SNAPSHOT_TIME:-06:00}
       - YUQUE_CHANGE_REPORT_TIME=${YUQUE_CHANGE_REPORT_TIME:-07:00}
       - YUQUE_CHANGE_TIMEZONE=${YUQUE_CHANGE_TIMEZONE:-Asia/Shanghai}
+      # 快照保留期：显式钉 90 天（旧版仅遗留函数里硬编码 30、调度路径从不 prune；
+      # bfc55d7 起每轮采集后真正清理，默认 90 —— 不钉就跟着上游默认漂）。
+      # cleanup 永远保护每库最近 2 个完整 run（与保留期无关），change_reports 不删。
+      - YUQUE_CHANGE_RETENTION_DAYS=${YUQUE_CHANGE_RETENTION_DAYS:-90}
     networks:
       - myopenclaw-net
     deploy:

@@ -22,7 +22,7 @@ START_SH = (REPO_ROOT / "scripts" / "start.sh").read_text()
 # 上游 gitcode.com/dlut-water/yuque_mcp_server 没有 tag，只能固定 commit。
 # 升级流程：cd ~/code/yuque_mcp_server && git fetch && 审查 diff → 改这里 + 重建镜像。
 SIBLING_REPO = REPO_ROOT.parent / "yuque_mcp_server"
-PINNED_SHA = "3945bce70ac72002ea7d0026f2c2a7ce16b0d821"
+PINNED_SHA = "bfc55d7d4a019859eb2cd30a040c52126895192a"
 
 
 def compose_service_block(name: str) -> str:
@@ -75,6 +75,14 @@ class TestComposeYuqueService:
         block = compose_service_block("yuque-mcp")
         assert "${HOME}/.myagentdata/yuque-mcp/change_data:/app/yuque/change_data" in block
         assert "${HOME}/.myagentdata/yuque-mcp/backup:/app/yuque/backup" in block
+
+    def test_pins_snapshot_retention_explicitly(self):
+        """显式钉 90 天保留期（bfc55d7 起上游默认 90；旧版硬编码 30）。
+
+        不写死值就跟着上游默认漂 —— 与 pin commit 同一哲学：行为变更必须显式发生。
+        """
+        block = compose_service_block("yuque-mcp")
+        assert "YUQUE_CHANGE_RETENTION_DAYS=${YUQUE_CHANGE_RETENTION_DAYS:-90}" in block
 
 
 class TestStartShWiring:

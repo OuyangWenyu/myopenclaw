@@ -10,7 +10,7 @@
 
 ## 架构边界
 
-- **服务端 = 本仓库 compose 的 `yuque-mcp` 服务**：独立镜像 `myopenclaw/yuque-mcp:latest`，从兄弟仓 `~/code/yuque_mcp_server`（gitcode.com/dlut-water/yuque_mcp_server）构建。上游**无 tag**，按 commit 固定（当前 `3945bce`），守卫 `tests/test_yuque_mcp_local.py::TestSiblingPin` 钉住本地 checkout 的 HEAD —— 升级 = 审查上游 diff → 改 pin + 重建，不存在"悄悄拉到 main"的路径。
+- **服务端 = 本仓库 compose 的 `yuque-mcp` 服务**：独立镜像 `myopenclaw/yuque-mcp:latest`，从兄弟仓 `~/code/yuque_mcp_server`（gitcode.com/dlut-water/yuque_mcp_server）构建。上游**无 tag**，按 commit 固定（当前 `bfc55d7`），守卫 `tests/test_yuque_mcp_local.py::TestSiblingPin` 钉住本地 checkout 的 HEAD —— 升级 = 审查上游 diff → 改 pin + 重建，不存在"悄悄拉到 main"的路径。
 - 服务端持有 `YUQUE_TOKEN`（语雀只读 token：`repo:read` + `doc:read`；要编辑者姓名再加 `group:read`），**客户端不需要**它，也不复用语雀侧其它凭据。
 - 只挂 `myopenclaw-net`，**不发布宿主端口**；除 Bearer key（服务端 `MCP_API_KEY = .env 的 MCP_YUQUE_MCP_API_KEY`）外不开面。⚠️ key 为空时上游是**无认证直通**（net 上任意容器都能读团队文档）—— 防线有三道：`start.sh` 缺键大声警告、Uptime Kuma 探针**只接受 401**（探得 2xx 即说明 key 未生效，报警）、守卫 `TestLiveEnvSwitched` 卡天一第二份拷贝同值。
 - 数据落宿主：`~/.myagentdata/yuque-mcp/change_data`（快照 + `change_summary.db` + `snapshots/` 正文，应用强制 0700/0600）与 `~/.myagentdata/yuque-mcp/backup`（`backup_repo` 工具输出根）。
@@ -66,7 +66,7 @@ docker compose up -d hermes
 # 服务端活着 + key 已配置：不带 token 探针应得 401
 docker compose exec -T uptime-kuma curl -s -o /dev/null -w '%{http_code}\n' http://yuque-mcp:18001/sse
 
-# MCP 连接（工具列表含 get_change_summary）
+# MCP 连接（应发现 11 tools：含 get_change_summary 与产出取证组的 4 个）
 docker compose exec hermes /opt/hermes/.venv/bin/hermes mcp test yuque-mcp
 
 # 调度在跑（应看到 yuque_change_summary_scheduler_enabling repo_count=3）
@@ -85,6 +85,23 @@ Uptime Kuma 监控项「Yuque MCP」（HTTP，**只接受 401**：探得 2xx 即
 - **次日起**：06:00 快照 → 07:00 报告 → 08:10 日报推送。上一版数据在校内服务器上；本次切换**不拷贝**（已拍板），基线在本机重建。
 - 重启/重建容器不会重复建基线（同一天去重）。
 - 本机休眠/关机错过 06:00/07:00：唤醒后调度器当轮补齐快照与报告，日报次日恢复；当日 08:10 若在睡眠中则错过该天。
+
+## 产出取证工具（bfc55d7 起，issue #81 的数据面）
+
+2026-10-10 上游合并"语雀产出取证工具组"（pin `bfc55d7`），MCP 面 7 → **11 tools**：
+
+| 工具 | 用途 |
+|---|---|
+| `query_document_changes(repo_namespace, since, until, min_net_units?)` | 按窗口跨快照聚合每篇文档的累计变更（只读本地快照库） |
+| `get_editor_stats(repo_namespace, since, until, group_login?)` | **按人**聚合窗口内产出（复用上者的 per-doc 结果） |
+| `list_docs_with_metadata(repo_namespace, since?, until?, page?, limit?)` | 文档元数据枚举（编辑者/时间/字数/TOC 口径，`updated_at` 过滤 + 分页） |
+| `list_group_members(group_login)` | 团队成员 user_id → 姓名映射（把编辑者 ID 变成姓名） |
+| `get_change_summary(since?, until?)` | 原有工具 + **可选窗口**：窗口精确命中已存报告时返回 `source: "stored_report"`，否则用快照引擎现算（缺省调用行为不变） |
+
+- **快照保留期**：`YUQUE_CHANGE_RETENTION_DAYS` 显式钉 **90** 天（compose 注入；旧版硬编码 30）。cleanup 在每日快照后执行，永远保护每库**最近 2 个完整 run**。
+- **本机验收（2026-10-10，3 库 × 2 run 真实数据）**：`query_document_changes.totals` == `get_editor_stats.totals` == **存量报告（旧代码路径）totals** 逐字段一致；`editors 汇总 + unattributed == totals` 三字段对账成立；覆盖率 `expected==actual, missing=[]`；窗口精确命中返回 `stored_report`。
+- 归因口径：**按快照点最后编辑者归属**（`observed_last_editor`），协作文档无法拆分到个人；无编辑者 ID 的文档计入 `unattributed`（响应内显式呈现，不静默）。
+- ⚠️ **授权面（知情项）**：`list_docs_with_metadata` / `list_group_members` 走语雀 API 侧、**不受监控库白名单**（`_gate_snapshot_query`）约束——可枚举的范围由 `YUQUE_TOKEN` 的（只读）权限界定。快照侧工具（前两个 + 窗口版 `get_change_summary`）仍限于监控三库。
 
 ## 故障排查
 
