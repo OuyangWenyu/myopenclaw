@@ -142,10 +142,9 @@ services:
       - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
-      - FEISHU_DOMAIN=feishu
-      - FEISHU_CONNECTION_MODE=websocket
+    # 飞书不授权 coder（2026-10-12 移除）：这里曾注入默认 app（爱玛士）凭据，
+    # 叠加 profile 配置漂移后 coder 容器成为「第二爱玛士」抢 DM，时好时坏地
+    # 读不了/发不出邮件。守卫 tests/test_coder_no_feishu.py —— 勿恢复。
     shm_size: "1g"
     deploy:
       resources:
