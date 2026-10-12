@@ -127,13 +127,11 @@ if [ ! -d /opt/data/skills/gitcode ]; then
   echo "   📦 gitcode-cli skill 已安装"
 fi
 
-# ── morning-briefing skill → Hermes skills ─────────────────────
-# Symlink from read-only volume mount to hermes skills dir
-if [ -d /opt/hermes-skills/morning-briefing ] && [ ! -L /opt/data/skills/morning-briefing ]; then
-  mkdir -p /opt/data/skills
-  ln -sf /opt/hermes-skills/morning-briefing /opt/data/skills/morning-briefing
-  echo "   📋 morning-briefing skill 已安装"
-fi
+# ── morning-briefing 有意不在此接线（2026-10-12 移除）────────────
+# live 源是 agent 自维护的原生副本 ~/.hermes/skills/devops/morning-briefing（带 scripts/）；
+# 仓库版没有 scripts/，当不了 live 源。历史块把仓库版 symlink 到同名顶层目录，
+# 与原生撞名 → cron skill 预加载被拒（"Ambiguous skill name … Refusing to guess"）。
+# 详见 docs/hermes-skills.md，勿重新添加。
 
 # ── morning-triage-v2 skill → Hermes skills ─────────────────────
 if [ -d /opt/hermes-skills/morning-triage-v2 ] && [ ! -L /opt/data/skills/morning-triage-v2 ]; then
@@ -627,43 +625,90 @@ if [ "${PROFILE}" != "default" ]; then
     rm -f "${HERMES_HOME}/gateway_state.json"
 fi
 
-# ── Profile-scoped gateway isolation ──────────────────────────
-# Hermes dynamically creates s6-supervised gateway services for ALL
-# profiles after startup. They all share the same container env vars and
-# config.yaml, so they compete for single-connection platform tokens
-# (e.g. Discord). Launch a background task that waits for the gateway
-# services to appear, then kills every one whose profile doesn't match
-# HERMES_PROFILE, and finally restarts the correct gateway so it gets a
-# clean connection.
+# ── Profile-scoped gateway isolation（2026-10-12 加固）──────────
+# Hermes 启动后会为**全部四个 profile**动态创建 s6-supervised gateway 服务，
+# 共用同一套容器 env 与 config.yaml —— 会争抢单连接的平台 token（如 Discord），
+# 更糟的是：受限容器里的游荡 gateway 会以本容器的凭据冒充默认 profile
+# （2026-10-12 事故：daoyuan/finance/coder 各留一个 default 游荡冒充爱玛士，
+# 邮箱=桩 → 用户 DM 时好时坏）。旧版单遍清扫在开机风暴下会扫到不完整的
+# 服务集而漏杀；漏掉的游荡会改写共享 gateway_state.json 自我复活（hydra）。
+# 加固版后台任务：
+#   1) 有界等待 4 个 gateway 服务出现；
+#   2) 多轮清扫（每轮重新 glob —— hermes 会陆续创建/重建服务）：本 profile
+#      的 gateway 只重启一次（清理旧连接），其余每个都 kill+disable，每轮
+#      重施（不碰任何 state 文件：共享卷上它们属于其他容器的活 gateway）；
+#   3) 终检：仍有多余服务在跑 → 大声告警（不静默）。
+# 可覆写变量供测试注入：S6_SVC / GW_SVC_ROOT / GW_SWEEP_PASSES /
+# GW_SWEEP_INTERVAL / GW_SWEEP_WAIT（tests/test_entrypoint_gateway_isolation.py）。
 HERMES_PROFILE="${HERMES_PROFILE:-default}"
-S6_SVC="/package/admin/s6-2.15.0.0/command/s6-svc"
+S6_SVC="${S6_SVC:-/package/admin/s6-2.15.0.0/command/s6-svc}"
+GW_SVC_ROOT="${GW_SVC_ROOT:-/run/service}"
+GW_SWEEP_PASSES="${GW_SWEEP_PASSES:-8}"
+GW_SWEEP_INTERVAL="${GW_SWEEP_INTERVAL:-20}"
+GW_SWEEP_WAIT="${GW_SWEEP_WAIT:-90}"
 if [ -x "${S6_SVC}" ]; then
   (
-    # Wait for Hermes to create the gateway supervision trees
-    for _ in $(seq 1 12); do
+    S6_SVSTAT="${S6_SVC%/*}/s6-svstat"
+    echo "   🧭 gateway 隔离开始（本容器 profile=${HERMES_PROFILE}）"
+    # 1) 等待四个 gateway 服务树出现（有界；扫不全也要进入清扫）
+    waited=0
+    while [ "${waited}" -lt "${GW_SWEEP_WAIT}" ]; do
+      # `|| true` 承重：pipefail 下 ls 无匹配会失败，整个子壳会被 set -e 静默打死
+      #（2026-10-12 真机事故：wrapper 先跑、服务目录后出现 —— 清扫一行没干）。
+      found="$(ls -d "${GW_SVC_ROOT}"/gateway-*/ 2>/dev/null | wc -l | tr -d ' ' || true)"
+      [ "${found}" -ge 4 ] && break
       sleep 5
-      ls /run/service/gateway-*/run >/dev/null 2>&1 && break
+      waited=$((waited + 5))
     done
-    for svc_dir in /run/service/gateway-*; do
+    restarted_own=0
+    pass=1
+    while [ "${pass}" -le "${GW_SWEEP_PASSES}" ]; do
+      for svc_dir in "${GW_SVC_ROOT}"/gateway-*; do
+        [ -d "${svc_dir}" ] || continue
+        svc_name="$(basename "${svc_dir}")"
+        profile_suffix="${svc_name#gateway-}"
+        # 本 profile：只重启一次（给干净连接），之后各轮不动它
+        if [ "${profile_suffix}" = "${HERMES_PROFILE}" ]; then
+          if [ "${restarted_own}" -eq 0 ]; then
+            "${S6_SVC}" -k "${svc_dir}" 2>/dev/null || true
+            echo "   🔄 重启 ${HERMES_PROFILE} gateway（清理多余连接）"
+            restarted_own=1
+          fi
+          continue
+        fi
+        # 复活的游荡：显式记录（第 1 轮之外的 up 都算复活）
+        if [ "${pass}" -gt 1 ] && "${S6_SVSTAT}" "${svc_dir}" 2>/dev/null | grep -q '^up'; then
+          echo "   ♻️ 压制复活的 gateway: ${svc_name}（第 ${pass} 轮）"
+        elif [ "${pass}" -eq 1 ]; then
+          echo "   🚫 停止多余 gateway: ${svc_name}"
+        fi
+        # kill + disable；每轮重施（hermes 可能刚把它重建出来）
+        "${S6_SVC}" -dk "${svc_dir}" 2>/dev/null || true
+        # 刻意**不**删该 profile 的 gateway_state.json：它在共享卷上，属于
+        # **其他容器**的活 gateway（2026-10-12 实测：四容器同时启动时会互删
+        # 对方 state = 跨容器友军火力）。防复活靠多轮击杀 + 上面既有的一次性
+        # 启动清理块，不靠清扫。
+      done
+      pass=$((pass + 1))
+      [ "${pass}" -le "${GW_SWEEP_PASSES}" ] && sleep "${GW_SWEEP_INTERVAL}"
+    done
+    # 3) 终检：多余服务必须全部不在跑
+    strays=0
+    for svc_dir in "${GW_SVC_ROOT}"/gateway-*; do
       [ -d "${svc_dir}" ] || continue
       svc_name="$(basename "${svc_dir}")"
       profile_suffix="${svc_name#gateway-}"
-      # Keep the matching profile
-      if [ "${profile_suffix}" = "${HERMES_PROFILE}" ]; then
-        "${S6_SVC}" -k "${svc_dir}" 2>/dev/null || true
-        echo "   🔄 重启 ${HERMES_PROFILE} gateway（清理多余连接）"
-        continue
+      [ "${profile_suffix}" = "${HERMES_PROFILE}" ] && continue
+      if "${S6_SVSTAT}" "${svc_dir}" 2>/dev/null | grep -q '^up'; then
+        strays=$((strays + 1))
+        echo "   ❌ 警告：多余 gateway 未被压制: ${svc_name}（$("${S6_SVSTAT}" "${svc_dir}" 2>/dev/null | head -1)）"
       fi
-      # gateway-default = profile "default"
-      if [ "${profile_suffix}" = "default" ] && [ "${HERMES_PROFILE}" = "default" ]; then
-        "${S6_SVC}" -k "${svc_dir}" 2>/dev/null || true
-        echo "   🔄 重启 default gateway（清理多余连接）"
-        continue
-      fi
-      # Kill and disable every other gateway
-      "${S6_SVC}" -dk "${svc_dir}" 2>/dev/null || true
-      echo "   🚫 停止多余 gateway: ${svc_name}"
     done
+    if [ "${strays}" -eq 0 ]; then
+      echo "   ✅ gateway 隔离完成：仅 ${HERMES_PROFILE} 在岗"
+    else
+      echo "   ❌ gateway 隔离未竟：${strays} 个多余服务仍在运行，请人工检查"
+    fi
   ) &
 fi
 
