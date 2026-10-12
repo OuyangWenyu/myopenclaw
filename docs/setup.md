@@ -38,6 +38,8 @@ cp .env.example .env
 | `DAOYUAN_FEISHU_APP_ID` / `SECRET` | 可选 | 道元·文献学者 飞书应用凭证 |
 | `FINANCE_FEISHU_APP_ID` / `SECRET` | 可选 | Finance 飞书应用凭证 |
 | `UPK_USER` / `UPK_PASS` | 可选 | Uptime Kuma 账号占位（模板里有，但 `setup-uptime-kuma.sh` 不读取；实际账号在 Web UI 创建） |
+| `YUQUE_TOKEN` | 可选 | 语雀只读 token（`repo:read` + `doc:read`），本机 `yuque-mcp` 服务端用；不填则语雀查询与变更日报不可用（`start.sh` 会警告） |
+| `MCP_YUQUE_MCP_API_KEY` | 可选 | yuque-mcp 访问 key（服务端与 Hermes/天一客户端共享的单一来源）；配 `YUQUE_MCP_URL` 后才会注册语雀日报 cron |
 
 ### 配置云盘路径
 
@@ -52,7 +54,7 @@ cp .cloud.conf.example .cloud.conf
 部分能力需要额外的仓库。跳过不影响核心服务运行：
 
 ```bash
-./scripts/clone-deps.sh       # 克隆 dailyinfo、aisecretary、git-contribution-stats
+./scripts/clone-deps.sh       # 克隆 dailyinfo、aisecretary、git-contribution-stats、yuque_mcp_server
 ```
 
 如需 zhixun 知汛助手（水文智能问答飞书机器人），额外克隆：

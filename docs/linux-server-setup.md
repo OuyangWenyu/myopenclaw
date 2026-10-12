@@ -3,7 +3,7 @@
 > 服务器：`10.48.0.81` | 部署用户：`gaoyu` | 项目路径：`/home/gaoyu/source_code/myopenclaw`
 
 > ⚠️ **本页是那台服务器上早期部署的记录，不是仓库现状。** 仓库当前的 `docker-compose.yml` 是
-> 15 个服务 + profile-gated `openclaw-cli`（另有 zhixun / tianyi 两个独立 bot 栈），下面几节的
+> 16 个服务 + profile-gated `openclaw-cli`（另有 zhixun / tianyi 两个独立 bot 栈），下面几节的
 > 挂载表、`gc` 挂载、MCP 脚本目录都来自旧版本，`git pull` 后对不上 —— 排查时以仓库里的
 > `docker-compose.yml` 为准。
 

@@ -47,6 +47,8 @@ HOT_DBS_RW=(
 HOT_DBS_RO=(
   "aisecretary/transactions.sqlite"             # 回滚模式 —— 事务库
   "dailyinfo/freshrss/data/users/*/db.sqlite"   # 回滚模式 —— 每用户一个
+  "yuque-mcp/change_data/change_summary.db"     # 回滚模式 —— 语雀变更快照索引
+                                                #  （快照正文随 rsync 照常上云）
 )
 HOT_DBS=("${HOT_DBS_RW[@]}" "${HOT_DBS_RO[@]}")
 

@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 # Wire a deployed Yuque MCP SSE service into a local Hermes installation.
 #
-# This script does not deploy the Yuque MCP server and does not require
-# YUQUE_TOKEN on the agent machine. The server-side deployment owns YUQUE_TOKEN;
-# Hermes only needs the remote SSE URL and the MCP API key used for Bearer auth.
+# This script does not deploy the Yuque MCP server. It only needs the SSE URL
+# and the MCP API key used for Bearer auth. Since issue #79 the server runs as
+# the local compose service `yuque-mcp` (which owns YUQUE_TOKEN in the repo-root
+# .env); YUQUE_TOKEN is still not consumed by this script or by Hermes itself.
 #
 # Required for enable:
-#   YUQUE_MCP_URL=https://your-yuque-mcp.example.com/sse
-#   MCP_API_KEY=your_remote_mcp_api_key
+#   YUQUE_MCP_URL=http://yuque-mcp:18001/sse
+#   MCP_API_KEY=your_mcp_api_key
 #
 # Optional:
 #   HERMES_HOME=$HOME/.hermes
 #
 # Usage:
-#   YUQUE_MCP_URL=https://your-server/sse MCP_API_KEY=xxx ./scripts/bootstrap_hermes.sh
-#   ./scripts/bootstrap_hermes.sh --url https://your-server/sse --api-key xxx
+#   YUQUE_MCP_URL=http://yuque-mcp:18001/sse MCP_API_KEY=xxx ./scripts/bootstrap_hermes.sh
+#   ./scripts/bootstrap_hermes.sh --url http://yuque-mcp:18001/sse --api-key xxx
 #   ./scripts/bootstrap_hermes.sh --dry-run
 #   ./scripts/bootstrap_hermes.sh --disable
 
@@ -38,7 +39,8 @@ Usage:
   bootstrap_hermes.sh [options]
 
 Options:
-  --url URL              Remote Yuque MCP SSE URL, e.g. https://host/sse
+  --url URL              Yuque MCP SSE URL, e.g. http://yuque-mcp:18001/sse
+                         (default: the local compose service; see docs/yuque-mcp-hermes.md)
   --api-key KEY          MCP API key for Bearer auth. Not printed by the script.
   --hermes-home PATH     Hermes home directory. Default: auto-detect ~/.hermes first,
                          then $HERMES_HOME if it contains config.yaml.

@@ -56,7 +56,14 @@ clone_or_update \
   "${CODE_DIR}/git-contribution-stats" \
   "git-contribution-stats（研发日报数据服务）"
 
-# ── 3. dailyinfo（软依赖：launchd 调度）───────────────────────
+# ── 3. yuque_mcp_server（硬依赖：build context）───────────────
+# GitCode 公开仓库（免认证）；无 tag，镜像按 commit pin（tests/test_yuque_mcp_local.py）
+clone_or_update \
+  "https://gitcode.com/dlut-water/yuque_mcp_server.git" \
+  "${CODE_DIR}/yuque_mcp_server" \
+  "yuque_mcp_server（本机语雀 MCP 服务端）"
+
+# ── 4. dailyinfo（软依赖：launchd 调度）───────────────────────
 clone_or_update \
   "https://github.com/iHeadWater/dailyinfo.git" \
   "${CODE_DIR}/dailyinfo" \
@@ -69,6 +76,7 @@ echo "============================================"
 for dir in \
   "${CODE_DIR}/aisecretary" \
   "${CODE_DIR}/git-contribution-stats" \
+  "${CODE_DIR}/yuque_mcp_server" \
   "${CODE_DIR}/dailyinfo"; do
   if [[ -d "${dir}/.git" ]]; then
     echo "  ✅ $(basename "${dir}")"

@@ -1,6 +1,6 @@
 # 架构
 
-myopenclaw 由主栈 15 个 Docker 服务 + zhixun 独立栈 2 个服务 + tianyi 独立栈 1 个服务组成（不含 profile-gated 的 openclaw-cli）。主栈运行在共享的 `myopenclaw-net` 桥接网络上，zhixun 栈运行在独立的 `zhixun-bot-net` 上；tianyi 栈为独立 Compose 但**共享主栈 `myopenclaw-net`**（复用 repo-scanner-mcp）。
+myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈 2 个服务 + tianyi 独立栈 1 个服务组成（不含 profile-gated 的 openclaw-cli）。主栈运行在共享的 `myopenclaw-net` 桥接网络上，zhixun 栈运行在独立的 `zhixun-bot-net` 上；tianyi 栈为独立 Compose 但**共享主栈 `myopenclaw-net`**（复用 repo-scanner-mcp）。
 
 ## 服务拓扑
 
@@ -25,6 +25,7 @@ myopenclaw 由主栈 15 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | aisecretary | 8000 | 事务数据库 MCP 服务，7 个 tools，SQLite 持久化 |
 | repo-scanner-mcp | 8001 | 研发日报 MCP 数据服务，来自 git-contribution-stats |
 | paper-queue-mcp | 8003 | 论文清单 MCP（FastMCP + streamable HTTP）。**独立容器是刻意的**：队列目录 `~/.myagentdata/paper-queue` 不挂给 openclaw-gateway（另有 backup-cron 的窄 rw 热备挂载） |
+| yuque-mcp | —（仅容器网络） | 语雀知识库 MCP（本机 SSE，自持只读 token，不发布宿主端口）。快照 06:00 / 变更报告 07:00（北京，容器内调度）；来源 `yuque_mcp_server`，按 commit pin |
 | freshrss | 8081 | RSS 聚合，dailyinfo 数据源 |
 | uptime-kuma | 3001 | 服务监控面板，HTTP + Docker 容器状态 |
 | backup-cron | — | 定时快照备份 |
@@ -40,7 +41,7 @@ myopenclaw 由主栈 15 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| openclaw-tianyi | 18792 | OpenClaw gateway（天一·研发助手），飞书 bot（`deepseek-flash`），terminal + MCP profile：读走共享 repo-scanner-mcp，写走 `gh`/`gc` CLI 创建 GitHub/GitCode issue，另接远程语雀 MCP |
+| openclaw-tianyi | 18792 | OpenClaw gateway（天一·研发助手），飞书 bot（`deepseek-flash`），terminal + MCP profile：读走共享 repo-scanner-mcp，写走 `gh`/`gc` CLI 创建 GitHub/GitCode issue，另接本机 yuque-mcp |
 
 ## 数据目录映射
 
@@ -56,6 +57,8 @@ myopenclaw 由主栈 15 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | `~/.myagentdata/aisecretary` | `/data` | aisecretary | 事务 SQLite |
 | `~/.myagentdata/repo-scanner` | `/data` | repo-scanner-mcp | 研发日报 SQLite（只读） |
 | `~/.myagentdata/paper-queue` | `/data` | paper-queue-mcp | 论文清单 SQLite（openclaw-gateway 不挂；backup-cron 另有窄 rw 热备挂载） |
+| `~/.myagentdata/yuque-mcp/change_data` | `/app/yuque/change_data` | yuque-mcp | 语雀快照 + change_summary.db + snapshots/ 正文（db 在 backup-cron 热备清单） |
+| `~/.myagentdata/yuque-mcp/backup` | `/app/yuque/backup` | yuque-mcp | 语雀知识库备份工具输出（Markdown） |
 | `~/.myagentdata/dailyinfo` | — | freshrss | RSS 数据 |
 | `~/.config/gh` | `/opt/gh-config` | hermes, claude-code | GitHub CLI 认证 |
 | `~/.config/opencode` | `/opt/opencode-config` | hermes | opencode 配置 |

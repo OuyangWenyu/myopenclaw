@@ -25,6 +25,21 @@ if ! grep -q '^GH_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
   echo "   在 .env 中设置 GH_TOKEN（OuyangWenyu 个人 GitHub 令牌）"
 fi
 
+# ── 检查 YUQUE_TOKEN 是否设置（本机语雀 MCP 服务端用）────────
+# 缺 token 时 yuque-mcp 容器照常 Up，但每夜快照与全部语雀工具静默失败 ——
+# 这里大声警告（不阻断：其余服务不受影响）。
+if ! grep -q '^YUQUE_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "   ⚠️  YUQUE_TOKEN 未设置 — 语雀 MCP 快照/查询将失败"
+  echo "   语雀后台创建只读 token（repo:read + doc:read）后写入 .env"
+fi
+
+# ── 检查 MCP_YUQUE_MCP_API_KEY 是否设置（yuque-mcp 服务端 Bearer key）──
+# 缺 key 时上游行为是**无认证直通**：myopenclaw-net 上任意容器（含可被提示
+# 注入的 agent）都能免鉴权读团队文档。监控只接受 401 探针兜底，这里先警告。
+if ! grep -q '^MCP_YUQUE_MCP_API_KEY=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "   ⚠️  MCP_YUQUE_MCP_API_KEY 未设置 — yuque-mcp 将无认证直通（网内容器可直读团队文档）"
+fi
+
 # Read GDRIVE_PAPERS_LOCAL_PATH from .env (can't source directly — cron expressions break bash)
 if [[ -z "${GDRIVE_PAPERS_LOCAL_PATH:-}" ]]; then
   GDRIVE_PAPERS_LOCAL_PATH=$(grep '^GDRIVE_PAPERS_LOCAL_PATH=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)
@@ -38,7 +53,7 @@ fi
 # ── 检查依赖仓库（非阻塞，仅警告）─────────────────────────────
 echo "🔍 检查依赖仓库..."
 MISSING_REPOS=()
-for repo in "${HOME}/code/aisecretary" "${HOME}/code/git-contribution-stats" "${HOME}/code/dailyinfo"; do
+for repo in "${HOME}/code/aisecretary" "${HOME}/code/git-contribution-stats" "${HOME}/code/yuque_mcp_server" "${HOME}/code/dailyinfo"; do
   if [[ ! -d "${repo}" ]]; then
     MISSING_REPOS+=("$(basename "${repo}")")
   fi
@@ -115,6 +130,9 @@ mkdir -p "${HOME}/.myagentdata/agentops"
 # 论文清单（虾酱写、mylibrary 读）。必须在 compose up 之前建好：否则 Docker 会
 # 以 root 身份创建这个挂载点，容器里的 node 用户随后写不进去。
 mkdir -p "${HOME}/.myagentdata/paper-queue"
+# 语雀 MCP 本机服务端：快照/报告库与备份输出。必须在 compose up 前建好 ——
+# 否则 Docker 以 root 建目录（本容器 user: root 时功能上无碍，但宿主归属/权限会乱）。
+mkdir -p "${HOME}/.myagentdata/yuque-mcp/change_data" "${HOME}/.myagentdata/yuque-mcp/backup"
 # inbox.md is produced by collect_agentops.py (host launchd). Without the
 # directory, Docker's ro mount of ~/.myagentdata has no agentops/ subdir
 # and Daily Command Center reports a false "AgentOps 未部署".

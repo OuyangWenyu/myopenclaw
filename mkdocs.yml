@@ -70,6 +70,7 @@ nav:
       - 论文清单 (paper-queue): paper-queue.md
   - 运维:
       - 调度系统: scheduling.md
+      - Hermes Skill 机制: hermes-skills.md
       - 备份系统: backup.md
       - 服务监控: monitoring.md
       - AgentOps 健康采集: agentops.md

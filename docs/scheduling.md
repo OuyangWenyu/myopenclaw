@@ -1,6 +1,6 @@
 # 调度系统
 
-myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 16 个定时任务的 single source of truth（个人 cron 不在此列）。
+myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 18 个定时任务的 single source of truth（个人 cron 不在此列）。
 
 ## 总览
 
@@ -16,7 +16,9 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 04:30 | 宿主机 | launchd | AI 资讯抓取 | `install-dailyinfo.sh` |
 | 05:30 | 宿主机 | launchd | 推送：AI 资讯 + 代码 + 资源 | `install-dailyinfo.sh` |
 | 06:00 | 宿主机 | launchd | 推送：期刊论文 | `install-dailyinfo.sh` |
+| 06:00 | Docker | yuque-mcp 调度器 | **语雀知识库快照**（变更基线） | 容器内置（`YUQUE_CHANGE_SNAPSHOT_TIME`） |
 | 07:00 | 宿主机 | launchd | 推送：arXiv 论文 | `install-dailyinfo.sh` |
+| 07:00 | Docker | yuque-mcp 调度器 | **语雀变更报告**生成（yuque-daily-digest 的数据源） | 容器内置（`YUQUE_CHANGE_REPORT_TIME`） |
 | 07:30 | Docker | Hermes cron | **工作日晨间简报**（事务 + 邮件，仅工作日） | `start.sh` 自动注册 |
 | 07:45 | 宿主机 | launchd | **git-contribution-stats 每日采集** | `install-all-schedulers.sh` |
 | 07:45 | 宿主机 | launchd | **AgentOps 健康信号采集** | `install-all-schedulers.sh` |
@@ -32,7 +34,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 07:45 ──────── git-contribution-stats + AgentOps 采集 ← 并行
 07:50 ──────── Daily Command Center ← 读 inbox.md + TDAI 记忆
 07:55 ──────── daily-dev-report ← 读 repo-scanner MCP (SQLite)
-08:10 ──────── yuque-daily-digest ← 读 yuque-mcp（服务端 07:00 已生成变更报告）
+08:10 ──────── yuque-daily-digest ← 读本机 yuque-mcp 容器（07:00 已生成变更报告）
 ```
 
 四个早间推送在 07:30–08:10 窗口内完成（含语雀日报 08:10），数据采集在推送前完成，保证数据新鲜。
@@ -55,7 +57,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 bash ${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh  # Git 数据采集
 ```
 
-Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作。其中 yuque-daily-digest 需在 `.env` **同时**配置 `YUQUE_DAILY_PUSH_REPOS`、`YUQUE_MCP_URL`、`MCP_YUQUE_MCP_API_KEY` 三者后才会注册（缺任一项静默跳过，只留一行提示）。
+Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作；yuque-mcp 容器的快照/报告调度为镜像内置（服务端启动即生效，无注册步骤）。其中 yuque-daily-digest 需在 `.env` **同时**配置 `YUQUE_DAILY_PUSH_REPOS`、`YUQUE_MCP_URL`、`MCP_YUQUE_MCP_API_KEY` 三者后才会注册（缺任一项静默跳过，只留一行提示）。
 
 > backup-cron 的保留策略（删除超过 `BACKUP_KEEP_DAYS` 的快照）**只在 02:00 这个定时任务里执行**；容器启动时的初始备份带 `BACKUP_SKIP_PRUNE=1`，重启不会删任何快照。详见 [备份系统](backup.md)。
 
