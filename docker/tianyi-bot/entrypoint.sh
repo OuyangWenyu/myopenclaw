@@ -114,6 +114,15 @@ for source_file in /opt/tianyi-workspace/*; do
   cp "${source_file}" "${target_file}"
 done
 
+# ── Validate CA cert for optional server-monitoring MCP ──────────────────
+if [ -n "${TIANYI_BOT_SERVER_MONITORING_MCP_URL:-}" ] \
+  && [ ! -f /opt/tianyi-bot/ca/server-monitoring-ca.pem ]; then
+  echo "❌ 已启用服务器监控 MCP（TIANYI_BOT_SERVER_MONITORING_MCP_URL 非空），但缺少 CA 证书："
+  echo "   /opt/tianyi-bot/ca/server-monitoring-ca.pem 不存在。"
+  echo "   该文件随仓库提供 —— 请确认 docker/tianyi-bot/ca/ 完整（git checkout 可恢复）。"
+  exit 1
+fi
+
 # ── Render config from template ──────────────────────────────────────────
 node /opt/tianyi-bot/render-config.mjs \
   /opt/tianyi-bot/openclaw.json.template \

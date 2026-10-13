@@ -189,6 +189,8 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml stop 
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml ps     # 服务状态
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml logs -f openclaw-tianyi  # 网关日志
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi node /app/openclaw.mjs mcp probe repo-scanner --json  # MCP 连接测试
+docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi node /app/openclaw.mjs mcp probe server-monitoring --json  # 监控 MCP（可选，见 docs/server-monitoring-mcp.md）
+uv run scripts/check_server_monitoring_mcp.py --json                 # 监控链路只读冒烟（TLS+鉴权+9 工具；token 只回显长度）
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi gh --version  # gh CLI 版本
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi gc --version  # gitcode-cli 版本
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml stop   # 停止服务
@@ -357,6 +359,8 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 - **tianyi bot (天一) — shared-network stack**: The tianyi feishu bot runs as a separate Compose stack but shares `myopenclaw-net` with the main stack (unlike zhixun's fully isolated network). This allows it to reuse the existing `repo-scanner-mcp` for read operations (daily reports, commits, authors). For write operations, the entrypoint installs `gh` CLI (APT) and `gitcode-cli` (npm) at startup — the same pattern used by the Hermes Dockerfile. The agent uses `profile: "coding"` (terminal + MCP) rather than `bundle-mcp`, so it can run CLI commands directly. Startup dependency: main stack must be running first (`scripts/start.sh` before `scripts/start-tianyi-bot.sh`). Data dir: `~/.openclaw-tianyi`.
 
+- **server-monitoring MCP（天一监控接入）**: 团队只读监控服务（`https://10.48.0.81:8765/mcp`，Streamable HTTP + Bearer + 内网自签 CA，9 个只读工具：服务器/容器/Prometheus/GFS 进度）接入天一，镜像 yuque 的**可选 MCP 模式**：**URL 非空 = 开关**（留空则渲染时摘除条目；关闭态零日志噪音 —— node 对空 `NODE_EXTRA_CA_CERTS` 静默，实测）。token 只进 gitignored `.env.tianyi-bot`，模板 header 写 `"Bearer ${MCP_SERVER_MONITORING_TOKEN}"` 由 OpenClaw **运行时**展开（渲染产物里没有 token，有守卫断言）；**CA 公钥随仓库提交**（`docker/tianyi-bot/ca/server-monitoring-ca.pem`，私钥绝不入库），compose 用 `${TIANYI_BOT_SERVER_MONITORING_MCP_URL:+路径}` 门控信任。三道 fail-loud：渲染器抛错（URL 非空 token 空）/ entrypoint 拒启（CA 缺失 —— node 对缺失 CA 文件也静默，这层是唯一防线）/ start 脚本预检。**唯一未知数**：streamable-http + 自定义 header 是本仓首次组合（yuque=sse+header、repo-scanner=streamable-http 无 header），最终判据 `mcp probe server-monitoring`；退路是 Authorization shim 容器（未建）。token 全客户端共用（轮换联系维护者）；CA 私钥已移除 ⇒ 续期 = CA rollover。检查器 `scripts/check_server_monitoring_mcp.py`（PEP 723 pin `mcp==2.2.0`；TLS 反证 + 401 反证 + 9 工具断言；token 只回显长度）。全文 `docs/server-monitoring-mcp.md`。
+
 - **mylibrary (hydrolitagent) — build-time install, local-first**: Paper pipeline code (paper_to_zotero, zot_link_gdrive, run_paper_pipeline.sh) lives in `~/code/mylibrary` and is installed into the hermes image at build time. `start.sh` rsyncs the local source into the Docker build context before `docker compose build`; the Dockerfile installs via `uv pip install` (with `--no-deps` to avoid mcp 2.0 conflicts with the Hermes agent). When local source is unavailable (CI / remote), falls back to `git clone --depth 1`. Skills from the same source are copied to `/opt/mylibrary-skills/` and registered via `external_dirs` in Hermes config. See `docs/zotero-cli-cc.md` for legacy zotero-cli-cc docs.
 
 - **Agent Memory (TDAI) — bidirectional cross-agent sharing**: 4 personal agents share long-term memory (L0→L3) via the tdai-memory Gateway. **Two physically-isolated systems** (separate SQLite files, not permission-based): personal (`~/.myagentdata/tdai-memory/`, 4 agents) and 虾酱 (`~/.openclaw/memory-tdai/`, multi-user OpenClaw plugin, local mode). Three integration paths, each with a critical gotcha learned during integration:
@@ -400,15 +404,15 @@ When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains,
 - `docker/<service>/Dockerfile` — custom images (hermes, claude-code, backup-cron)
 - `docker/paper-queue-mcp/` — 论文清单的 MCP 服务（FastMCP + streamable HTTP）+ 契约 `schema.sql`。**独立容器**是刻意的，见 Key Design Decisions
 - `docker/zhixun-bot/` — zhixun bot MCP Dockerfile + compat layers + config template
-- `docker/tianyi-bot/` — tianyi bot entrypoint + config template + render script
+- `docker/tianyi-bot/` — tianyi bot entrypoint + config template + render script + 内网 CA（`ca/`，公钥材料随仓库提交）
 - `openclaw/skills/paper-queue/` — 虾酱的论文清单 skill（只剩 SKILL.md；契约与 MCP 服务已搬到 `docker/paper-queue-mcp/`），由 `start.sh` 的 `install_paper_queue()` 拷到 `~/.openclaw/skills/`（openclaw-gateway **没有** skills 挂载，所以是拷贝不是 bind mount）
 - `openclaw/plugins/paper-queue-actor/` — 身份注入插件（三钩子），同样按仓库为源、`start.sh` 拷贝到 `~/.openclaw/extensions/`
 - `openclaw-zhixun/workspace/` — zhixun bot agent policy files (AGENTS.md, SOUL.md)
 - `openclaw-tianyi/workspace/` — tianyi bot agent policy files (AGENTS.md, SOUL.md)
 - `hermes/scripts/`, `openclaw/scripts/`, `claude/scripts/` — per-service backup scripts, mounted read-only into backup-cron
-- `scripts/` — top-level orchestration scripts (start, stop, restore, cloud setup, launchd, start-zhixun-bot, start-tianyi-bot, rehearse-openclaw-migration, ensure_hermes_model, ensure_hermes_web_search)
+- `scripts/` — top-level orchestration scripts (start, stop, restore, cloud setup, launchd, start-zhixun-bot, start-tianyi-bot, rehearse-openclaw-migration, ensure_hermes_model, ensure_hermes_web_search, check_server_monitoring_mcp)
 - `scripts/launchd/` — macOS launchd plist 模板 + install 脚本（dailyinfo, agentops, healthchecks）
 - `skills/` — 执行层 skill 的**版本源/参考**（morning-triage-v2 等 Hermes cron skill）。⚠️ Hermes 实际加载/执行的是 `~/.hermes/skills` **原生副本**（agent 自维护；仓库挂载的 `/opt/hermes-skills` 未注册 `skills.external_dirs`，不参与发现）——「改仓库版 ≠ 改线上行为」；两份副本关系、同名 symlink 撞车史与治理选项见 `docs/hermes-skills.md`
-- `tests/` — 守卫测试。Python 侧（`test_*.py`，**统一用下划线** —— pytest 默认只收 `test_*.py`/`*_test.py`，用连字符会静默不被收集）与 bash 侧（`test-*.sh`）分开跑：`uv run --with pytest --with pyyaml pytest tests/ -q`（当前 **433 项**）与 `for t in tests/test-*.sh; do bash "$t" || echo "FAIL $t"; done`。**没有 CI 在跑它们**（`.github/workflows/docs.yml` 只构建文档），全靠手动 —— 改过模板 / pin / 模型名后务必自己跑一遍。另有 `scripts/tests/test-start-sh-optional-greps.sh` 守卫 start.sh 的缺键容错
+- `tests/` — 守卫测试。Python 侧（`test_*.py`，**统一用下划线** —— pytest 默认只收 `test_*.py`/`*_test.py`，用连字符会静默不被收集）与 bash 侧（`test-*.sh`）分开跑：`uv run --with pytest --with pyyaml pytest tests/ -q`（当前 **484 项**）与 `for t in tests/test-*.sh; do bash "$t" || echo "FAIL $t"; done`。**没有 CI 在跑它们**（`.github/workflows/docs.yml` 只构建文档），全靠手动 —— 改过模板 / pin / 模型名后务必自己跑一遍。另有 `scripts/tests/test-start-sh-optional-greps.sh` 守卫 start.sh 的缺键容错
 - `.secrets/` — encrypted via git-crypt (hermes.env.example, openclaw.env.example)
 - All scripts use `set -euo pipefail` and Chinese-language output/emojis

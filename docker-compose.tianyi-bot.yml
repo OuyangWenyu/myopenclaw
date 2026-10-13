@@ -28,6 +28,14 @@ services:
       TIANYI_BOT_YUQUE_MCP_URL: ${TIANYI_BOT_YUQUE_MCP_URL:-}
       TIANYI_BOT_MCP_YUQUE_MCP_API_KEY: ${TIANYI_BOT_MCP_YUQUE_MCP_API_KEY:-}
       MCP_YUQUE_MCP_API_KEY: ${TIANYI_BOT_MCP_YUQUE_MCP_API_KEY:-}
+      # 服务器监控 MCP（团队 server-monitoring，HTTPS + Bearer + 内网 CA；
+      # URL 留空则渲染时移除 server-monitoring 条目，能力完全关闭）
+      TIANYI_BOT_SERVER_MONITORING_MCP_URL: ${TIANYI_BOT_SERVER_MONITORING_MCP_URL:-}
+      TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN: ${TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN:-}
+      MCP_SERVER_MONITORING_TOKEN: ${TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN:-}
+      # URL 非空才信任内网 CA（空串时 node 静默忽略，关闭态行为不变）；
+      # CA 证书随仓库提供，经 ./docker/tianyi-bot 只读挂载进容器
+      NODE_EXTRA_CA_CERTS: ${TIANYI_BOT_SERVER_MONITORING_MCP_URL:+/opt/tianyi-bot/ca/server-monitoring-ca.pem}
     healthcheck:
       test:
         - CMD

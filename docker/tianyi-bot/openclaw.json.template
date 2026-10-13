@@ -87,6 +87,16 @@
         "connectionTimeoutMs": 10000,
         "requestTimeoutMs": 120000,
         "supportsParallelToolCalls": true
+      },
+      "server-monitoring": {
+        "url": "__SERVER_MONITORING_MCP_URL__",
+        "transport": "streamable-http",
+        "headers": {
+          "authorization": "Bearer ${MCP_SERVER_MONITORING_TOKEN}"
+        },
+        "connectionTimeoutMs": 10000,
+        "requestTimeoutMs": 120000,
+        "supportsParallelToolCalls": true
       }
     }
   },

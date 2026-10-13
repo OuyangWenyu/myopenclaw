@@ -154,7 +154,12 @@ class TestEnvExampleShape:
     def test_tianyi_example_points_at_local_service(self):
         example = (REPO_ROOT / ".env.tianyi-bot.example").read_text()
         assert "TIANYI_BOT_YUQUE_MCP_URL=http://yuque-mcp:18001/sse" in example
-        assert "10.48.0.81" not in example
+        # 「无校内地址」只对**语雀相关行**断言：本意是「语雀不得指回依赖 UniVPN 的
+        # 校内服务器」。天一样例里 10.48.0.81 是合法出现的 —— 团队 server-monitoring
+        # MCP 就部署在那台机器上（见 docs/server-monitoring-mcp.md），全局断言会把
+        # 新能力误判成违规。
+        yuque_lines = [line for line in example.splitlines() if "YUQUE" in line]
+        assert not any("10.48.0.81" in line for line in yuque_lines)
 
 
 class TestLiveEnvSwitched:

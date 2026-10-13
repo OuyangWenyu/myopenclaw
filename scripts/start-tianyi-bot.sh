@@ -32,6 +32,20 @@ for name in "${required_vars[@]}"; do
   fi
 done
 
+# ── Validate optional server-monitoring MCP wiring ──────────────────────
+# 这层最早发现配置错误：compose up 对 crash-loop 的容器照样返回 0，
+# 「URL 非空而 token 为空」若不拦在这里，要等容器起来后看日志才知道。
+monitoring_url="$(grep -E '^TIANYI_BOT_SERVER_MONITORING_MCP_URL=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+monitoring_token="$(grep -E '^TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+if [[ -n "${monitoring_url}" ]]; then
+  if [[ -z "${monitoring_token}" || "${monitoring_token}" == "replace_me" || "${monitoring_token}" == *"xxxx"* ]]; then
+    echo "❌ TIANYI_BOT_SERVER_MONITORING_MCP_URL 已设置，但 TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN 未正确设置"
+    echo "   两者要么都配好，要么清空 URL 以完全关闭服务器监控能力（详见 docs/server-monitoring-mcp.md）。"
+    exit 1
+  fi
+  echo "✅ server-monitoring MCP 已配置（URL 非空 + token 已设置）"
+fi
+
 # ── Validate main stack is running ──────────────────────────────────────
 if ! docker inspect repo-scanner-mcp --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
   echo "❌ repo-scanner-mcp 未运行"
@@ -87,5 +101,6 @@ echo "✅ 启动命令已提交"
 echo "   状态: docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml ps"
 echo "   日志: docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml logs -f openclaw-tianyi"
 echo "   MCP:  docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi node /app/openclaw.mjs mcp probe repo-scanner --json"
+echo "   监控: docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi node /app/openclaw.mjs mcp probe server-monitoring --json"
 echo "   gh:   docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi gh --version"
 echo "   gc:   docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec openclaw-tianyi gc --version"

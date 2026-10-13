@@ -94,9 +94,12 @@ render_and_validate() {
     return ${rc}
 }
 
+# tianyi 带上 server-monitoring 的 URL+token：streamable-http + headers 的组合
+# 是本仓第一次用，只有真跑一次目标版本的 config validate 才能证明 schema 认可这条目。
+# ⚠️ 注释不能放进 for 的续行列表里（`\` 后面跟注释会直接语法错误）——2026-10-13 恢复存档时修的。
 for spec in \
     "zhixun|docker/zhixun-bot/openclaw.json.template|docker/zhixun-bot/render-config.mjs|ZHIXUN_BOT_FEISHU_APP_ID=dummy_id ZHIXUN_BOT_FEISHU_APP_SECRET=dummy_secret ZHIXUN_BOT_MODEL_API_KEY=dummy_key ZHIXUN_BOT_MODEL_ID=deepseek-flash ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com ZHIXUN_BOT_FEISHU_STREAMING=STREAMING_VAL" \
-    "tianyi|docker/tianyi-bot/openclaw.json.template|docker/tianyi-bot/render-config.mjs|TIANYI_BOT_FEISHU_APP_ID=dummy_id TIANYI_BOT_FEISHU_APP_SECRET=dummy_secret TIANYI_BOT_MODEL_API_KEY=dummy_key TIANYI_BOT_MODEL_ID=deepseek-flash TIANYI_BOT_MODEL_BASE_URL=https://api.deepseek.com TIANYI_BOT_FEISHU_STREAMING=STREAMING_VAL"
+    "tianyi|docker/tianyi-bot/openclaw.json.template|docker/tianyi-bot/render-config.mjs|TIANYI_BOT_FEISHU_APP_ID=dummy_id TIANYI_BOT_FEISHU_APP_SECRET=dummy_secret TIANYI_BOT_MODEL_API_KEY=dummy_key TIANYI_BOT_MODEL_ID=deepseek-flash TIANYI_BOT_MODEL_BASE_URL=https://api.deepseek.com TIANYI_BOT_FEISHU_STREAMING=STREAMING_VAL TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://10.48.0.81:8765/mcp TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN=dummy_token"
 do
     label="${spec%%|*}"; rest="${spec#*|}"
     template="${rest%%|*}"; rest="${rest#*|}"

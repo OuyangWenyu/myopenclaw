@@ -27,6 +27,7 @@ const replacements = new Map([
   ["__MODEL_ID__", process.env.TIANYI_BOT_MODEL_ID],
   ["__MODEL_BASE_URL__", process.env.TIANYI_BOT_MODEL_BASE_URL],
   ["__YUQUE_MCP_URL__", process.env.TIANYI_BOT_YUQUE_MCP_URL ?? ""],
+  ["__SERVER_MONITORING_MCP_URL__", process.env.TIANYI_BOT_SERVER_MONITORING_MCP_URL ?? ""],
 ]);
 
 function replace(value) {
@@ -70,6 +71,16 @@ if (!yuqueUrl) {
 } else if (!process.env.TIANYI_BOT_MCP_YUQUE_MCP_API_KEY) {
   throw new Error(
     "TIANYI_BOT_YUQUE_MCP_URL is set but TIANYI_BOT_MCP_YUQUE_MCP_API_KEY is missing",
+  );
+}
+
+// Drop server-monitoring entry when no URL is configured (optional capability)
+const serverMonitoringUrl = process.env.TIANYI_BOT_SERVER_MONITORING_MCP_URL?.trim();
+if (!serverMonitoringUrl) {
+  delete config.mcp.servers["server-monitoring"];
+} else if (!process.env.TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN) {
+  throw new Error(
+    "TIANYI_BOT_SERVER_MONITORING_MCP_URL is set but TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN is missing",
   );
 }
 
