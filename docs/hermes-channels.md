@@ -9,11 +9,13 @@ Hermes 的四个 profile（default、coder、daoyuan、finance）各自可以接
 | 飞书 | 全部（default / coder / daoyuan / finance） | 各自飞书应用凭据 | 主消息平台，走 WebSocket 长连接 |
 | Discord | coder（爱码士） | 项目 `.env` + `docker-compose.yml` | 独立 Discord Bot，仅限个人使用 |
 
-**飞书应用隔离**：default 与 coder 共享一个飞书应用，daoyuan / finance 各用独立的飞书应用，互不影响：
+**飞书应用隔离**：四个 profile 各用**独立的**飞书应用，互不影响：
 - 爱玛士（default）：`FEISHU_APP_ID` — 主飞书 bot
-- 爱码士（coder）：同 `FEISHU_APP_ID` — 与爱玛士共享飞书应用
+- 爱码士（coder）：`CODER_FEISHU_APP_ID` — 独立飞书 bot（2026-10-13 起；该应用同时是 lark-cli 第二 profile 的「爱码士应用」= `LARK_CLI_IDM_*`）
 - 道元（daoyuan）：`DAOYUAN_FEISHU_APP_ID` — 文献学者专用飞书 bot，群内开放访问
 - finance：`FINANCE_FEISHU_APP_ID` — 财经助手专用飞书 bot
+
+> **历史（2026-10-12 事故 → 2026-10-13 修复）**：coder 曾与 default **共享**同一个飞书应用 —— 两个容器同时用同一 app 建长连接，DM 被分到其中一条；落到 coder 容器（受限 profile，邮箱是拒绝桩）的轮次读不了/发不出邮件（症状：时好时坏）。10-12 摘除 coder 全部飞书注入止血（副作用：爱码士从飞书消失）；10-13 改为接入它自己的独立应用（事后查明：coder profile 的 `.env` 早在 2026-05 就备好了爱码士应用凭据，只是被 compose 注入的默认 app 遮蔽 ——「共享」是意外的接线事故，不是设计）。**不要恢复共享** —— 一个 app 同一时刻只有一条连接能接到消息，双容器必然互抢。守卫 `tests/test_coder_feishu_app.py`。
 
 各平台凭据独立管理，互不影响。
 
@@ -33,7 +35,7 @@ FEISHU_GROUP_POLICY=open
 2. 在「事件与回调」中选择「使用长连接接收事件/回调」
 3. 将凭据写入 `~/.hermes/.env`，重启容器
 
-finance profile 使用独立的飞书应用（`FINANCE_FEISHU_APP_ID/SECRET`），在项目 `.env` 中配置，`docker-compose.yml` 中传入。
+finance profile 使用独立的飞书应用（`FINANCE_FEISHU_APP_ID/SECRET`），在项目 `.env` 中配置，`docker-compose.yml` 中传入。爱码士（coder）同理使用 `CODER_FEISHU_APP_ID/SECRET`（若与已有「爱码士应用」为同一应用，值与 `LARK_CLI_IDM_*` 相同）；该应用需具备**机器人能力** + 「事件与回调」**长连接**（订阅 `im.message.receive_v1`）才能收发消息。
 
 ## Discord（爱码士 coder）
 
