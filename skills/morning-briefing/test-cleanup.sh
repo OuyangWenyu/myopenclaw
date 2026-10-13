@@ -57,6 +57,16 @@ REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 check "No passwords in repo skills/*.md" \
     "! grep -r --include='*.md' -E '$QQ_PWD|$DLUT_PWD' '$REPO_ROOT/skills/' 2>/dev/null"
 
+# 7. 技能脚本目录不得有明文口令（2026-10-13：mark_read.py 曾硬编码 qq/dlut 口令，
+#    已改为从 himalaya 配置读；本检查防回退）
+SKILL_SCRIPTS="${HOME}/.hermes/skills/devops/morning-briefing/scripts"
+check "No passwords in live skill scripts ($SKILL_SCRIPTS)" \
+    "! grep -r --include='*.py' --include='*.sh' -E '$QQ_PWD|$DLUT_PWD' '$SKILL_SCRIPTS' 2>/dev/null"
+
+# 8. 仓库镜像同样不得带口令（将来把脚本搬进仓库时兜底）
+check "No passwords in repo skills/morning-briefing/scripts" \
+    "! grep -r --include='*.py' --include='*.sh' -E '$QQ_PWD|$DLUT_PWD' '$REPO_ROOT/skills/morning-briefing/scripts' 2>/dev/null"
+
 echo ""
 echo "=== Results: $PASS passed, $FAIL failed ==="
 if [ "$FAIL" -gt 0 ]; then

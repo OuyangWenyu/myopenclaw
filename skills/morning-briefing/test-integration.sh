@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Integration Test: Verify data collection commands work inside hermes container
+# ⚠️ aisecretary REST 前缀是 /api（写成 /transactions 会 404，2026-10-13 实测修正）
 set -euo pipefail
 
 CONTAINER="hermes"
@@ -26,7 +27,7 @@ echo "── Transactions API ──"
 check "API reachable (HTTP 200)" \
     "docker compose exec -T $CONTAINER python3 -c \"
 import urllib.request
-req = urllib.request.Request('http://host.docker.internal:8000/transactions')
+req = urllib.request.Request('http://host.docker.internal:8000/api/transactions')
 with urllib.request.urlopen(req, timeout=10) as r:
     assert r.status == 200, f'HTTP {r.status}'
     print('OK')
@@ -35,7 +36,7 @@ with urllib.request.urlopen(req, timeout=10) as r:
 check "API returns JSON array" \
     "docker compose exec -T $CONTAINER python3 -c \"
 import urllib.request, json
-req = urllib.request.Request('http://host.docker.internal:8000/transactions')
+req = urllib.request.Request('http://host.docker.internal:8000/api/transactions')
 with urllib.request.urlopen(req, timeout=10) as r:
     data = json.loads(r.read())
     assert isinstance(data, list), f'Expected list, got {type(data).__name__}'
@@ -45,7 +46,7 @@ with urllib.request.urlopen(req, timeout=10) as r:
 check "Has active (non-done) transactions" \
     "docker compose exec -T $CONTAINER python3 -c \"
 import urllib.request, json
-req = urllib.request.Request('http://host.docker.internal:8000/transactions')
+req = urllib.request.Request('http://host.docker.internal:8000/api/transactions')
 with urllib.request.urlopen(req, timeout=10) as r:
     data = json.loads(r.read())
 active = [t for t in data if t.get('status') not in ('done', 'cancelled')]

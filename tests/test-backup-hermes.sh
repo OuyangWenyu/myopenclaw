@@ -75,6 +75,12 @@ run_backup_initial() {
     return $?
 }
 
+# 保留期是相对「今天」算的 —— 夹具日期必须动态生成，写死会随日历腐烂
+# （2026-10-13 实测：写死的 2026-09-12 恰好越过 30 天保留期，场景 3 误报 FAIL）
+RECENT_DAY="$(python3 -c 'import datetime; print((datetime.date.today()-datetime.timedelta(days=5)).strftime("%Y-%m-%d"))')"
+RECENT_TS="${RECENT_DAY}_120000"       # 本次备份的时间戳（保留期内）
+RECENT_OLD_TS="${RECENT_DAY}_100000"   # 同一天早些时候的旧快照（保留期内）
+
 # ══ 场景 1：嵌套目录必须被完整备份 ═══════════════════════════════════
 echo "── 场景 1: 嵌套目录 .config/ 备份 ──"
 
@@ -108,11 +114,11 @@ echo "── 场景 2: mtime 陈旧的新快照必须保留（prune 按名字判
 setup_fixture
 # 造一个"名字很新但 mtime 是 2020 年"的快照 —— 这正是线上发生的情形：
 # rsync -a 把源目录的 mtime 传播到快照目录，旧实现据此误判为过期。
-mkdir -p "${BACKUP_ROOT}/hermes/2026-09-13_100000"
-touch -t 202001010000 "${BACKUP_ROOT}/hermes/2026-09-13_100000"
-run_backup "2026-09-13_120000"
+mkdir -p "${BACKUP_ROOT}/hermes/${RECENT_OLD_TS}"
+touch -t 202001010000 "${BACKUP_ROOT}/hermes/${RECENT_OLD_TS}"
+run_backup "${RECENT_TS}"
 check "mtime 停在 2020 但名字是今天的快照没有被误删" \
-      "[[ -d '${BACKUP_ROOT}/hermes/2026-09-13_100000' ]]"
+      "[[ -d '${BACKUP_ROOT}/hermes/${RECENT_OLD_TS}' ]]"
 teardown_fixture
 echo
 
@@ -120,15 +126,15 @@ echo
 echo "── 场景 3: 过期快照的清理 ──"
 setup_fixture
 mkdir -p "${BACKUP_ROOT}/hermes/2020-01-01_000000"   # 远超保留期
-mkdir -p "${BACKUP_ROOT}/hermes/2026-09-12_020000"   # 保留期内
+mkdir -p "${BACKUP_ROOT}/hermes/${RECENT_OLD_TS}"    # 保留期内（今天 -5 天）
 mkdir -p "${BACKUP_ROOT}/hermes/latest"
-run_backup "2026-09-13_120000"
+run_backup "${RECENT_TS}"
 check "过期快照 2020-01-01_000000 已清理" \
       "[[ ! -d '${BACKUP_ROOT}/hermes/2020-01-01_000000' ]]"
-check "保留期内快照 2026-09-12_020000 未被误删" \
-      "[[ -d '${BACKUP_ROOT}/hermes/2026-09-12_020000' ]]"
+check "保留期内快照 ${RECENT_OLD_TS} 未被误删" \
+      "[[ -d '${BACKUP_ROOT}/hermes/${RECENT_OLD_TS}' ]]"
 check "latest/ 未被误删" "[[ -d '${BACKUP_ROOT}/hermes/latest' ]]"
-check "本次快照仍在" "[[ -d '${BACKUP_ROOT}/hermes/2026-09-13_120000' ]]"
+check "本次快照仍在" "[[ -d '${BACKUP_ROOT}/hermes/${RECENT_TS}' ]]"
 teardown_fixture
 echo
 

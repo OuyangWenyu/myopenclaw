@@ -7,9 +7,11 @@
   "Ambiguous skill name … Refusing to guess" → cron 预加载被静默跳过
   （`skill not found, skipping`，job last_status 仍显 ok）。
 
-仓库版只有 SKILL.md + test-*.sh、**没有 scripts/**（job prompt 硬编码的
-unread_report.py 只在原生副本里），永远当不了 live 源 —— 该块属历史遗留，
-2026-10-12 已从 wrapper 删除。本测试钉住：
+仓库版不是 live 源：live 始终是 `~/.hermes/skills/devops/morning-briefing`
+原生副本（job prompt 硬编码的 unread_report.py 等只在原生副本里）。仓库版自
+2026-10-13 起同步了日期修复文件（SKILL.md + scripts/{today,cst_today}.py，
+见 docs/hermes-skills.md），但接线块 **不得**因「仓库版更全了」而复活 ——
+它属 PR #16 时代历史遗留，2026-10-12 已从 wrapper 删除。本测试钉住：
   ① morning-briefing 的 symlink 块不得复活；
   ② 其余三个 symlink 块（triage/dev-report/yuque）与 gitcode 拷贝块保留（防误删）；
   ③ 文档已记录谜底（来源 = wrapper，已移除），不再写「尚未查明」。

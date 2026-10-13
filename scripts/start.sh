@@ -674,11 +674,51 @@ if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 
       fi
 
       # ── 工作日晨间简报（待办事务 + 未读邮件，仅工作日）────────
+      # 日期预脚本：cron --script 只认 ~/.hermes/scripts/ 下的路径，stdout 每轮注入 prompt。
+      # ⚠️ 只补缺、不覆盖 —— ~/.hermes 下是 agent 自维护的权威副本，仓库版只是版本源/种子
+      #    （2026-10-12 symlink 覆盖事故、2026-10-13 日期误判事故的教训）。
+      if [ ! -f "${HOME}/.hermes/scripts/cst_today.py" ]; then
+        install -m 644 "${REPO_ROOT}/skills/morning-briefing/scripts/cst_today.py" \
+          "${HOME}/.hermes/scripts/cst_today.py" && \
+          echo "   📋 日期预脚本 cst_today.py 已就位 (~/.hermes/scripts/)" || \
+          echo "   ⚠️  日期预脚本安装失败（job 的 --script 将找不到它）"
+      fi
       EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "工作日晨间简报" || true)
       if [ "${EXISTING:-0}" -lt 1 ]; then
+        # prompt 全文种子（含「邮件铁律」与「第一步：先查日期」）——新部署的唯一来源；
+        # 已存在的 job 不会被覆盖，线上 prompt 的权威副本在 ~/.hermes/cron/jobs.json。
+        MORNING_BRIEFING_PROMPT=$(cat <<'MORNING_BRIEFING_PROMPT_EOF'
+执行 morning-briefing 技能生成晨间简报。收集待办事务和未读邮件，按 SKILL.md 中的规则筛选和呈现。
+
+⛔ 邮件铁律（用户 2026-09-15 明确要求，不可妥协）：
+「邮件规整的时候读所有未读邮件，不要嫌麻烦，我不能错过任何一个未读的邮件。」
+
+- 必须一次性拉全 DLUT + QQ + Outlook 三个邮箱的**所有未读**，用：
+  python3 /opt/data/skills/devops/morning-briefing/scripts/unread_report.py
+- 严禁用 `himalaya envelope list --page-size 15` 这类「最近N封」的窗口代替未读筛选——那跟已读/未读无关，会漏掉更早的未读邮件。
+- 简报里先把三个邮箱各自的**未读总数**和合计报出来，再逐条列出全部「需关注」邮件（含历史积压，积压的也要列，可压缩但不能省略）。推送类按「发件人 × N」聚合即可。
+- editorialmanager（审稿系统）的邮件不算推送，必须逐条列出。
+
+⛔ 第一步（不可跳过，不可凭直觉）：确认北京时间今天几号、星期几
+
+```bash
+python3 /opt/data/skills/devops/morning-briefing/scripts/today.py
+python3 /opt/data/skills/devops/morning-briefing/scripts/today.py --check-weekend   # 退出码 0=工作日 1=周末
+echo $?
+```
+
+- 退出码 **0** → 今天（北京时间）是工作日，**必须**正常采集并发送简报。
+- 退出码 **1** → 才回「今天是周末，没有晨间简报。好好休息！🌴」，不做数据采集。
+- 简报标题的日期用脚本输出的北京时间日期；事务「已逾期/今日截止/本周」的分档也用它。
+- 容器时区是 UTC，本任务在北京时间 07:30 触发（= 前一天 23:30 UTC）。**千万不要自己推算星期几。**
+  2026-10-13 07:30 CST 那期就是代理没查日期、凭感觉断言「今天是周末」，把整期简报吞了，用户当天追问。
+- 判定完把脚本输出原样贴一句作为凭据（例如「今天：2026年10月13日 星期二 ← 工作日」）。
+MORNING_BRIEFING_PROMPT_EOF
+)
         docker compose exec -T hermes "${HERMES_BIN}" cron create \
           "30 23 * * 0-4" \
-          "执行 morning-briefing 技能生成晨间简报。收集待办事务和未读邮件，按 SKILL.md 中的规则筛选和呈现。今天是工作日，正常发送。" \
+          "${MORNING_BRIEFING_PROMPT}" \
+          --script cst_today.py \
           --deliver "${DELIVER}" \
           --name "工作日晨间简报" 2>/dev/null && \
           echo "   📋 工作日晨间简报 cron job 已注册 (工作日 7:30 北京)" || \

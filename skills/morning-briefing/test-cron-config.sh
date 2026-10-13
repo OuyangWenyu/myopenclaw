@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Test: Cron job 260cdd03f97e uses skill not script, config is valid
+# Test: Cron job 260cdd03f97e 配置有效（skill + 日期预脚本）
+# 2026-10-13 起：job 必须挂 cst_today.py —— 星期几只认脚本输出，代理不得凭直觉断言
+# （当日 07:30 那期就是没查日期、误判成周末，把整期简报吞了）。
 set -euo pipefail
 
 JOBS_FILE="${HOME}/.hermes/cron/jobs.json"
@@ -38,15 +40,18 @@ ids = [j['id'] for j in data['jobs']]
 assert '$JOB_ID' in ids, f'Job $JOB_ID not found in {ids}'
 \" 2>&1"
 
-# 3. Job has skills field (not script)
-check "Job has 'skills' field (not 'script')" \
+# 3. Job has skills field + 日期预脚本
+check "Job has 'skills' field + date pre-script" \
     "python3 -c \"
 import json
 data = json.load(open('$JOBS_FILE'))
 job = next(j for j in data['jobs'] if j['id'] == '$JOB_ID')
 assert 'skills' in job, 'skills field missing'
-assert 'script' not in job or job.get('script') is None, 'script field should be removed'
+assert job.get('script') == 'cst_today.py', f'script is {job.get(\"script\")!r}, want cst_today.py'
 \" 2>&1"
+
+check "Pre-script exists at ~/.hermes/scripts/cst_today.py" \
+    "test -f \"\$HOME/.hermes/scripts/cst_today.py\""
 
 # 4. skills includes morning-briefing
 check "Skills includes 'morning-briefing'" \
@@ -66,13 +71,13 @@ job = next(j for j in data['jobs'] if j['id'] == '$JOB_ID')
 assert job.get('enabled') == True, f'enabled is {job.get(\"enabled\")}'
 \" 2>&1"
 
-# 6. Job schedule is weekday mornings
-check "Schedule is 0 0 * * 1-5 (weekdays)" \
+# 6. Job schedule is weekday mornings (UTC 周日–周四 23:30 = 北京周一–周五 07:30)
+check "Schedule is 30 23 * * 0-4 (北京周一至周五 07:30)" \
     "python3 -c \"
 import json
 data = json.load(open('$JOBS_FILE'))
 job = next(j for j in data['jobs'] if j['id'] == '$JOB_ID')
-assert job['schedule']['expr'] == '0 0 * * 1-5', f'schedule is {job[\"schedule\"][\"expr\"]}'
+assert job['schedule']['expr'] == '30 23 * * 0-4', f'schedule is {job[\"schedule\"][\"expr\"]}'
 \" 2>&1"
 
 echo ""
