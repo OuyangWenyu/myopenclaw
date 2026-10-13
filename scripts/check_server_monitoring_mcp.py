@@ -48,7 +48,10 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = REPO_ROOT / ".env.tianyi-bot"
 DEFAULT_CA = REPO_ROOT / "docker" / "tianyi-bot" / "ca" / "server-monitoring-ca.pem"
 
-# 服务端注册的 9 个只读工具（缺一个 = 服务端升级了而客户端策略没跟上）
+# 客户端策略依赖的 9 个核心只读工具：**缺任何一个 = 失败**（AGENTS.md 纪律与既有验收
+# 清单引用了它们）。服务端新增、客户端尚未纳入策略的工具**不算失败**，在 detail 里列出
+# 提示 —— 2026-10-13 实测服务端已扩到 12 个（+list_projects/get_project_overview/
+# get_project_build，CI/Jenkins 层），等待与维护者对齐后再决定是否纳入客户端。
 EXPECTED_TOOLS = frozenset({
     "list_servers",
     "get_server_status",
@@ -285,11 +288,15 @@ async def check_mcp(url: str, token: str, ca_path: Path, server_name: str,
                     names = {t.name for t in tools.tools}
                     missing = sorted(EXPECTED_TOOLS - names)
                     extra = sorted(names - EXPECTED_TOOLS)
-                    if names == EXPECTED_TOOLS:
-                        record(checks, "tools_list", True, "9/9 工具齐全")
-                    else:
+                    if missing:
                         record(checks, "tools_list", False,
-                               f"缺失 {missing or '无'}；多出 {extra or '无'}")
+                               f"缺失 {missing}（服务端升级丢工具，或客户端策略未跟上？）；"
+                               f"服务端另有：{extra or '无'}")
+                    else:
+                        note = "9/9 核心工具齐全"
+                        if extra:
+                            note += f"；服务端另有 {len(extra)} 个未纳入客户端策略的工具（仅提示）：{extra}"
+                        record(checks, "tools_list", True, note)
 
                     res = await session.call_tool("list_servers", {})
                     payload = extract_payload(res)
