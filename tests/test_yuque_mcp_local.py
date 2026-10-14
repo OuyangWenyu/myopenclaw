@@ -154,7 +154,10 @@ class TestEnvExampleShape:
     def test_tianyi_example_points_at_local_service(self):
         example = (REPO_ROOT / ".env.tianyi-bot.example").read_text()
         assert "TIANYI_BOT_YUQUE_MCP_URL=http://yuque-mcp:18001/sse" in example
-        assert "10.48.0.81" not in example
+        # 公开模板不得残留任何真实内网地址。2026-10-13 前 server-monitoring 行曾用
+        # 真实 IP 并把这句放宽到「只查 YUQUE 行」；改为 <MCP_HOST> 占位符后恢复全量
+        # 断言（真实地址以 docs/server-monitoring-mcp.md 为准）。
+        assert "10.48.0.81" not in example, "模板不得残留校内地址"
 
 
 class TestLiveEnvSwitched:

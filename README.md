@@ -21,6 +21,7 @@
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |
 | Google Drive | rclone 直连云端上传论文 PDF | — |
 | 语雀知识库 | 本机 yuque-mcp 服务（Hermes + 天一接入；读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
+| 服务器监控 | 天一接入团队 server-monitoring MCP（HTTPS + Bearer + 内网 CA，12 个只读工具：9 运行 + 3 交付/CI） | [server-monitoring](https://gitcode.com/dlut-water/server-monitoring) |
 | 千问办公 AI听记 | 爱玛士远程 MCP（OAuth，仅默认 profile）：听记列表 / AI 摘要 / 待办 / 转写查询与整理 | — |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 + AgentOps 健康采集 | — |
@@ -120,7 +121,7 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 | backup-cron | — | 主栈 | 定时快照备份 |
 | zhixun-water-mcp | 18201 | zhixun 栈 | 水文 MCP（43 tools），兼容 zhixun-core v2 |
 | openclaw-zhixun | 18791 | zhixun 栈 | 知汛助手 — OpenClaw 飞书 bot（独立网络 + 数据目录） |
-| openclaw-tianyi | 18792 | tianyi 栈 | 天一研发助手 — OpenClaw 飞书 bot（共享主栈网络，复用 repo-scanner-mcp，gh/gc 写 GitHub/GitCode issue） |
+| openclaw-tianyi | 18792 | tianyi 栈 | 天一研发助手 — OpenClaw 飞书 bot（共享主栈网络，复用 repo-scanner-mcp，gh/gc 写 GitHub/GitCode issue；可选接入 server-monitoring 监控 MCP） |
 
 ## 目录结构
 
@@ -142,7 +143,7 @@ myopenclaw/
 │   ├── repo-scanner-mcp/             #   研发日报 MCP
 │   ├── zotero-mcp/                   #   Zotero 文献 MCP（mylibrary 源码）
 │   ├── zhixun-bot/                   #   zhixun 水文 MCP + 兼容层
-│   └── tianyi-bot/                   #   tianyi bot entrypoint + 配置模板 + 渲染脚本
+│   └── tianyi-bot/                   #   tianyi bot entrypoint + 配置模板 + 渲染脚本 + 内网 CA（ca/）
 ├── openclaw-zhixun/workspace/        # zhixun bot agent 策略文件（AGENTS.md, SOUL.md）
 ├── openclaw-tianyi/workspace/        # tianyi bot agent 策略文件（AGENTS.md, SOUL.md）
 ├── hermes/                           # Hermes 配置模板 + 备份脚本
@@ -166,6 +167,7 @@ myopenclaw/
 - [可移植性](https://ouyangwenyu.github.io/myopenclaw/portability/) — 换电脑需要准备什么
 - [备份系统](https://ouyangwenyu.github.io/myopenclaw/backup/) — 备份内容、恢复流程
 - [语雀知识库接入](https://ouyangwenyu.github.io/myopenclaw/yuque-mcp-hermes/) — Hermes 接入本机语雀 MCP 服务（含每日变更推送 yuque-daily-digest）
+- [服务器监控 MCP](https://ouyangwenyu.github.io/myopenclaw/server-monitoring-mcp/) — 天一接入团队 server-monitoring（只读监控：服务器/容器/GFS；启用、回退与核对 CA）
 
 本地预览文档：
 
