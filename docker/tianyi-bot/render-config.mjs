@@ -85,8 +85,10 @@ if (!serverMonitoringUrl) {
 }
 
 // ⚠️ 不要给 channels.feishu 加 execApprovals —— 2026.9.1 的飞书 schema 拒绝该键
-// （真校验器实测 "must not have additional properties"；飞书原生审批卡是上游
-// 未发布功能，PR #60328）。审批体验走顶层 approvals.exec 转发（见模板）。
+// （真校验器实测 "must not have additional properties"；飞书原生审批卡是上游未发布
+// 功能，canonical 跟踪 openclaw/openclaw#104521）。审批体验走 `tools.exec.mode:
+// "auto"`（白名单直通 + 审查员兜底，见模板）；**不要**再加 approvals.exec 转发——
+// 它会制造审批路由、绕过 #108935 的 askFallback 内联快速路径，导致队列级卡死。
 // 守卫：tests/test_server_monitoring_mcp.py::TestExecApprovalsApprover。
 
 const temporaryPath = `${outputPath}.tmp`;

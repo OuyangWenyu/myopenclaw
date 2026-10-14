@@ -294,14 +294,16 @@ class TestDigestAutomation:
 
 
 class TestExecApprovalsApprover:
-    """审批体验修复（2026-10-14）：飞书在 2026.9.1 **不是**原生态审批渠道。
+    """审批体验修复（2026-10-14 最终版）：飞书在 2026.9.1 **不是**原生态审批渠道。
 
-    实证链：真校验器拒绝 `channels.feishu.execApprovals`（must not have additional
-    properties）；上游 Issue #69860 / PR #60328 是"飞书原生审批按钮卡"的在途功能，
-    尚未合并。因此：
-    - 负向守卫：任何人再给 channels.feishu 加 execApprovals 都会被 schema 拒绝（别加）；
-    - 破局点 = 顶层 `approvals.exec` 转发：工具立即返回审批 id、pending 活 30 分钟、
-      批复后会话被唤醒执行——把 ~10s（yieldMs）的回合内窗口变成人类尺度。
+    实证链（全部有出处）：
+    - 真校验器拒绝 `channels.feishu.execApprovals`（must not have additional properties）；
+      上游六次飞书审批卡 PR 全部关闭未合并，canonical 跟踪 = openclaw/openclaw#104521；
+    - 顶层 `approvals.exec` 转发是**错误尝试**并已回退：它制造一条"审批路由"，绕过上游
+      7 月修复 #108935 的"no-route → askFallback 秒级内联生效"快速路径 → 审批转为
+      "等人类" → 阻塞每会话队列 → 撞 300s 上限被驱逐（实测 229-312s 卡死、消息被吞）；
+    - 正解 = `tools.exec.mode: "auto"`：白名单直通；未命中先过自动审查员（低风险放行/
+      有风险拒绝），回合秒级完成——不再需要任何人工审批界面。
     """
 
     def test_feishu_channel_must_not_carry_exec_approvals_key(self):
@@ -310,20 +312,29 @@ class TestExecApprovalsApprover:
             "2026.9.1 飞书 schema 拒绝该键（真校验器实证）——飞书原生审批是上游未发布功能"
         )
 
-    def test_template_forwarding_makes_approvals_async(self):
-        """approvals.exec 转发：把 ~10s 的回合内等待窗变成 30 分钟的人类尺度窗口。"""
+    def test_template_must_not_carry_approvals_forwarding(self):
+        """负向守卫：`approvals.exec` 转发制造路由 → 等待人类 → 300s 队列驱逐（实测事故）。"""
         template = json.loads(TEMPLATE_PATH.read_text())
-        approval = template["approvals"]["exec"]
-        assert approval["enabled"] is True
-        assert approval["mode"] == "session", "session = 投递回发起会话（天一的飞书私聊）"
+        assert "approvals" not in template, (
+            "不要再加 approvals.exec 转发——它会绕过 #108935 的 askFallback 内联快速路径，"
+            "在无审批 UI 的飞书渠道造成队列级卡死（2026-10-14 实测）"
+        )
+
+    def test_template_exec_mode_is_auto(self):
+        """2026-10-14 决策：tools.exec.mode ask→auto。
+        无 UI 渠道下'等人工'必然死；auto = 白名单直通 + 审查员对低风险未命中放行。
+        """
+        template = json.loads(TEMPLATE_PATH.read_text())
+        assert template["tools"]["exec"]["mode"] == "auto"
 
     @pytest.mark.skipif(NODE is None, reason="宿主机无 node，跳过渲染器行为测试")
-    def test_rendered_config_has_no_feishu_exec_approvals(self, tmp_path):
+    def test_rendered_config_shape(self, tmp_path):
         proc, out = render(tmp_path, {})
         assert proc.returncode == 0, proc.stderr
         config = json.loads(out.read_text())
         assert "execApprovals" not in config["channels"]["feishu"]
-        assert config["approvals"]["exec"]["mode"] == "session"
+        assert "approvals" not in config
+        assert config["tools"]["exec"]["mode"] == "auto"
 
 
 class TestCronJobIdExtractor:
@@ -387,6 +398,21 @@ class TestAgentPolicy:
         assert "read-only" in AGENTS_MD
         assert "gfs-visualization" in AGENTS_MD, "GFS 主 worker 与可视化要分开 —— 别让模型合并报"
         assert "UNKNOWN" in AGENTS_MD
+
+    def test_agents_md_exec_guidance_matches_mode_auto(self):
+        """2026-10-14 复核实锤：AGENTS.md 的 exec 指引必须与 `tools.exec.mode=auto` 同口径。
+
+        旧文案（"approvals are effectively broken… 非白名单命令说'不能跑'"）写于
+        mode=auto 之前的凌晨；放行路径已改由自动审查员承担，旧文案会让模型拒绝
+        本可成功的命令（实测 uname / python3 -c 均在审查员放行之列），恰好抵消修复。
+        """
+        assert "auto reviewer" in AGENTS_MD, "指引应写明：非白名单命令走自动审查员"
+        assert "effectively broken" not in AGENTS_MD, (
+            "旧口径（'approvals are effectively broken…'）已废弃"
+            "（mode=auto 下低风险命令可跑）——注意别用 'cannot run here' 做断言："
+            "新文案在『不要这样说』的否定句里合法地引用了它"
+        )
+        assert "attempt" in AGENTS_MD.lower(), "指引应为『直接尝试，被拒再解释』"
 
 
 @pytest.mark.skipif(NODE is None, reason="宿主机无 node")

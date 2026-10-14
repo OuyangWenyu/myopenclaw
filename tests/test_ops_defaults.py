@@ -81,6 +81,10 @@ class TestOpenclawExecDefault:
 
     **zhixun 不需要 exec 段**（故不在此测试内）：它是 `messaging` profile，`exec` 工具
     不属于该 profile；且 agent 级 `tools.allow` 只有 `["bundle-mcp"]` —— exec 根本不可达。
+
+    **tianyi 已于 2026-10-14 另立档位 `auto`**（无人工审批 UI 的飞书渠道；完整理由链见
+    `tests/test_server_monitoring_mcp.py::TestExecApprovalsApprover`），由下方专属测试钉住。
+    上面这条"不得比线上更松"的推理仍适用于主模板（虾酱）。
     """
 
     @staticmethod
@@ -101,8 +105,19 @@ class TestOpenclawExecDefault:
     def test_main_template_exec_matches_hardened_value(self):
         self._assert_hardened(self._exec_of(OPENCLAW_EXAMPLE), "主模板 openclaw.json.example")
 
-    def test_tianyi_template_exec_matches_hardened_value(self):
-        self._assert_hardened(self._exec_of(TIANYI_TEMPLATE), "tianyi 模板")
+    def test_tianyi_template_exec_mode_is_auto_by_design(self):
+        """tianyi 自 2026-10-14 刻意用 `auto`（不是 ask）——与主模板/虾酱分开。
+
+        理由链见 tests/test_server_monitoring_mcp.py::TestExecApprovalsApprover：
+        飞书非原生审批渠道 + 无人工审批 UI ⇒ `ask` 档的"等人工"必然撞 300s 队列上限
+        （实测事故）；`auto` = 白名单直通 + 审查员对低风险未命中放行，回合秒级完成。
+        本守卫钉的是"**刻意**"：改回 ask 或滑向 full 都会变红，必须重新论证。
+        """
+        exec_cfg = self._exec_of(TIANYI_TEMPLATE)
+        assert exec_cfg is not None, "tianyi 模板没有 exec 段——coding profile 的默认最松"
+        assert exec_cfg.get("mode") == "auto", (
+            f"tianyi exec.mode 是 {exec_cfg.get('mode')!r}，应为 'auto'（刻意的无 UI 渠道档位）"
+        )
 
 
 class TestPaperQueueWiring:

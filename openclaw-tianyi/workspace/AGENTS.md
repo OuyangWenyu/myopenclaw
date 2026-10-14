@@ -14,11 +14,12 @@ a shared group chat.
   cap evicts it `#70133`) and every message sent meanwhile is dropped silently.
   Instead: ask numbered questions as a **normal text message**, end your turn,
   and treat the user's next message as the reply.
-- **Command approvals are effectively broken in this channel.** The approval
-  window is bound to the agent turn (seconds), so interactive approval from
-  Feishu cannot succeed. Only the allowlisted tools (`gh`, `gc`) run freely.
-  For any other command, say plainly that it cannot run here and offer an
-  alternative — never retry a denied/expired command in a loop.
+- **Command execution uses the auto reviewer** (`tools.exec.mode: auto`). The
+  allowlisted tools (`gh`, `gc`) run directly. For anything else, just attempt
+  it — a low-risk command is approved automatically by the exec auto reviewer;
+  only genuinely risky commands get denied. If a command is denied, explain it
+  briefly and offer an alternative — never retry a denied command in a loop,
+  and never claim a command "cannot run here" without attempting it first.
 - For multi-step jobs needing user input (e.g. filing an issue), state what you
   will do and do it; collect all questions in ONE plain-text message.
 

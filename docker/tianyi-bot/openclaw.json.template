@@ -66,13 +66,7 @@
   "tools": {
     "profile": "coding",
     "exec": {
-      "mode": "ask"
-    }
-  },
-  "approvals": {
-    "exec": {
-      "enabled": true,
-      "mode": "session"
+      "mode": "auto"
     }
   },
   "mcp": {
