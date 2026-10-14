@@ -52,7 +52,7 @@ _ALLOWED_EMAIL_DOMAINS = frozenset({"example.com", "example.org", "example.net"}
 
 
 def _public_markdown_files():
-    for base in ("skills", "docs"):
+    for base in ("skills", "docs", ".claude/prds"):
         yield from (REPO_ROOT / base).rglob("*.md")
     yield from REPO_ROOT.glob("*.md")
 
@@ -78,7 +78,7 @@ def test_no_personal_emails_in_public_docs():
 # 邮箱守卫拦不住用户名：server-monitoring 接入文档曾把服务器部署账号路径
 # （~qupengfei/.config/...）写进 docs/。出现服务器上的部署账号一律匿名化为
 # 「维护者私有目录」之类表述；确需指名时先进本清单（一行）并说明理由。
-_INTERNAL_USERNAMES = ("qupengfei",)
+_INTERNAL_USERNAMES = ("qupengfei", "gaoyu", "zhaoyubo")
 
 
 def test_no_internal_usernames_in_public_docs():

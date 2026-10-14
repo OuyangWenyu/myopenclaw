@@ -1,6 +1,6 @@
 # Linux 服务器部署配置指南
 
-> 服务器：`10.48.0.81` | 部署用户：`gaoyu` | 项目路径：`/home/gaoyu/source_code/myopenclaw`
+> 服务器：`10.48.0.81` | 部署用户：`<deploy-user>` | 项目路径：`/home/<deploy-user>/source_code/myopenclaw`
 
 > ⚠️ **本页是那台服务器上早期部署的记录，不是仓库现状。** 仓库当前的 `docker-compose.yml` 是
 > 16 个服务 + profile-gated `openclaw-cli`（另有 zhixun / tianyi 两个独立 bot 栈），下面几节的
@@ -26,18 +26,18 @@ backup-cron       -       定时快照备份（默认每天凌晨 2:00）
 
 | 宿主机路径 | 容器内路径 | 说明 |
 |-----------|-----------|------|
-| `/home/gaoyu/.hermes` | `/opt/data` | Hermes 主数据目录（home） |
-| `/home/gaoyu/.config/gh` | `/opt/gh-config` | gh CLI 认证信息 |
-| `/home/gaoyu/.config/opencode` | `/opt/opencode-config` | opencode 配置 |
-| `/home/gaoyu/.claude` | `/opt/claude-config` | Claude Code 配置 |
+| `/home/<deploy-user>/.hermes` | `/opt/data` | Hermes 主数据目录（home） |
+| `/home/<deploy-user>/.config/gh` | `/opt/gh-config` | gh CLI 认证信息 |
+| `/home/<deploy-user>/.config/opencode` | `/opt/opencode-config` | opencode 配置 |
+| `/home/<deploy-user>/.claude` | `/opt/claude-config` | Claude Code 配置 |
 | `./hermes/mcp/` | `/opt/mcp`（只读） | MCP server 脚本（**仓库里已无此目录**，见下方 MCP 一节） |
 
 ### openclaw-gateway 容器挂载
 
 | 宿主机路径 | 容器内路径 | 说明 |
 |-----------|-----------|------|
-| `/home/gaoyu/.openclaw` | `/home/node/.openclaw` | OpenClaw 数据（含 SQLite DB） |
-| `/home/gaoyu/.config/gc` | `/home/node/.config/gc` | GitCode CLI 配置 |
+| `/home/<deploy-user>/.openclaw` | `/home/node/.openclaw` | OpenClaw 数据（含 SQLite DB） |
+| `/home/<deploy-user>/.config/gc` | `/home/node/.config/gc` | GitCode CLI 配置 |
 
 ### backup-cron 容器挂载
 
@@ -50,24 +50,24 @@ backup-cron       -       定时快照备份（默认每天凌晨 2:00）
 
 | 宿主机路径 | 容器内路径 | 说明 |
 |-----------|-----------|------|
-| `/home/gaoyu/.hermes` | `/root/.hermes`（只读） | Hermes 数据快照源 |
-| `/home/gaoyu/.hermes/cron` | `/root/.hermes/cron`（可写） | cron 活库热备：executions.db 是 WAL，读者要写 `-shm` |
-| `/home/gaoyu/.openclaw` | `/root/.openclaw`（只读） | OpenClaw 数据快照源 |
-| `/home/gaoyu/.myagentdata` | `/.myagentdata`（只读） | agent 附加数据快照源 |
-| `/home/gaoyu/.myagentdata/`{paper-queue,tdai-memory,repo-scanner} | `/.myagentdata/<同名>`（可写） | WAL 库热备：读者也要写 `-shm`，只读挂载连 SELECT 都打不开 |
+| `/home/<deploy-user>/.hermes` | `/root/.hermes`（只读） | Hermes 数据快照源 |
+| `/home/<deploy-user>/.hermes/cron` | `/root/.hermes/cron`（可写） | cron 活库热备：executions.db 是 WAL，读者要写 `-shm` |
+| `/home/<deploy-user>/.openclaw` | `/root/.openclaw`（只读） | OpenClaw 数据快照源 |
+| `/home/<deploy-user>/.myagentdata` | `/.myagentdata`（只读） | agent 附加数据快照源 |
+| `/home/<deploy-user>/.myagentdata/`{paper-queue,tdai-memory,repo-scanner} | `/.myagentdata/<同名>`（可写） | WAL 库热备：读者也要写 `-shm`，只读挂载连 SELECT 都打不开 |
 | `${BACKUP_ROOT}` | `/backup` | 快照写入目标（云盘挂载点） |
 
-**重要**：必须以 `gaoyu` 身份运行 `docker compose`，否则 `${HOME}` 变为 `/root`，导致数据挂载到错误目录。
+**重要**：必须以 `<deploy-user>` 身份运行 `docker compose`，否则 `${HOME}` 变为 `/root`，导致数据挂载到错误目录。
 
-**容器内文件权限**：hermes 服务进程以 UID `10000` 运行，其创建的文件在宿主机上显示为 UID 10000（非具名用户）；hermes 内的 bash 子进程以 root 运行，其创建的文件在宿主机显示为 root。操作 `~/.hermes/` 下非 gaoyu 所属的文件均需 `sudo`。
+**容器内文件权限**：hermes 服务进程以 UID `10000` 运行，其创建的文件在宿主机上显示为 UID 10000（非具名用户）；hermes 内的 bash 子进程以 root 运行，其创建的文件在宿主机显示为 root。操作 `~/.hermes/` 下非 <deploy-user> 所属的文件均需 `sudo`。
 
 ---
 
 ## 首次部署
 
 ```bash
-# 以 gaoyu 身份在宿主机执行
-cd /home/gaoyu/source_code/myopenclaw
+# 以 <deploy-user> 身份在宿主机执行
+cd /home/<deploy-user>/source_code/myopenclaw
 
 # 1. 创建环境变量文件
 cp .env.example .env
@@ -98,7 +98,7 @@ docker compose logs -f hermes
 
 ### `.env` 文件
 
-路径：`/home/gaoyu/source_code/myopenclaw/.env`
+路径：`/home/<deploy-user>/source_code/myopenclaw/.env`
 
 ```bash
 # ZAI / 智谱 GLM（同时作为 Claude Code 的 ANTHROPIC_API_KEY 使用）
@@ -121,20 +121,20 @@ GITCODE_TOKEN=gitcode_xxxxx
 
 ### Hermes 内部凭证库 `auth.json`
 
-路径：`/home/gaoyu/.hermes/auth.json`（**UID 10000 所属，需 sudo**）
+路径：`/home/<deploy-user>/.hermes/auth.json`（**UID 10000 所属，需 sudo**）
 
 存储 Hermes 自身使用的 provider credentials。ZAI/GLM key 在 `credential_pool.zai`。
 
 ```bash
 # 查看 ZAI 凭证
-sudo python3 -c "import json; d=json.load(open('/home/gaoyu/.hermes/auth.json')); print(json.dumps(d['credential_pool'].get('zai'), indent=2))"
+sudo python3 -c "import json; d=json.load(open('/home/<deploy-user>/.hermes/auth.json')); print(json.dumps(d['credential_pool'].get('zai'), indent=2))"
 ```
 
 ---
 
 ## Hermes 模型配置
 
-文件：`/home/gaoyu/.hermes/config.yaml`（**UID 10000 所属，需 sudo**）
+文件：`/home/<deploy-user>/.hermes/config.yaml`（**UID 10000 所属，需 sudo**）
 
 ```yaml
 model_config:
@@ -358,7 +358,7 @@ docker compose exec openclaw-gateway gc auth status
 ## 日常运维
 
 ```bash
-# 以 gaoyu 身份，在项目目录执行
+# 以 <deploy-user> 身份，在项目目录执行
 
 # 启动 / 重启
 ./scripts/start.sh
@@ -372,8 +372,8 @@ docker compose logs -f openclaw-gateway
 ./scripts/stop.sh
 
 # 修改 Hermes 配置（UID 10000 所属，需 sudo）
-sudo nano /home/gaoyu/.hermes/config.yaml
-sudo nano /home/gaoyu/.hermes/auth.json
+sudo nano /home/<deploy-user>/.hermes/config.yaml
+sudo nano /home/<deploy-user>/.hermes/auth.json
 
 # 手动备份
 docker compose exec backup-cron /scripts/backup-all-docker.sh
@@ -386,7 +386,7 @@ docker compose exec backup-cron /scripts/backup-all-docker.sh
 ### 代码更新 / 镜像重建
 
 ```bash
-cd /home/gaoyu/source_code/myopenclaw
+cd /home/<deploy-user>/source_code/myopenclaw
 
 # 拉取最新代码
 git pull
@@ -406,7 +406,7 @@ git pull
 | 问题 | 原因 | 解决方案 |
 |------|------|----------|
 | `command: uv` 报 not found | Hermes 子进程 PATH 不含 `/usr/local/bin` | 改为 `command: /usr/local/bin/uv` |
-| 数据挂载到 `/root/.hermes` | 以 root 身份执行了 `docker compose` | 改为 `gaoyu` 用户执行 |
+| 数据挂载到 `/root/.hermes` | 以 root 身份执行了 `docker compose` | 改为 `<deploy-user>` 用户执行 |
 | `config.yaml` / `auth.json` 无法直接编辑 | 文件 owner 是 UID 10000 或 root（容器进程创建） | 用 `sudo` 操作，或写 Python 脚本 scp 到服务器执行 |
 | DeepSeek v4 多轮对话 400 错误 | 推理模型返回 `reasoning_content`，Hermes 重发时 API 报错 | 使用 ZAI GLM 等标准模型，避免 DeepSeek 推理模型 |
 | `/model` 命令更改不持久 | 仅改当前 CLI session，不影响 gateway | 必须修改 `config.yaml` + `docker restart hermes` |
