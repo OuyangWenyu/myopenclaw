@@ -182,5 +182,5 @@ Mac 主栈验收完成后在此追加带日期的记录（先例：`docs/zhixun-
 | agent 能力（openclaw agent 回合） | ✅ 6 次调用 0 失败，按 AGENTS.md 纪律先总览后下钻；回答兑现 UNKNOWN≠健康、主/可视化分开、盘告警聚合 |
 | 反向用例（未注册服务器名） | ✅ 如实答"不在已注册服务器里……UNKNOWN 不等于健康，不会用其他机器数据替代" |
 | 回退演练 | ✅ 关闭：条目消失、probe 报 "No MCP server named"、repo-scanner 不受影响；恢复：12 工具、飞书 ws 重连 |
-| 飞书真实提问（DM） | ⏳ 待补 —— 2026-10-14 hermes 容器重建（飞书卡片工作）丢了 lark-cli user token，重授权后补测 |
+| 飞书真实提问（DM） | ✅ 2026-10-14 用户真实客户端提问 → 天一以 interactive 卡片回复：服务器状态表 + forecast-system 容器下钻 + GFS 三件套（主/可视化/数据库边界）+ zhixun-core CI #38（477/477）与生产 CD receipt 分开报，并主动指出 **"CI 最新构建 ≠ 当前已部署版本"**（SHA 不一致）——服务端验收表中最刁钻的口径题被正确兑现 |
 | 部署期修复（意外收获） | 首启竞态：某 root 上下文进程抢建 root:700 的 `/home/node/.cache` → node gateway "SQLite read-only worker Unsafe fallback" crash-loop（重启复用容器可写层，永不恢复）。entrypoint 预建 node 属主 `.cache` + 守卫测试 `test_precreates_node_owned_cache_dir`；受控实验（快照镜像 A/B）验证 |
