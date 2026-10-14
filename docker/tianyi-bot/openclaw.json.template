@@ -69,6 +69,12 @@
       "mode": "ask"
     }
   },
+  "approvals": {
+    "exec": {
+      "enabled": true,
+      "mode": "session"
+    }
+  },
   "mcp": {
     "servers": {
       "repo-scanner": {

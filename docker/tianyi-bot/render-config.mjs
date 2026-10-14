@@ -84,6 +84,11 @@ if (!serverMonitoringUrl) {
   );
 }
 
+// ⚠️ 不要给 channels.feishu 加 execApprovals —— 2026.9.1 的飞书 schema 拒绝该键
+// （真校验器实测 "must not have additional properties"；飞书原生审批卡是上游
+// 未发布功能，PR #60328）。审批体验走顶层 approvals.exec 转发（见模板）。
+// 守卫：tests/test_server_monitoring_mcp.py::TestExecApprovalsApprover。
+
 const temporaryPath = `${outputPath}.tmp`;
 fs.writeFileSync(temporaryPath, `${JSON.stringify(config, null, 2)}\n`, {
   mode: 0o600,

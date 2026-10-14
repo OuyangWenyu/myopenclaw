@@ -293,6 +293,39 @@ class TestDigestAutomation:
         assert "TIANYI_BOT_MONITORING_DIGEST_CRON" in ENV_EXAMPLE
 
 
+class TestExecApprovalsApprover:
+    """审批体验修复（2026-10-14）：飞书在 2026.9.1 **不是**原生态审批渠道。
+
+    实证链：真校验器拒绝 `channels.feishu.execApprovals`（must not have additional
+    properties）；上游 Issue #69860 / PR #60328 是"飞书原生审批按钮卡"的在途功能，
+    尚未合并。因此：
+    - 负向守卫：任何人再给 channels.feishu 加 execApprovals 都会被 schema 拒绝（别加）；
+    - 破局点 = 顶层 `approvals.exec` 转发：工具立即返回审批 id、pending 活 30 分钟、
+      批复后会话被唤醒执行——把 ~10s（yieldMs）的回合内窗口变成人类尺度。
+    """
+
+    def test_feishu_channel_must_not_carry_exec_approvals_key(self):
+        template = json.loads(TEMPLATE_PATH.read_text())
+        assert "execApprovals" not in template["channels"]["feishu"], (
+            "2026.9.1 飞书 schema 拒绝该键（真校验器实证）——飞书原生审批是上游未发布功能"
+        )
+
+    def test_template_forwarding_makes_approvals_async(self):
+        """approvals.exec 转发：把 ~10s 的回合内等待窗变成 30 分钟的人类尺度窗口。"""
+        template = json.loads(TEMPLATE_PATH.read_text())
+        approval = template["approvals"]["exec"]
+        assert approval["enabled"] is True
+        assert approval["mode"] == "session", "session = 投递回发起会话（天一的飞书私聊）"
+
+    @pytest.mark.skipif(NODE is None, reason="宿主机无 node，跳过渲染器行为测试")
+    def test_rendered_config_has_no_feishu_exec_approvals(self, tmp_path):
+        proc, out = render(tmp_path, {})
+        assert proc.returncode == 0, proc.stderr
+        config = json.loads(out.read_text())
+        assert "execApprovals" not in config["channels"]["feishu"]
+        assert config["approvals"]["exec"]["mode"] == "session"
+
+
 class TestCronJobIdExtractor:
     """cron-job-id.mjs（OFF 态回收用的 id 提取器）行为单测。"""
 
