@@ -147,6 +147,28 @@ RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config /opt/gitcode-c
 # opencode respects OPENCODE_CONFIG_DIR to find its config
 ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
 
+# ── LaTeX 公式渲染（Feishu 公式→图片流水线）──────────────────
+# 公式在飞书消息（post 与卡片同）里只能以图呈现（2026-10-14 实测 + 官方语法
+# 清单）。渲染走独立子进程脚本（render-formula.py，stdin JSON → PNG），网关
+# 进程不加载 matplotlib（护住内存限制）。MPLCONFIGDIR 落数据卷 → 字体缓存
+# 跨容器重建持久化。
+RUN uv pip install --python /opt/hermes/.venv/bin/python3 matplotlib
+COPY render-formula.py /opt/hermes/scripts/render-formula.py
+ENV MPLCONFIGDIR=/opt/data/.cache/matplotlib
+
+# ── 飞书聊天体验补丁（myopenclaw）─────────────────────────────
+# ① markdown 回复卡片化：post 渲染器把 GFM 表格露成生管道符源码、标题降级为
+#    普通文字；卡片（Card JSON 2.0）能真渲染。上游 PR #21000/#29630 未 merge。
+# ② 话题回复锚点：gateway 缺 reply_to_message_id 时适配器拿 thread_id 当
+#    receive_id（无效字段 99992402），omt_ 话题里 bot 的回复永远送不出去。
+# 两处都是对 upstream 源文件做文本手术（feishu_markdown_card.py 原样内联 +
+# adapter.py 四处/gateway/run.py 一处锚点改写），先内存里全部成功才落盘。
+# base image 是 :latest（无 pin）——锚点失配时脚本非零退出、**构建失败**，
+# 不会静默出厂未打补丁的镜像。守卫: bash tests/test-feishu-card-patch.sh
+COPY feishu_markdown_card.py patch-feishu.py /tmp/
+RUN /opt/hermes/.venv/bin/python3 /tmp/patch-feishu.py && \
+    rm -f /tmp/feishu_markdown_card.py /tmp/patch-feishu.py
+
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the
