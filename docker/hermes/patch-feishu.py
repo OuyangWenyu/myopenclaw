@@ -121,13 +121,44 @@ A3_NEW = (
     "                return True\n"
     '            return attempted == "interactive"\n'
     "\n"
+    f"        # {SENTINEL} — LaTeX→图片流水线（飞书消息里公式只能以图呈现）。\n"
+    '        _latex_cache = getattr(self, "_latex_image_cache", None)\n'
+    "        if _latex_cache is None:\n"
+    "            _latex_cache = self._latex_image_cache = load_latex_image_cache(LATEX_IMAGE_CACHE_PATH)\n"
+    "        _render_formulas_batch = make_subprocess_renderer(LATEX_RENDER_PYTHON, LATEX_RENDER_SCRIPT)\n"
+    "\n"
+    "        async def _upload_formula_png(png_bytes: bytes) -> str:\n"
+    "            from io import BytesIO\n"
+    '            request_body = self._build_image_upload_body(image_type="message", image=BytesIO(png_bytes))\n'
+    "            request = self._build_image_upload_request(request_body)\n"
+    "            response = await self._run_blocking(self._client.im.v1.image.create, request)\n"
+    '            key = self._extract_response_field(response, "image_key")\n'
+    "            if not key:\n"
+    '                raise RuntimeError("feishu image upload missing image_key")\n'
+    "            return str(key)\n"
+    "\n"
+    "        async def _card_payload_for(chunk: str) -> Any:\n"
+    "            if not latex_images_enabled():\n"
+    "                return build_markdown_card_payload(chunk)\n"
+    "            try:\n"
+    "                _before = len(_latex_cache)\n"
+    "                payload = await card_payload_with_formula_images(\n"
+    "                    chunk, render_batch=_render_formulas_batch, upload_png=_upload_formula_png,\n"
+    "                    cache=_latex_cache)\n"
+    "                if len(_latex_cache) != _before:\n"
+    "                    save_latex_image_cache(LATEX_IMAGE_CACHE_PATH, _latex_cache)\n"
+    "                return payload\n"
+    "            except Exception:\n"
+    '                logger.warning("[Feishu] LaTeX image pipeline failed; falling back to source text", exc_info=True)\n'
+    "                return build_markdown_card_payload(chunk)\n"
+    "\n"
     "        try:\n"
     "            for chunk in chunks:\n"
     "                msg_type, payload = self._build_outbound_payload(chunk, prefer_post=prefer_post)\n"
     f'                # {SENTINEL} — ``post`` already means "markdown"\n'
     "                # (prefer_post locked the decision whole-message); None keeps the legacy post path.\n"
     '                if msg_type == "post":\n'
-    "                    card_payload = build_markdown_card_payload(chunk)\n"
+    "                    card_payload = await _card_payload_for(chunk)\n"
     "                    if card_payload is not None:\n"
     '                        msg_type, payload = "interactive", card_payload\n'
     "                try:\n"
@@ -167,6 +198,26 @@ A4_OLD = '                if msg_type == "post" and _POST_CONTENT_INVALID_RE.sea
 A4_NEW = '                if msg_type in ("interactive", "post") and _POST_CONTENT_INVALID_RE.search(str(exc)):\n'
 
 # ---------------------------------------------------------------------------
+# A6 — markdown hint regex: recognize `$...$` / `$$...$$` so formula-bearing
+# replies (which may contain no other markdown) enter the card path (and thus
+# the formula pipeline) instead of being sent as plain text.
+# ---------------------------------------------------------------------------
+A6_OLD = (
+    '    r"|(\\[[^\\]]+\\]\\([^)]+\\))"\n'
+    '    r"|(^>\\s)",\n'
+    "    re.MULTILINE,\n"
+    ")\n"
+)
+A6_NEW = (
+    '    r"|(\\[[^\\]]+\\]\\([^)]+\\))"\n'
+    '    r"|(\\$\\$(?!\\$)[^$]+\\$\\$)"\n'
+    '    r"|(\\$(?![\\s$])[^\\n$]*[^\\s$]\\$(?![$\\d]))"\n'
+    '    r"|(^>\\s)",\n'
+    "    re.MULTILINE,\n"
+    ")\n"
+)
+
+# ---------------------------------------------------------------------------
 # A5 — gateway: anchor Feishu thread sends via metadata.reply_to_message_id.
 # ---------------------------------------------------------------------------
 A5_OLD = (
@@ -195,14 +246,16 @@ A5_NEW = (
 _ADAPTER_MARKERS = (
     'r"content format of the (?:post|interactive|card) type is incorrect"',
     "def build_markdown_card_payload(markdown, env=None):",
-    "card_payload = build_markdown_card_payload(chunk)",
+    "async def _card_payload_for(",
     'if msg_type in ("interactive", "post") and _POST_CONTENT_INVALID_RE.search(str(exc)):',
+    'r"|(\\$(?![\\s$])',
 )
 _ADAPTER_REPLACEMENTS = (
     ("A1", A1_OLD, A1_NEW),
     ("A2", A2_OLD, None),
     ("A3", A3_OLD, A3_NEW),
     ("A4", A4_OLD, A4_NEW),
+    ("A6", A6_OLD, A6_NEW),
 )
 
 

@@ -144,6 +144,10 @@ def _adapter_skeleton(patcher) -> str:
             '_MULTISPACE_RE = re.compile(r"[ \\t]{2,}")\n',
             patcher.A1_OLD,
             "\n",
+            "_HINT_RE = re.compile(\n",
+            '    r"(^x)",\n',
+            patcher.A6_OLD,
+            "\n",
             "def _build_markdown_post_rows(content):\n",
             "    return []\n",
             "\n",
@@ -238,13 +242,16 @@ class TestPatchScript:
         out = adapter.read_text(encoding="utf-8")
         assert patcher.SENTINEL in out
         assert "def build_markdown_card_payload(markdown, env=None):" in out
-        assert "card_payload = build_markdown_card_payload(chunk)" in out
-        # A1/A3/A4 被替换；A2 原文保留（作为内联块的结尾）
+        assert "async def _card_payload_for(" in out
+        assert "card_payload = await _card_payload_for(chunk)" in out
+        # A1/A3/A4/A6 被替换；A2 原文保留（作为内联块的结尾）
         assert patcher.A1_OLD not in out
         assert patcher.A3_OLD not in out
         assert patcher.A4_OLD not in out
+        assert patcher.A6_OLD not in out
         assert patcher.A2_OLD in out
         assert patcher.A4_NEW in out
+        assert patcher.A6_NEW in out
         ast.parse(out)
 
         gw = gateway.read_text(encoding="utf-8")

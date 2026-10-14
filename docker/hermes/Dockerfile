@@ -147,6 +147,15 @@ RUN mkdir -p /opt/gh-config /opt/opencode-config /opt/lark-config /opt/gitcode-c
 # opencode respects OPENCODE_CONFIG_DIR to find its config
 ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
 
+# ── LaTeX 公式渲染（Feishu 公式→图片流水线）──────────────────
+# 公式在飞书消息（post 与卡片同）里只能以图呈现（2026-10-14 实测 + 官方语法
+# 清单）。渲染走独立子进程脚本（render-formula.py，stdin JSON → PNG），网关
+# 进程不加载 matplotlib（护住内存限制）。MPLCONFIGDIR 落数据卷 → 字体缓存
+# 跨容器重建持久化。
+RUN uv pip install --python /opt/hermes/.venv/bin/python3 matplotlib
+COPY render-formula.py /opt/hermes/scripts/render-formula.py
+ENV MPLCONFIGDIR=/opt/data/.cache/matplotlib
+
 # ── 飞书聊天体验补丁（myopenclaw）─────────────────────────────
 # ① markdown 回复卡片化：post 渲染器把 GFM 表格露成生管道符源码、标题降级为
 #    普通文字；卡片（Card JSON 2.0）能真渲染。上游 PR #21000/#29630 未 merge。

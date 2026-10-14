@@ -71,6 +71,7 @@ services:
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
+      - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -152,6 +153,7 @@ services:
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
+      - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
     shm_size: "1g"
     deploy:
       resources:
@@ -211,6 +213,7 @@ services:
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
+      - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
       - FEISHU_GROUP_POLICY=open
       - GATEWAY_ALLOW_ALL_USERS=true
     shm_size: "1g"
@@ -266,6 +269,7 @@ services:
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
+      - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
       - FEISHU_GROUP_POLICY=open
       - GATEWAY_ALLOW_ALL_USERS=true
     shm_size: "1g"
