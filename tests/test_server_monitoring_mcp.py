@@ -33,6 +33,9 @@ COMPOSE = (REPO_ROOT / "docker-compose.tianyi-bot.yml").read_text()
 ENV_EXAMPLE = (REPO_ROOT / ".env.tianyi-bot.example").read_text()
 START_SH = (REPO_ROOT / "scripts" / "start-tianyi-bot.sh").read_text()
 AGENTS_MD = (REPO_ROOT / "openclaw-tianyi" / "workspace" / "AGENTS.md").read_text()
+MONITORING_DOC = (REPO_ROOT / "docs" / "server-monitoring-mcp.md").read_text()
+README_MD = (REPO_ROOT / "README.md").read_text()
+CLAUDE_MD = (REPO_ROOT / "CLAUDE.md").read_text()
 
 CA_HOST_PATH = REPO_ROOT / "docker" / "tianyi-bot" / "ca" / "server-monitoring-ca.pem"
 CA_CONTAINER_PATH = "/opt/tianyi-bot/ca/server-monitoring-ca.pem"
@@ -65,7 +68,7 @@ def render(tmp_path: Path, extra_env: dict[str, str]) -> tuple[subprocess.Comple
 
 
 class TestCaFile:
-    """CA 是公钥材料，随仓库提交（私有团队仓）；私钥当然绝不进仓库。"""
+    """CA 是公钥材料，随仓库提交（公开仓亦然：只能验证签名、不能制造签名）；私钥当然绝不进仓库。"""
 
     def test_ca_file_exists_and_parses(self):
         assert CA_HOST_PATH.is_file(), (
@@ -224,9 +227,15 @@ class TestEnvExample:
         assert not any(line.strip().startswith(f"{URL_VAR}=") for line in self.lines)
         assert not any(line.strip().startswith(f"{TOKEN_VAR}=") for line in self.lines)
 
-    def test_documents_real_url_and_rules(self):
-        assert any("10.48.0.81:8765/mcp" in line for line in self.lines)
+    def test_documents_placeholder_and_rules(self):
+        """公开模板不得含真实内网地址（全仓 .example 惯例）——真实地址以 docs 为准。
+
+        2026-10-13 前此处曾用真实 IP + 把「示例禁现校内地址」守卫收窄到 YUQUE 行；
+        改为 <MCP_HOST> 占位符后守卫恢复全量语义（见 test_yuque_mcp_local.py）。
+        """
+        assert any("https://<MCP_HOST>:8765/mcp" in line for line in self.lines)
         assert "docs/server-monitoring-mcp.md" in ENV_EXAMPLE
+        assert "10.48.0.81" not in ENV_EXAMPLE
 
 
 class TestAgentPolicy:
@@ -278,3 +287,39 @@ class TestNodeExtraCaCertsSemantics:
         if proc.stdout.strip() == "SKIP":
             pytest.skip("node 无 tls.getCACertificates API")
         assert int(proc.stdout.strip()) >= 1
+
+
+class TestToolSurfaceAlignment:
+    """2026-10-13：服务端正式发布交付层，工具面 9 → 12（+list_projects /
+    get_project_overview / get_project_build，Jenkins CI 证据链）。
+
+    客户端策略（AGENTS.md 纪律 + docs + README/CLAUDE 表述）必须与能力面同步——
+    "服务端加了工具而客户端纪律没跟上"是最阴的漂移：不影响连通，只是模型永远
+    不知道能问、报告也永远少一层事实。检查器集合本身由
+    tests/test_check_server_monitoring_mcp.py 钉住，这里钉跨文件表述。
+    """
+
+    def test_agents_md_covers_delivery_tools(self):
+        for name in ("list_projects", "get_project_overview", "get_project_build"):
+            assert name in AGENTS_MD, f"AGENTS.md 纪律缺少交付工具 {name}"
+        low = AGENTS_MD.lower()
+        assert "staging" in low, "交付纪律必须写明 staging ≠ 生产验收"
+        assert "unknown" in low, "交付纪律必须写明 UNKNOWN ≠ 成功"
+
+    def test_agents_md_notes_weather_docker_gap(self):
+        """weather 没有 Docker 详情后端（实测 DOCKER_UNAVAILABLE）——纪律要如实
+        告知，否则模型会把"查不到容器"报成"服务挂了"。"""
+        assert "weather" in AGENTS_MD
+        assert "DOCKER_UNAVAILABLE" in AGENTS_MD
+
+    def test_docs_cover_registry_and_tools(self):
+        for token in ("12", "list_projects", "get_project_overview", "get_project_build",
+                      "rainfall-oa-data", "zhixun-core", "realtime-forecast"):
+            assert token in MONITORING_DOC, f"docs/server-monitoring-mcp.md 缺少 {token}"
+        assert "qupengfei" not in MONITORING_DOC, "公开面文档不得出现内网部署用户名"
+        assert "私有团队仓" not in MONITORING_DOC, "本仓是公开仓——假前提文案已废弃"
+
+    def test_readme_and_claude_md_say_twelve(self):
+        assert "12 个只读工具" in README_MD
+        assert "12 个只读工具" in CLAUDE_MD
+        assert "9 工具" not in CLAUDE_MD, "旧「9 工具」表述必须清除（含命令注释里的简写）"

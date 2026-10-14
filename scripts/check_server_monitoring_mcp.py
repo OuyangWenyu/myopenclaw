@@ -8,7 +8,7 @@ check_server_monitoring_mcp.py — server-monitoring MCP 只读冒烟检查器
 
 回答「天一 → server-monitoring 这条链路现在通不通」，不经过模型、不改任何状态：
 token 形状 → 内网 CA（正/反两向）→ 证书有效期 → /health/live →
-Bearer 鉴权（正/反两向）→ MCP initialize → 9 个只读工具名 → 抽查两次调用。
+Bearer 鉴权（正/反两向）→ MCP initialize → 12 个工具名（9 运行 + 3 交付）→ 抽查调用。
 
 用法:
   uv run scripts/check_server_monitoring_mcp.py                  # 默认读仓库 .env.tianyi-bot + 仓库内 CA
@@ -48,11 +48,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV_FILE = REPO_ROOT / ".env.tianyi-bot"
 DEFAULT_CA = REPO_ROOT / "docker" / "tianyi-bot" / "ca" / "server-monitoring-ca.pem"
 
-# 客户端策略依赖的 9 个核心只读工具：**缺任何一个 = 失败**（AGENTS.md 纪律与既有验收
-# 清单引用了它们）。服务端新增、客户端尚未纳入策略的工具**不算失败**，在 detail 里列出
-# 提示 —— 2026-10-13 实测服务端已扩到 12 个（+list_projects/get_project_overview/
-# get_project_build，CI/Jenkins 层），等待与维护者对齐后再决定是否纳入客户端。
-EXPECTED_TOOLS = frozenset({
+# 客户端策略依赖的工具面 = 9 个核心运行工具 + 3 个交付/CI 工具（2026-10-13 起纳入：
+# 服务端当天正式发布 Jenkins 交付层，统一入口要"同时取得交付与运行事实"）。
+# **缺任何一个 = 失败**（AGENTS.md 纪律引用了它们：运行类管"现在怎么样"，
+# 交付类管"CI/构建怎么样"）。服务端新增、客户端尚未纳入策略的工具**不算失败**，
+# 在 detail 里列出提示 —— 是否纳入是决策项，不是故障。
+CORE_TOOLS = frozenset({
     "list_servers",
     "get_server_status",
     "list_containers",
@@ -63,6 +64,35 @@ EXPECTED_TOOLS = frozenset({
     "get_gfs_status",
     "get_runtime_failure_evidence",
 })
+DELIVERY_TOOLS = frozenset({
+    "list_projects",
+    "get_project_overview",
+    "get_project_build",
+})
+REQUIRED_TOOLS = CORE_TOOLS | DELIVERY_TOOLS
+
+
+def evaluate_tools(names: set[str]) -> tuple[bool, str]:
+    """判定服务端工具面对客户端策略的满足度，返回 (ok, detail)。
+
+    缺任一必需工具（不分组）→ False，detail 指明缺了什么；
+    多出未知工具 → True，仅提示（供"是否纳入客户端策略"的决策参考）。
+    """
+    missing_core = sorted(CORE_TOOLS - names)
+    missing_delivery = sorted(DELIVERY_TOOLS - names)
+    extra = sorted(names - REQUIRED_TOOLS)
+    if missing_core or missing_delivery:
+        parts = []
+        if missing_core:
+            parts.append(f"缺核心运行工具 {missing_core}")
+        if missing_delivery:
+            parts.append(f"缺交付工具 {missing_delivery}")
+        return False, "；".join(parts) + ("（服务端升级丢工具，或客户端策略未跟上？）" if not extra else f"；服务端另有：{extra}")
+    note = "12/12 工具齐全（9 运行 + 3 交付）"
+    if extra:
+        note += f"；服务端另有 {len(extra)} 个未纳入客户端策略的工具（仅提示）：{extra}"
+    return True, note
+
 
 TOKEN_MIN_LEN = 32          # 服务端要求 Bearer token ≥32 个可打印 ASCII 字符
 HTTP_TIMEOUT = 15.0         # 健康端点探测超时（秒）
@@ -141,23 +171,56 @@ def http_get(url: str, context: ssl.SSLContext, headers: dict[str, str] | None =
         return resp.status
 
 
+def _leaf_exceptions(exc: BaseException) -> list[BaseException]:
+    """展开异常树（mcp SDK 的会话失败包成 ExceptionGroup / TaskGroup 形态）。
+
+    用鸭子类型探测 `.exceptions`（ExceptionGroup 是 3.11+，本脚本声明 >=3.10，
+    不能直接依赖该类存在）。
+    """
+    children = getattr(exc, "exceptions", None)
+    if children:
+        leaves: list[BaseException] = []
+        for child in children:
+            leaves.extend(_leaf_exceptions(child))
+        return leaves
+    return [exc]
+
+
+def describe_exception(exc: Exception) -> str:
+    """人类可读的异常描述；包了组就展示叶子异常 —— 不拆包时最常见的
+    连接被拒/TLS 失败只回显 'unhandled errors in a TaskGroup'，没法诊断。"""
+    leaves = _leaf_exceptions(exc)
+    if len(leaves) == 1 and leaves[0] is exc:
+        return f"{type(exc).__name__}: {exc}"
+    inner = "; ".join(f"{type(e).__name__}: {e}" for e in leaves)
+    return f"{type(exc).__name__}({len(leaves)} 个子异常): {inner}"
+
+
 def hint_for(exc: Exception) -> str:
-    """把常见失败翻译成排查方向（对应 docs/server-monitoring-mcp.md 的对照表）。"""
-    text = f"{type(exc).__name__}: {exc}"
-    low = text.lower()
-    if "certificate_verify" in low or "sslcertverification" in low:
-        return " → TLS 校验失败：CA 不对（--ca / 容器内 NODE_EXTRA_CA_CERTS）"
-    if "401" in text or "unauthorized" in low:
-        return " → 鉴权失败：token 不对，或 Authorization header 没送达"
-    if "refused" in low or "connecterror" in low or "all connection attempts" in low:
-        return " → 连接被拒：服务未启动 / 端口不对 / 网络不通"
-    if "timed out" in low or "timeout" in low:
-        return " → 超时：网络路径不通或服务卡住"
-    if "421" in text:
-        return " → Host 白名单拒绝：URL 必须是裸 IP:port（不能走别名/代理）"
-    if "redirect" in low or "moved" in low:
-        return " → 重定向：URL 可能少了 /mcp 路径"
-    return ""
+    """把常见失败翻译成排查方向（对应 docs/server-monitoring-mcp.md 的对照表）。
+
+    先展开异常树再逐叶匹配：组里任意一个叶子命中就给提示。
+    """
+    hints: list[str] = []
+    for leaf in _leaf_exceptions(exc):
+        text = f"{type(leaf).__name__}: {leaf}"
+        low = text.lower()
+        hint = ""
+        if "certificate_verify" in low or "sslcertverification" in low:
+            hint = " → TLS 校验失败：CA 不对（--ca / 容器内 NODE_EXTRA_CA_CERTS）"
+        elif "401" in text or "unauthorized" in low:
+            hint = " → 鉴权失败：token 不对，或 Authorization header 没送达"
+        elif "refused" in low or "connecterror" in low or "all connection attempts" in low:
+            hint = " → 连接被拒：服务未启动 / 端口不对 / 网络不通"
+        elif "timed out" in low or "timeout" in low:
+            hint = " → 超时：网络路径不通或服务卡住"
+        elif "421" in text:
+            hint = " → Host 白名单拒绝：URL 必须是裸 IP:port（不能走别名/代理）"
+        elif "redirect" in low or "moved" in low:
+            hint = " → 重定向：URL 可能少了 /mcp 路径"
+        if hint and hint not in hints:
+            hints.append(hint)
+    return "".join(hints)
 
 
 # =============================================================
@@ -286,17 +349,8 @@ async def check_mcp(url: str, token: str, ca_path: Path, server_name: str,
 
                     tools = await session.list_tools()
                     names = {t.name for t in tools.tools}
-                    missing = sorted(EXPECTED_TOOLS - names)
-                    extra = sorted(names - EXPECTED_TOOLS)
-                    if missing:
-                        record(checks, "tools_list", False,
-                               f"缺失 {missing}（服务端升级丢工具，或客户端策略未跟上？）；"
-                               f"服务端另有：{extra or '无'}")
-                    else:
-                        note = "9/9 核心工具齐全"
-                        if extra:
-                            note += f"；服务端另有 {len(extra)} 个未纳入客户端策略的工具（仅提示）：{extra}"
-                        record(checks, "tools_list", True, note)
+                    ok, detail = evaluate_tools(names)
+                    record(checks, "tools_list", ok, detail)
 
                     res = await session.call_tool("list_servers", {})
                     payload = extract_payload(res)
@@ -317,7 +371,7 @@ async def check_mcp(url: str, token: str, ca_path: Path, server_name: str,
                         record(checks, f"get_server_status({server_name})", bool(detail),
                                detail or "返回为空")
     except Exception as exc:  # noqa: BLE001 - 会话级失败 = 三项检查全失败
-        detail = f"{type(exc).__name__}: {exc}{hint_for(exc)}"
+        detail = f"{describe_exception(exc)}{hint_for(exc)}"
         for name in ("tools_list", "list_servers", f"get_server_status({server_name})"):
             if not any(c["name"] == name for c in checks):
                 record(checks, name, False, f"MCP 会话失败: {detail}")
@@ -333,7 +387,7 @@ def emit_human(checks: list[dict], meta: dict) -> None:
     print(f"  端点: {meta['url']}（token 长度 {meta['token_length']}，CA: {meta['ca']}）")
     print()
     for check in checks:
-        mark = "✓" if check["ok"] else "✗ FAIL"
+        mark = "✅" if check["ok"] else "❌"
         print(f"  {mark} {check['name']:<28} {check['detail']}")
     failed = sum(1 for c in checks if not c["ok"])
     print()

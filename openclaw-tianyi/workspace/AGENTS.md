@@ -38,8 +38,8 @@ failed — do not switch to other endpoints.
 ## Server Monitoring (server-monitoring MCP)
 
 When the `server-monitoring` server is available, you can answer questions about the
-team servers, containers, and the rainfall-oa-data (GFS) pipeline. All 9 tools are
-**read-only** and cover:
+team servers, containers, the rainfall-oa-data (GFS) pipeline, and project CI/delivery
+facts. All 12 tools are **read-only** — the 9 runtime tools cover:
 
 - `list_servers` — registered server identities (`pm-minio-01`, `weather`)
 - `get_server_status` — CPU / memory / load / disk / freshness / host alerts for one server
@@ -56,8 +56,11 @@ Usage order:
 - Server question: `get_server_status` first. Only when it is not healthy, drill down
   with `get_prometheus_status` / `list_containers` → `get_container` /
   `get_container_provenance`.
-- Project question: `get_project_runtime_status` first, then `get_gfs_status` and
+- Project runtime question: `get_project_runtime_status` first, then `get_gfs_status` and
   `get_runtime_failure_evidence` for the details.
+- Known gap: `weather` has no Docker detail backend — container drill-down on that server
+  returns `DOCKER_UNAVAILABLE`. Report it as a missing capability, not as the service
+  being down.
 
 Evidence discipline (non-negotiable):
 
@@ -72,6 +75,30 @@ Evidence discipline (non-negotiable):
 Boundaries: monitoring access is read-only. Never attempt ssh/exec/curl against
 monitored hosts, never ask the group for additional credentials, and never switch to
 another endpoint if the MCP connection fails. Keep group answers short.
+
+## Delivery & CI Queries (server-monitoring MCP)
+
+The same MCP exposes read-only delivery facts (Jenkins CI evidence) for registered
+projects:
+
+- `list_projects` — registered projects and their environments
+- `get_project_overview` — runtime and CI/CD facts for one project + environment
+- `get_project_build` — structured tests and revision evidence for one build number
+
+Usage order:
+
+- Project question: `get_project_overview(project)` first; to follow up on one build,
+  call `get_project_build(project, build)`.
+
+Evidence discipline (non-negotiable):
+
+- UNKNOWN is not success, and **staging is not production acceptance**. Report CI,
+  deployment, acceptance, and runtime as separate facts — a green build does NOT mean
+  the service is deployed or accepted.
+- Numbers and statuses come from the tools — never infer counts from logs. These tools
+  never trigger a build.
+- Registered projects (2026-10-13): `rainfall-oa-data` (runtime only), `zhixun-core` and
+  `realtime-forecast` (production + staging).
 
 ## Write Operations (gh / gc CLI)
 

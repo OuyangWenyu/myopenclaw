@@ -72,3 +72,23 @@ def test_no_personal_emails_in_public_docs():
         + "\n  ".join(sorted(set(offenders)))
         + "\n→ 匿名化，或确为通用服务商地址时加入 tests/test_no_secrets.py 的 _ALLOWED_EMAILS"
     )
+
+
+# ── 公开面文档不得出现内网部署用户名（2026-10-13 补，同一隐私事故的姓氏层）──
+# 邮箱守卫拦不住用户名：server-monitoring 接入文档曾把服务器部署账号路径
+# （~qupengfei/.config/...）写进 docs/。出现服务器上的部署账号一律匿名化为
+# 「维护者私有目录」之类表述；确需指名时先进本清单（一行）并说明理由。
+_INTERNAL_USERNAMES = ("qupengfei",)
+
+
+def test_no_internal_usernames_in_public_docs():
+    offenders: list[str] = []
+    for path in _public_markdown_files():
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for name in _INTERNAL_USERNAMES:
+            if name in text:
+                offenders.append(f"{path.relative_to(REPO_ROOT)} → {name}")
+    assert not offenders, (
+        "公开面文档出现内网部署用户名：\n  " + "\n  ".join(sorted(offenders))
+        + "\n→ 匿名化为「维护者私有目录」等表述，或确需指名时加入 _INTERNAL_USERNAMES"
+    )
