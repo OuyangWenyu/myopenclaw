@@ -37,6 +37,19 @@ FEISHU_GROUP_POLICY=open
 
 finance profile 使用独立的飞书应用（`FINANCE_FEISHU_APP_ID/SECRET`），在项目 `.env` 中配置，`docker-compose.yml` 中传入。爱码士（coder）同理使用 `CODER_FEISHU_APP_ID/SECRET`（若与已有「爱码士应用」为同一应用，值与 `LARK_CLI_IDM_*` 相同）；该应用需具备**机器人能力** + 「事件与回调」**长连接**（订阅 `im.message.receive_v1`）才能收发消息。
 
+### markdown 渲染：卡片化补丁（Card JSON 2.0）
+
+镜像构建时对 upstream 做文本手术（`docker/hermes/patch-feishu.py`）——**飞书 post 渲染器不支持 GFM 表格**（原样露出生管道符源码）、标题降级为普通文字；卡片（interactive, Card JSON 2.0）能真渲染：
+
+1. **markdown 命中的回复 → 卡片**：标题分级字号、列表项目符号、**表格真渲染**（每组件 ≤4 表、除表头外 ≤5 行数据 + 分页）；纯文本消息保持 text 不变
+2. **话题（omt_）回复修复（上游 bug）**：缺回复锚点时 bot 在话题里的回复一律 99992402 发送失败，补上锚点后走 `reply_in_thread` 路径
+
+- 开关：`FEISHU_MARKDOWN_CARD`（compose 透传四个 hermes 服务；默认 on）—— 填 `0/off/false/no` 单容器回退旧 post 渲染；`.env` 改后 `up -d` 重建容器生效
+- 降级链：卡片被拒 → post 重试 → 纯文本（永不丢消息；降级打 `[Feishu] Card payload rejected` warning 日志）
+- 已知边界：Card 2.0 需飞书客户端 ≥ 7.20（旧客户端显示升级提示）；>4 个表格的消息保持 post；**LaTeX 公式在 post 和卡片里都是源码文本**（飞书 IM 消息不支持公式渲染，KaTeX 是云文档的功能）
+- 判据：`bash tests/test-feishu-card-patch.sh` 全绿（16 项）；上游 merge 卡片 PR 后应删补丁并重验
+- 回滚：环境开关（最快）或 `docker tag myopenclaw/hermes:pre-card myopenclaw/hermes:latest` + `up -d`
+
 ## Discord（爱码士 coder）
 
 hermes-coder 通过 Discord Bot 接入，与 OpenClaw（虾酱）的 Discord Bot 是**独立的两套**。
