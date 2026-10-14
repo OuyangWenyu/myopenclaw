@@ -31,12 +31,14 @@
 ```
 dailyinfo/                 ← AI 情报聚合（RSS + AI 摘要）
 aisecretary/               ← 事务数据库 MCP
-git-contribution-stats/    ← 多仓库 Git 贡献统计
+git-contribution-stats/    ← 多仓库 Git 贡献统计（repo-scanner-mcp 源码）
 yuque_mcp_server/          ← 语雀 MCP 服务端（yuque-mcp 构建依赖）
 zhixun-agent/              ← 水文 MCP（zhixun 知汛 bot 构建依赖）
 mylibrary/                 ← Zotero 文献工具（zotero-mcp 源码）
+server-monitoring/         ← 团队监控服务（⚠️ 非构建依赖：天一【运行时消费】其只读 MCP）
     │
-    │  全部通过 Docker volume、build context 或 MCP 接入
+    │  前六个通过 Docker volume、build context 或 MCP 接入；
+    │  server-monitoring 在团队内网（10.48.x），只进 URL + CA + token 三样配置
     ▼
 myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     │
@@ -44,9 +46,10 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     ├─ claude-code   (CC飞总，飞书直连)
     ├─ openclaw      (虾酱，Discord 网关)
     ├─ openclaw-zhixun (知汛助手，飞书水文 bot，独立栈)
-    ├─ openclaw-tianyi (天一，飞书研发 bot，独立栈共享主栈网络)
+    ├─ openclaw-tianyi (天一，飞书研发 bot，独立栈共享主栈网络；消费 server-monitoring MCP)
     ├─ zotero-mcp    (文献查询 MCP，mylibrary 源码)
     ├─ repo-scanner-mcp (研发日报 MCP)
+    ├─ paper-queue-mcp (论文清单 MCP，独立容器)
     ├─ aisecretary   (事务数据库 MCP)
     ├─ yuque-mcp     (语雀知识库 MCP，本机 SSE)
     ├─ tdai-memory   (Agent 长期记忆)
@@ -55,8 +58,9 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     └─ uptime-kuma   (服务监控)
 ```
 
+- **两类配合关系**：① **构建/部署依赖**（前六个仓库：源码进 build context、volume mount 或本机 MCP 服务）；② **运行时消费**（`server-monitoring`：团队维护的服务端，本仓只做客户端接入——天一通过 HTTPS + Bearer + 内网 CA 调其只读 MCP，12 个工具覆盖服务器/GFS/CI 状态，并每日 08:30 自动推服务器日报）。**服务端不在本仓管理**，详见 [服务器监控 MCP](docs/server-monitoring-mcp.md)
 - **所有数据落 `~/.myagentdata/`** — 备份管线自动覆盖
-- **每个仓库独立克隆** — 放在 `~/code/<repo>`，Docker 通过 volume mount 访问
+- **每个仓库独立克隆** — 放在 `~/code/<repo>`，Docker 通过 volume mount 访问（`server-monitoring` 无需克隆，仅需维护者提供的 CA 与 token）
 
 ## 快速开始
 
@@ -70,7 +74,7 @@ cp .env.example .env          # 编辑 .env，至少填入 DEEPSEEK_API_KEY
 cp .cloud.conf.example .cloud.conf
 
 # 3. （可选）克隆依赖仓库
-./scripts/clone-deps.sh       # 克隆 dailyinfo、aisecretary、git-contribution-stats
+./scripts/clone-deps.sh       # 克隆 dailyinfo、aisecretary、git-contribution-stats、yuque_mcp_server
 
 # 4. 启动所有服务
 ./scripts/start.sh
