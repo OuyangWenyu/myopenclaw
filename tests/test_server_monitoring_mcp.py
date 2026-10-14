@@ -220,6 +220,103 @@ class TestEntrypointGuard:
         assert cache_at < switch_at, "必须在切 node 用户之前预建（切完之后是 node，chown 失败）"
 
 
+class TestDigestAutomation:
+    """声明式预置每日监控摘要 automation（2026-10-14）：拉起即有、幂等更新、
+    URL 清空即无、绝不阻塞网关启动。幂等语义实测确认：同 declaration-key 重加
+    = created:false/updated:true（原地更新、ID 不变、不重复）。
+    """
+
+    _MARKER = "# ── Declare daily monitoring digest automation"
+
+    def test_entrypoint_provisions_automation(self):
+        assert self._MARKER in ENTRYPOINT
+        block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
+        assert "cron add" in block
+        assert "--declaration-key tianyi-monitoring-daily" in block
+        assert "--channel feishu" in block
+        assert "--announce" in block
+        assert '--to "${TIANYI_BOT_OWNER_OPEN_ID}"' in block
+        assert "--tz Asia/Shanghai" in block
+        assert "TIANYI_BOT_MONITORING_DIGEST_CRON" in block
+        assert "30 8 * * *" in block, "默认排期 08:30（北京）"
+
+    def test_provisioning_gated_backgrounded_before_exec(self):
+        marker_at = ENTRYPOINT.index(self._MARKER)
+        exec_at = ENTRYPOINT.index("exec node /app/openclaw.mjs gateway")
+        assert marker_at < exec_at
+        block = ENTRYPOINT[marker_at:exec_at]
+        assert "TIANYI_BOT_SERVER_MONITORING_MCP_URL" in block, "门控：URL 非空才声明"
+        assert ") &" in block, "必须后台运行（等待网关健康），不得阻塞 exec gateway"
+        assert "healthz" in block, "创建前要等网关健康（cron 经 Gateway 管理）"
+
+    def test_gate_directions_pinned(self):
+        """方向必须钉死：变异 `-n`→`-z` / `= off`→`!= off` 均会反转语义而静默通过
+        （2026-10-14 独立复核实测的假守卫）。这里把比较形式逐字钉住。"""
+        block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
+        assert '[ -n "${TIANYI_BOT_SERVER_MONITORING_MCP_URL:-}" ]' in block, "门控必须是 URL 非空（-n）"
+        assert '[ "${digest_cron}" = "off" ]' in block, "关闭判断必须是 = off（不是 !=）"
+        assert '!= "off"' not in block
+
+    def test_off_path_reclaims_existing_automation(self):
+        """OFF 态（URL 空 / DIGEST_CRON=off）必须**主动回收**既有 automation。
+
+        框架不会自动回收 service 声明的 job（只有 system-owned 类型启动时收敛，
+        2026-10-14 复核镜像内证据 cron-jobs.md:234-236）——不做回收的话，关掉开关
+        后旧 job 仍每日投递（届时降级成无监控工具的日报），"清空即消失"就是假话。
+        回收经 cron-job-id.mjs 按 declaration-key 找 id（cron rm 只吃 id）。
+        """
+        block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
+        assert "cron-job-id.mjs tianyi-monitoring-daily" in block, "回收需经提取器按 declaration-key 找 id"
+        assert "cron rm" in block
+        assert "未启用" in block, "URL 空也要走回收分支（「监控未启用」口径）"
+
+    def test_failure_branch_is_reachable(self):
+        """cron add 失败时 set -e 会杀子壳，`case` 形态的 ❌ 分支是死代码（复核实测）。
+        必须用 if cmd; then ✅ else ❌ fi 才能开出失败提示。"""
+        block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
+        assert "if out=$(node /app/openclaw.mjs cron add" in block
+        assert "❌ 每日监控摘要 automation 创建失败" in block
+
+    def test_missing_owner_warns_not_blocks(self):
+        block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
+        owner_guard_at = block.index("TIANYI_BOT_OWNER_OPEN_ID")
+        window = block[:owner_guard_at + 200]
+        assert "⚠️" in window, "缺 OWNER id 只警告，不拦启动"
+        assert "exit 1" not in block.split("cron add")[0], "provisioning 段不得有拦启动的 exit 1"
+
+    def test_compose_passes_digest_envs(self):
+        assert "TIANYI_BOT_OWNER_OPEN_ID: ${TIANYI_BOT_OWNER_OPEN_ID:-}" in COMPOSE
+        assert "TIANYI_BOT_MONITORING_DIGEST_CRON: ${TIANYI_BOT_MONITORING_DIGEST_CRON:-}" in COMPOSE
+
+    def test_env_example_documents_digest(self):
+        assert "TIANYI_BOT_OWNER_OPEN_ID" in ENV_EXAMPLE
+        assert "TIANYI_BOT_MONITORING_DIGEST_CRON" in ENV_EXAMPLE
+
+
+class TestCronJobIdExtractor:
+    """cron-job-id.mjs（OFF 态回收用的 id 提取器）行为单测。"""
+
+    @pytest.mark.skipif(NODE is None, reason="宿主机无 node")
+    def test_extracts_id_by_declaration_key(self):
+        payload = '{"jobs": [{"id": "aaa", "declarationKey": "other"}, {"id": "bbb", "declarationKey": "tianyi-monitoring-daily"}]}'
+        proc = subprocess.run(
+            [NODE, str(REPO_ROOT / "docker" / "tianyi-bot" / "cron-job-id.mjs"), "tianyi-monitoring-daily"],
+            input=payload, capture_output=True, text=True,
+        )
+        assert proc.returncode == 0
+        assert proc.stdout == "bbb"
+
+    @pytest.mark.skipif(NODE is None, reason="宿主机无 node")
+    def test_missing_key_or_broken_json_yields_empty(self):
+        for payload in ('{"jobs": []}', "not json at all"):
+            proc = subprocess.run(
+                [NODE, str(REPO_ROOT / "docker" / "tianyi-bot" / "cron-job-id.mjs"), "tianyi-monitoring-daily"],
+                input=payload, capture_output=True, text=True,
+            )
+            assert proc.returncode == 0, "解析失败也要退出码 0（按无需回收处理）"
+            assert proc.stdout == ""
+
+
 class TestStartScriptPreflight:
     """compose up 对 crash-loop 返回 0 —— 预检是"启动命令看起来成功"时唯一的破功点。"""
 

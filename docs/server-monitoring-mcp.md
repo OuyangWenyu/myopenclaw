@@ -111,9 +111,25 @@ GFS（含 stage 失败 / cycle 年龄 / UNKNOWN 原因）、失败证据、各�
 来自工具返回，服务端原则"事实由程序确定"）。
 
 **消费归属：天一（OpenClaw）**——服务器情况以天一为唯一消费者（本项目**不接 Hermes**）。
-天一部署到服务器后，每日推送 = 天一自己的 OpenClaw cron automation（`cron add --cron
-"分 时 * * *" <message> --channel feishu --announce`，到点自动跑汇报回合并投递飞书）；
-本脚本的定位是**验收证据 / 连着 UniVPN 的电脑上的随手查 / 部署参考实现**。
+
+**每日推送已声明式内置**（2026-10-14）：entrypoint 在网关上电后**幂等声明**一条
+automation（`declaration-key = tianyi-monitoring-daily`，同 key 重加 = 原地更新、
+ID 不变——改本仓后重启自动更新）。门控与排期：
+- `TIANYI_BOT_SERVER_MONITORING_MCP_URL` 非空 = 声明开启（清空即自动消失——**OFF 态
+  会在启动时按 declaration-key 主动回收既有 automation**；框架自身不会回收 service
+  声明的 job，2026-10-14 复核实测，经 `cron-job-id.mjs` 提取 id 后 `cron rm`）；
+- 推给 `TIANYI_BOT_OWNER_OPEN_ID`（接收人 open_id）；缺它只警告不拦启动；
+  ⚠️ **open_id 是应用维度的**：必须填天一应用视角下该用户的 id。填错应用视角
+  （如 lark-cli/爱码士视角）的症状是投递 400 `99992361 "open_id cross app"`
+  （2026-10-14 实测踩过；取法见 `.env.tianyi-bot.example` 注释）；
+- 排期默认 `30 8 * * *`（Asia/Shanghai），`TIANYI_BOT_MONITORING_DIGEST_CRON` 可改，
+  设 `off` 显式关闭；
+- ⚠️ 本机（Mac）推送时需 UniVPN 在线（断线时会如实报"取数失败"——这也是监控信号）；
+  部署到内网服务器后无此约束。
+
+**拉起即有**：本地 `./scripts/start-tianyi-bot.sh` 或将来服务器上直接拉起，automation
+自动就位。本脚本（`server_monitoring_summary.py`）的定位是**验收证据 / 连着 UniVPN
+的电脑上的随手查 / 部署参考实现**——与推送自动化是两条独立路径，互不依赖。
 
 `--json` 顶层键（下游消费契约）：`generated_at` / `overall{headline, alerts_firing,
 unknown_projects, servers_total, projects_total}` / `servers[]` / `prometheus` / `gfs` /

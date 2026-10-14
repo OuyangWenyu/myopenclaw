@@ -33,6 +33,9 @@ services:
       TIANYI_BOT_SERVER_MONITORING_MCP_URL: ${TIANYI_BOT_SERVER_MONITORING_MCP_URL:-}
       TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN: ${TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN:-}
       MCP_SERVER_MONITORING_TOKEN: ${TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN:-}
+      # 每日监控摘要 automation（entrypoint 幂等声明；URL 非空才启用）
+      TIANYI_BOT_OWNER_OPEN_ID: ${TIANYI_BOT_OWNER_OPEN_ID:-}
+      TIANYI_BOT_MONITORING_DIGEST_CRON: ${TIANYI_BOT_MONITORING_DIGEST_CRON:-}
       # URL 非空才信任内网 CA（空串时 node 静默忽略，关闭态行为不变）；
       # CA 证书随仓库提供，经 ./docker/tianyi-bot 只读挂载进容器
       NODE_EXTRA_CA_CERTS: ${TIANYI_BOT_SERVER_MONITORING_MCP_URL:+/opt/tianyi-bot/ca/server-monitoring-ca.pem}
