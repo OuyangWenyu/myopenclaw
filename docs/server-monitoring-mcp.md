@@ -171,3 +171,16 @@ uv run scripts/server_monitoring_summary.py --json     # 结构化（含 complet
 ## 验收记录
 
 Mac 主栈验收完成后在此追加带日期的记录（先例：`docs/zhixun-mcp-acceptance-20260928.md`）。
+
+### 2026-10-14 Mac 主栈（天一 × server-monitoring，对应 issue #3 验收清单）
+
+| 项 | 结果 |
+|---|---|
+| compose 两态 config | ✅ 关闭 = 空串 / 启用 = `/opt/tianyi-bot/ca/server-monitoring-ca.pem` |
+| 只读冒烟检查器（宿主机） | ✅ 10/10、exit 0（TLS/401 双反证、12 工具、真实数据、证书剩 381 天） |
+| **`mcp probe server-monitoring`** | ✅ **12 工具、diagnostics 空** —— streamable-http + 自定义 header 首例实测成立，**无需 shim 退路** |
+| agent 能力（openclaw agent 回合） | ✅ 6 次调用 0 失败，按 AGENTS.md 纪律先总览后下钻；回答兑现 UNKNOWN≠健康、主/可视化分开、盘告警聚合 |
+| 反向用例（未注册服务器名） | ✅ 如实答"不在已注册服务器里……UNKNOWN 不等于健康，不会用其他机器数据替代" |
+| 回退演练 | ✅ 关闭：条目消失、probe 报 "No MCP server named"、repo-scanner 不受影响；恢复：12 工具、飞书 ws 重连 |
+| 飞书真实提问（DM） | ⏳ 待补 —— 2026-10-14 hermes 容器重建（飞书卡片工作）丢了 lark-cli user token，重授权后补测 |
+| 部署期修复（意外收获） | 首启竞态：某 root 上下文进程抢建 root:700 的 `/home/node/.cache` → node gateway "SQLite read-only worker Unsafe fallback" crash-loop（重启复用容器可写层，永不恢复）。entrypoint 预建 node 属主 `.cache` + 守卫测试 `test_precreates_node_owned_cache_dir`；受控实验（快照镜像 A/B）验证 |

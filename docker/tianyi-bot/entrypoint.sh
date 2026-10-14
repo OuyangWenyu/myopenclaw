@@ -47,6 +47,15 @@ if [ "$(id -u)" = "0" ]; then
   [ -d /home/node/.config ] && chown -R node:node /home/node/.config 2>/dev/null || true
   [ -d /home/node/.gitcode ] && chown -R node:node /home/node/.gitcode 2>/dev/null || true
 
+  # Pre-create OpenClaw's temp root (/home/node/.cache) as node-owned — race guard.
+  # 2026-10-14 实测事故：某个 root 上下文的 openclaw 调用（HOME=/home/node）以 uid 0
+  # 抢建 /home/node/.cache（root:700），随后真正的 gateway（node, uid 1000）连遍历都
+  # EACCES → "SQLite read-only worker Unsafe fallback ... openclaw-1000" → crash-loop
+  # （restart 复用同一容器可写层，永久无法自愈；全新容器无此状态则正常）。预建 +
+  # chown -R 让这个竞态无论谁先跑都安全。
+  mkdir -p /home/node/.cache
+  chown -R node:node /home/node/.cache 2>/dev/null || true
+
   # Re-exec as node user for Phase 2
   echo "🔑 Switching to node user..."
   exec su node -s /bin/sh -c "exec sh $0"

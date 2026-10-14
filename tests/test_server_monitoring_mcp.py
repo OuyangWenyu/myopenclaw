@@ -206,6 +206,19 @@ class TestEntrypointGuard:
         assert "exit 1" in window
         assert "TIANYI_BOT_SERVER_MONITORING_MCP_URL" in ENTRYPOINT[guard_at - 300:guard_at]
 
+    def test_precreates_node_owned_cache_dir(self):
+        """2026-10-14 事故守卫：root 阶段必须预建 node 属主的 /home/node/.cache。
+
+        竞态：某个 root 上下文进程抢建了 root:700 的 /home/node/.cache + openclaw-0，
+        随后真正的 gateway（node, uid 1000）连遍历都 EACCES → "SQLite read-only worker
+        Unsafe fallback ... openclaw-1000" → crash-loop（重启复用同一容器可写层，
+        永久无法自愈；全新容器则正常）。预建 + chown -R 让竞态无论谁赢都安全。
+        """
+        assert "chown -R node:node /home/node/.cache" in ENTRYPOINT
+        cache_at = ENTRYPOINT.index("/home/node/.cache")
+        switch_at = ENTRYPOINT.index("Switching to node user")
+        assert cache_at < switch_at, "必须在切 node 用户之前预建（切完之后是 node，chown 失败）"
+
 
 class TestStartScriptPreflight:
     """compose up 对 crash-loop 返回 0 —— 预检是"启动命令看起来成功"时唯一的破功点。"""
