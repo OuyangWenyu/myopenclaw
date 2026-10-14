@@ -363,7 +363,12 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 - **飞书命令审批流（2026-10-14 排查，天一/虾酱同病）**: 现象=审批提示发到飞书后批不动（早期回合窗口 ~10s=yieldMs 默认 10000，人类节奏根本来不及；事后批复报 "unknown or expired approval id"——运行时 authority 随回合结束作废，"late approval cannot restart it" 是文档明示行为）。**关键实证：飞书在 2026.9.1 不是原生态审批渠道**——`channels.feishu.execApprovals` 被真校验器拒绝（must not have additional properties；插件只挂了 approvalCapability 做授权），"带可点按钮的原生审批卡"是上游**未发布**功能（Issue #69860 / PR #60328 在途未合并）。当前版本破局点=**顶层 `approvals.exec` 转发**（`{"enabled": true, "mode": "session"}`，已入 tianyi 模板）：文档语义 = exec 工具立即返回审批 id、pending 活 **30 分钟**、批复后**会话被唤醒**执行——把回合内窗口变成人类尺度。守卫 `tests/test_server_monitoring_mcp.py::TestExecApprovalsApprover`（含负向守卫：再给 channels.feishu 加 execApprovals 会被 schema 拒）。**何时真正修好**：等上游合并飞书原生审批（PR #60328）→ 按 OpenClaw 升级流程升版本后，开 `channels.feishu.execApprovals` 即得按钮卡（Hermes 那种）。**过渡白名单（2026-10-14 已配，存于状态库、不在仓库里——state 丢失后按此重配）**：
 ```bash
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec -T --user node openclaw-tianyi \
-  sh -c 'node /app/openclaw.mjs approvals allowlist add --agent tianyi-dev "/usr/bin/gh" && node /app/openclaw.mjs approvals allowlist add --agent tianyi-dev "/usr/local/bin/gc"'
+  sh -c 'node /app/openclaw.mjs approvals allowlist add --agent tianyi-dev "gh" \
+      && node /app/openclaw.mjs approvals allowlist add --agent tianyi-dev "gc"'
+# ⚠️ 必须用**基名**（gh/gc，无斜杠）：带 "/" 的模式按 **realpath** 比对，而 npm 装的
+# gc 是符号链接（/usr/local/bin/gc → /usr/local/lib/node_modules/gitcode-cli/bin/gc.js），
+# 全路径模式会**静默失配**（2026-10-14 实测：加了路径模式仍被要求审批，基名即刻生效）。
+# remove 别忘 --agent（默认 "*" 对不上 tianyi-dev 的条目、静默无效）。
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml exec -T --user node openclaw-tianyi node /app/openclaw.mjs approvals get --gateway
 ```
 gh/gc = 天一的本职工具（AGENTS.md 建 issue 用），逐条审批等于把本职废掉；其余命令仍走审批（ask=on-miss）。虾酱（主网关）同症，其频道白名单待镜像。**已知残余风险**：这两个二进制现在无审批可执行，注入面依赖 token 权限范围——建议复核 `TIANYI_BOT_GITHUB_TOKEN` 的实际 scope（越只读越好）。
