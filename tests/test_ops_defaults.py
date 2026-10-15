@@ -590,3 +590,43 @@ class TestBackupHeartbeatWiring:
             "—— set -e 下任何一条漏了都会让整次备份非零退出"
         )
         assert "exit 1" not in writer
+
+
+class TestTianyiGlmFallback:
+    """天一 GLM 兜底（2026-10-15）：模板声明 fallbacks + 两份 key 拷贝必须同值。
+
+    key 不同值的表现是「兜底静默 401」——只在主模型故障那条路径上暴露，比语雀的
+    第二份拷贝（每次调用都会响）更阴险，所以同样钉死。比较先布尔化：失败输出
+    不得渲染 key 字面值（同 TestLiveEnvSwitched 的规矩）。
+    """
+
+    def _read_env(self, path: Path) -> dict[str, str]:
+        pairs: dict[str, str] = {}
+        for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            pairs[key.strip()] = value.strip()
+        return pairs
+
+    def test_template_declares_glm_fallback(self):
+        tpl = TIANYI_TEMPLATE.read_text(encoding="utf-8")
+        assert '"fallbacks": ["zhipu/glm-5.3-flash"]' in tpl
+        assert '"id": "glm-5.3-flash"' in tpl
+        assert "https://open.bigmodel.cn/api/paas/v4" in tpl
+
+    def test_glm_key_is_second_copy_of_main_env(self):
+        main_path = REPO_ROOT / ".env"
+        tianyi_path = REPO_ROOT / ".env.tianyi-bot"
+        if not main_path.exists() or not tianyi_path.exists():
+            pytest.skip(".env / .env.tianyi-bot 不齐（未部署）")
+        main_key = self._read_env(main_path).get("GLM_API_KEY", "")
+        if not main_key:
+            pytest.skip(".env 未配置 GLM_API_KEY")
+        tianyi_key = self._read_env(tianyi_path).get("TIANYI_BOT_GLM_API_KEY", "")
+        keys_match = bool(tianyi_key) and tianyi_key == main_key
+        assert keys_match, (
+            "天一 GLM 兜底 key 是主 .env GLM_API_KEY 的第二份拷贝 —— 轮换时必须两处同改，"
+            "否则兜底只在主模型故障时静默 401"
+        )

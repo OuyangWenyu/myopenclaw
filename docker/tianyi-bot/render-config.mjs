@@ -27,6 +27,13 @@ const replacements = new Map([
   ["__MODEL_ID__", process.env.TIANYI_BOT_MODEL_ID],
   ["__MODEL_BASE_URL__", process.env.TIANYI_BOT_MODEL_BASE_URL],
   ["__YUQUE_MCP_URL__", process.env.TIANYI_BOT_YUQUE_MCP_URL ?? ""],
+  // GLM 兜底模型 key（可选，2026-10-15）：替换占位符；无 key 时见下方摘除逻辑
+  ["__GLM_API_KEY__", (process.env.TIANYI_BOT_GLM_API_KEY ?? "").trim()],
+  // repo-scanner 是必需能力（不可像 yuque / server-monitoring 那样删条目）：
+  // 未设/空串/纯空白 = 回落默认（主栈同网逻辑地址，与参数化前行为一致）；
+  // 赤兔迁移 / 异地消费时经 env 覆盖。trim 与相邻 yuque/monitoring 的约定一致——
+  // 纯空白值若原样渲染会让 config validate 失败 → entrypoint 中止 → crash-loop。
+  ["__REPO_SCANNER_MCP_URL__", (process.env.TIANYI_BOT_REPO_SCANNER_MCP_URL ?? "").trim() || "http://repo-scanner-mcp:8001/mcp"],
   ["__SERVER_MONITORING_MCP_URL__", process.env.TIANYI_BOT_SERVER_MONITORING_MCP_URL ?? ""],
 ]);
 
@@ -72,6 +79,21 @@ if (!yuqueUrl) {
   throw new Error(
     "TIANYI_BOT_YUQUE_MCP_URL is set but TIANYI_BOT_MCP_YUQUE_MCP_API_KEY is missing",
   );
+}
+
+// GLM 兜底模型（可选，2026-10-15）：无 key 时摘除 zhipu provider 与 fallbacks 条目。
+// 与虾酱的 fallbacks 机制同款（agents.defaults.model.fallbacks）——主模型不可用时
+// OpenClaw 自动切换；不配兜底 ≠ 起不来（其余能力不受影响）。
+const glmKey = (process.env.TIANYI_BOT_GLM_API_KEY ?? "").trim();
+if (!glmKey) {
+  delete config.models.providers.zhipu;
+  const model = config.agents?.defaults?.model;
+  if (model && Array.isArray(model.fallbacks)) {
+    model.fallbacks = model.fallbacks.filter((m) => m !== "zhipu/glm-5.3-flash");
+    if (model.fallbacks.length === 0) {
+      delete model.fallbacks;
+    }
+  }
 }
 
 // Drop server-monitoring entry when no URL is configured (optional capability)

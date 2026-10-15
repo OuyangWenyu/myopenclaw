@@ -44,10 +44,87 @@ check() {
 echo "=== Test: bot 渲染产物必须通过目标版本的 config validate ==="
 echo
 
+# ── 静态接线守卫（不需要 node/docker，先跑）：渲染器 / entrypoint / 模板引用的
+#    每个环境变量都必须在对应 compose 的**显式 environment 条目**里转发。
+#    漏转发不会报错——只会让覆盖静默回落到默认值（2026-10-14 repo-scanner 参数化
+#    时差点踩到：模板/渲染器/entrypoint 全改好，compose 忘加 = 线上覆盖无效）。
+#    三层扫描面 + 两道防假绿（空集合 / 注释误命中），tianyi 与 zhixun 同款架构一起守。
+guard_wiring() {  # $1=bot标签 $2=docker目录 $3=compose文件 $4=变量前缀
+    local label="$1" dir="$2" compose="$3" prefix="$4"
+    local vars tmpl_vars missing=""
+    vars="$(grep -hoE "${prefix}_[A-Z0-9_]+" "${dir}/render-config.mjs" "${dir}/entrypoint.sh" 2>/dev/null | sort -u || true)"
+    tmpl_vars="$(grep -hoE '\$\{[A-Z0-9_]+\}' "${dir}/openclaw.json.template" 2>/dev/null | tr -d '${}' | sort -u || true)"
+    # 防假绿①：文件被改名/挪走时 grep 失败只留空集合，零循环 = 误报绿
+    if [ ! -f "${dir}/render-config.mjs" ] || [ -z "${vars}" ]; then
+        missing=" (渲染器缺失或未扫到任何 ${prefix}_* 变量——文件被改名/挪走？)"
+    fi
+    # 防假绿②：锚定 environment 条目（^缩进 VAR:）——注释里提一嘴变量名不算接线
+    for v in ${vars} ${tmpl_vars}; do
+        grep -qE "^[[:space:]]*${v}:" "${compose}" || missing="${missing} ${v}"
+    done
+    check "${label}: 渲染器/entrypoint/模板引用的变量全部被 compose 转发" '[ -z "${missing}" ]'
+    [ -n "${missing}" ] && echo "      问题:${missing}"
+    return 0
+}
+guard_wiring "tianyi" "docker/tianyi-bot" "docker-compose.tianyi-bot.yml" "TIANYI_BOT"
+guard_wiring "zhixun" "docker/zhixun-bot" "docker-compose.zhixun-bot.yml" "ZHIXUN_BOT"
+
+# 默认端点字面量对账：渲染器与 entrypoint 各持一份默认值，漂移会让就绪探测
+# 目标 ≠ 网关实际连接目标（表现为假 "not reachable" + 60s 延时）。
+check "tianyi: repo-scanner 默认端点在渲染器与 entrypoint 中一致" \
+    'grep -q "http://repo-scanner-mcp:8001/mcp" docker/tianyi-bot/render-config.mjs && grep -q "http://repo-scanner-mcp:8001/mcp" docker/tianyi-bot/entrypoint.sh'
+
 if ! command -v node >/dev/null 2>&1; then
-    echo "  ⏭️  宿主机无 node，跳过（渲染脚本需要 node 执行）"
-    exit 0
+    echo "  ⏭️  宿主机无 node，跳过渲染断言（接线守卫结果仍计入）"
+    exit ${FAIL}
 fi
+
+# ── repo-scanner 端点参数化（2026-10-14）────────────────────────────────
+# 只依赖 node（不依赖镜像）——放在镜像 gate **之前**，否则本地无镜像时整体静默消失。
+# 契约：未设/空串/纯空白 → 默认端点（与参数化前一致）；设了 → 覆盖。
+#
+# 公共假环境（渲染器必需项 + 兜底模型 dummy key）——主循环与断言共用一份，避免漂移
+TIANYI_ENVS_COMMON="TIANYI_BOT_FEISHU_APP_ID=dummy_id TIANYI_BOT_FEISHU_APP_SECRET=dummy_secret TIANYI_BOT_MODEL_API_KEY=dummy_key TIANYI_BOT_MODEL_ID=deepseek-flash TIANYI_BOT_MODEL_BASE_URL=https://api.deepseek.com TIANYI_BOT_FEISHU_STREAMING=STREAMING_VAL TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://10.48.0.81:8765/mcp TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN=dummy_token TIANYI_BOT_OWNER_OPEN_ID=ou_0123456789abcdef0123456789abcdef TIANYI_BOT_GLM_API_KEY=dummy_glm_key"
+
+render_tianyi_to() {  # $1=label $2=额外 env（可空）→ 渲染到 "${WORK}/$1/openclaw.json"
+    local label="$1" extra="${2:-}"
+    local d="${WORK}/$1"
+    mkdir -p "${d}"
+    # env -u 隔离调用者 shell 继承的同名变量（否则"未设"用例假红）；extra 会重新赋值。
+    # STREAMING_VAL 占位统一取 false（本段不需要流式）。
+    env -u TIANYI_BOT_REPO_SCANNER_MCP_URL ${TIANYI_ENVS_COMMON//STREAMING_VAL/false} ${extra} \
+        node docker/tianyi-bot/render-config.mjs \
+        docker/tianyi-bot/openclaw.json.template "${d}/openclaw.json" \
+        >/dev/null 2>"${d}/render.err" || { head -3 "${d}/render.err"; return 1; }
+}
+
+check "未设变量 → 渲染默认端点 repo-scanner-mcp:8001（行为与参数化前一致）" \
+    'render_tianyi_to default && grep -q "http://repo-scanner-mcp:8001/mcp" "${WORK}/default/openclaw.json"'
+
+check "设了变量 → 渲染覆盖端点且不含默认端点" \
+    'render_tianyi_to override "TIANYI_BOT_REPO_SCANNER_MCP_URL=https://chitu.example/repo/mcp" \
+        && grep -q "https://chitu.example/repo/mcp" "${WORK}/override/openclaw.json" \
+        && ! grep -q "repo-scanner-mcp:8001" "${WORK}/override/openclaw.json"'
+
+check "空串/纯空白 → 回落默认端点（compose 未配置传空串；纯空白是粘贴事故）" \
+    'render_tianyi_to emptyurl "TIANYI_BOT_REPO_SCANNER_MCP_URL=" \
+        && render_tianyi_to blank "TIANYI_BOT_REPO_SCANNER_MCP_URL=   " \
+        && grep -q "http://repo-scanner-mcp:8001/mcp" "${WORK}/emptyurl/openclaw.json" \
+        && grep -q "http://repo-scanner-mcp:8001/mcp" "${WORK}/blank/openclaw.json"'
+
+# ── GLM 兜底模型（2026-10-15）───────────────────────────────────────────
+# fallbacks 机制与虾酱同款（agents.defaults.model.fallbacks）——主模型不可用时
+# OpenClaw 自动切换。key 可选：无 key 时摘除 zhipu provider 与 fallbacks
+# 条目（不配兜底 ≠ 起不来）。
+check "GLM 兜底：设了 key → 渲染 fallbacks 条目与 zhipu provider（值被替换）" \
+    'render_tianyi_to fallback "TIANYI_BOT_GLM_API_KEY=glm_key_custom" \
+        && grep -q "zhipu/glm-5.3-flash" "${WORK}/fallback/openclaw.json" \
+        && grep -q "glm_key_custom" "${WORK}/fallback/openclaw.json" \
+        && grep -q "\"zhipu\"" "${WORK}/fallback/openclaw.json"'
+
+check "GLM 兜底：未设/空 key → 摘除兜底（provider 与 fallbacks 都不渲染）" \
+    'render_tianyi_to nofallback "TIANYI_BOT_GLM_API_KEY=" \
+        && ! grep -qiE "zhipu|glm-5\.3" "${WORK}/nofallback/openclaw.json"'
 
 # 目标版本取自 .env 的 pin —— 守卫跟着部署版本走，升级后自动校验新版本的 schema
 TAG="$(sed -n 's/^OPENCLAW_IMAGE=.*:\(.*\)$/\1/p' .env 2>/dev/null | head -1)"
@@ -56,8 +133,8 @@ echo "  目标镜像: ${IMAGE}"
 echo
 
 if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
-    echo "  ⏭️  本地无 ${IMAGE}，跳过（避免测试触发大镜像拉取）"
-    exit 0
+    echo "  ⏭️  本地无 ${IMAGE}，跳过渲染+校验断言（此前的守卫结果仍计入退出码）"
+    exit ${FAIL}
 fi
 
 # 渲染 + 校验一组（bot 名 + 模板路径 + 该 bot 的必需环境变量）
@@ -97,9 +174,11 @@ render_and_validate() {
 # tianyi 带上 server-monitoring 的 URL+token：streamable-http + headers 的组合
 # 是本仓第一次用，只有真跑一次目标版本的 config validate 才能证明 schema 认可这条目。
 # ⚠️ 注释不能放进 for 的续行列表里（`\` 后面跟注释会直接语法错误）——2026-10-13 恢复存档时修的。
+# （TIANYI_ENVS_COMMON 公共假环境定义在上方「端点参数化」段——主循环与断言共用一份。）
+
 for spec in \
     "zhixun|docker/zhixun-bot/openclaw.json.template|docker/zhixun-bot/render-config.mjs|ZHIXUN_BOT_FEISHU_APP_ID=dummy_id ZHIXUN_BOT_FEISHU_APP_SECRET=dummy_secret ZHIXUN_BOT_MODEL_API_KEY=dummy_key ZHIXUN_BOT_MODEL_ID=deepseek-flash ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com ZHIXUN_BOT_FEISHU_STREAMING=STREAMING_VAL" \
-    "tianyi|docker/tianyi-bot/openclaw.json.template|docker/tianyi-bot/render-config.mjs|TIANYI_BOT_FEISHU_APP_ID=dummy_id TIANYI_BOT_FEISHU_APP_SECRET=dummy_secret TIANYI_BOT_MODEL_API_KEY=dummy_key TIANYI_BOT_MODEL_ID=deepseek-flash TIANYI_BOT_MODEL_BASE_URL=https://api.deepseek.com TIANYI_BOT_FEISHU_STREAMING=STREAMING_VAL TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://10.48.0.81:8765/mcp TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN=dummy_token TIANYI_BOT_OWNER_OPEN_ID=ou_0123456789abcdef0123456789abcdef"
+    "tianyi|docker/tianyi-bot/openclaw.json.template|docker/tianyi-bot/render-config.mjs|${TIANYI_ENVS_COMMON}"
 do
     label="${spec%%|*}"; rest="${spec#*|}"
     template="${rest%%|*}"; rest="${rest#*|}"

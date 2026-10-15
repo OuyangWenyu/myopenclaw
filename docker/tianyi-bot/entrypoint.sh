@@ -101,9 +101,20 @@ if [ -n "${TIANYI_BOT_MODEL_API_KEY:-}" ]; then
 fi
 
 # ── Wait for repo-scanner-mcp ────────────────────────────────────────────
-echo "⏳ Waiting for repo-scanner-mcp (http://repo-scanner-mcp:8001)..."
+# 端点可配（2026-10-14 参数化）：默认 = 主栈同网逻辑地址（行为不变）；
+# 赤兔迁移 / 异地消费时经 TIANYI_BOT_REPO_SCANNER_MCP_URL 覆盖。
+# 归一后再推导 health：去首尾空白 / query / 尾斜杠 / /mcp 后缀——尾斜杠等常见
+# 粘贴形态若不归一，探测会轰一个不存在的路径，给出误导性的 "not reachable"。
+REPO_SCANNER_MCP_URL="${TIANYI_BOT_REPO_SCANNER_MCP_URL:-http://repo-scanner-mcp:8001/mcp}"
+REPO_SCANNER_MCP_URL="${REPO_SCANNER_MCP_URL#"${REPO_SCANNER_MCP_URL%%[![:space:]]*}"}"
+REPO_SCANNER_MCP_URL="${REPO_SCANNER_MCP_URL%"${REPO_SCANNER_MCP_URL##*[![:space:]]}"}"
+REPO_SCANNER_MCP_URL="${REPO_SCANNER_MCP_URL%%\?*}"
+REPO_SCANNER_MCP_URL="${REPO_SCANNER_MCP_URL%/}"
+case "${REPO_SCANNER_MCP_URL}" in */mcp) REPO_SCANNER_MCP_URL="${REPO_SCANNER_MCP_URL%/mcp}" ;; esac
+REPO_SCANNER_HEALTH_URL="${REPO_SCANNER_MCP_URL}/health"
+echo "⏳ Waiting for repo-scanner-mcp (${REPO_SCANNER_HEALTH_URL})..."
 for i in $(seq 1 30); do
-  if curl -fsS "http://repo-scanner-mcp:8001/health" 2>/dev/null; then
+  if curl -fsS "${REPO_SCANNER_HEALTH_URL}" 2>/dev/null; then
     echo ""
     echo "✅ repo-scanner-mcp is ready"
     break

@@ -22,8 +22,14 @@ services:
       TIANYI_BOT_FEISHU_STREAMING: ${TIANYI_BOT_FEISHU_STREAMING:-false}
       TIANYI_BOT_MODEL_ID: ${TIANYI_BOT_MODEL_ID:-deepseek-flash}
       TIANYI_BOT_MODEL_BASE_URL: ${TIANYI_BOT_MODEL_BASE_URL:-https://api.deepseek.com}
+      # GLM 兜底模型（可选）：主模型不可用时自动切换（fallbacks = zhipu/glm-5.3-flash）
+      TIANYI_BOT_GLM_API_KEY: ${TIANYI_BOT_GLM_API_KEY:-}
       TIANYI_BOT_GITHUB_TOKEN: ${TIANYI_BOT_GITHUB_TOKEN:-}
       TIANYI_BOT_GITCODE_TOKEN: ${TIANYI_BOT_GITCODE_TOKEN:-}
+      # 仓库动态 MCP（必需能力）。未设 = 渲染器回落主栈同网默认地址
+      # （http://repo-scanner-mcp:8001/mcp，行为与参数化前一致）；
+      # 仅当服务不在同网（如天一部署到团队服务器由外部消费）才覆盖。
+      TIANYI_BOT_REPO_SCANNER_MCP_URL: ${TIANYI_BOT_REPO_SCANNER_MCP_URL:-}
       # 本机语雀 MCP（主栈 yuque-mcp 服务；URL 留空则渲染时移除 yuque-mcp 条目）
       TIANYI_BOT_YUQUE_MCP_URL: ${TIANYI_BOT_YUQUE_MCP_URL:-}
       TIANYI_BOT_MCP_YUQUE_MCP_API_KEY: ${TIANYI_BOT_MCP_YUQUE_MCP_API_KEY:-}
