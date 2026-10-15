@@ -186,7 +186,10 @@ fallback_providers:
 - zai
 fallback_model:
   provider: zai
-  model: glm-5.1
+  model: glm-5.3-flash
+agent:
+  reasoning_overrides:
+    glm-5.3-flash: low
 YAML
   echo "   📝 已创建 Hermes coder profile 配置（模型: deepseek-flash）"
 fi
@@ -204,7 +207,10 @@ fallback_providers:
 - zai
 fallback_model:
   provider: zai
-  model: glm-5.1
+  model: glm-5.3-flash
+agent:
+  reasoning_overrides:
+    glm-5.3-flash: low
 mcp_servers:
   zotero:
     url: http://zotero-mcp:8002/mcp
