@@ -2,7 +2,20 @@
 
 个人多 Agent 协作平台 —— Docker Compose 一键部署，整合 Hermes、Claude Code、OpenClaw 三个 AI Agent 框架，配合长期记忆、飞书/Discord 桥接、晨间四签、论文管线、水文智能问答等能力。数据留在本机，配置用 Git 管理，定期快照备份到云盘。
 
+## 我该从哪开始
+
+| 你是 | 从这里开始 |
+|---|---|
+| **团队成员**（想用团队能力） | 飞书里直接问 **天一**（零配置）；想接进自己的 agent（WorkBuddy / 千问办公 / 豆包工作 / DeepSeek Harness / Claude Code / Codex）→ [部署到服务器时要看什么](docs/server-deploy.md) |
+| **部署服务器**（团队侧） | [部署到服务器时要看什么](docs/server-deploy.md) —— 服务器只部署「**天一 + 三项团队服务**」，**与 hermes 个人栈无关** |
+| **部署个人栈** | [快速开始](#快速开始)（下文） |
+| **了解全貌** | [架构](docs/architecture.md) |
+
+> 本仓库有**两条线**：**个人栈**（hermes 全家桶 + 个人服务，本 README 主体）与**服务器侧团队能力**（天一 + 语雀/仓库统计/服务监控三项服务）。成员接入机器自检：`./scripts/member-check.sh`（[说明](docs/member-check.md)）。
+
 ## 能力地图
+
+<!-- 🌐 = 团队侧能力（服务器部署那条线）；其余为个人栈 -->
 
 | 能力 | 实现方式 | 依赖仓库 |
 |------|----------|----------|
@@ -13,15 +26,15 @@
 | Discord 桥接 | Hermes coder（爱码士）+ OpenClaw 虾酱 | — |
 | 晨间四签 | Hermes cron skill → TDAI/AgentOps/语雀 MCP 等信号 → 飞书推送 | — |
 | AI 情报聚合 | dailyinfo 多源抓取 + AI 摘要 → 飞书 / Discord 推送 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) |
-| 研发日报 | repo-scanner MCP 采集 35 仓库 → Hermes skill → 飞书推送；天一 bot 复用同源读能力 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
+| 🌐 研发日报 | repo-scanner MCP 采集 35 仓库 → Hermes skill → 飞书推送；天一 bot 复用同源读能力（团队服务，服务器部署见 [server-deploy](docs/server-deploy.md)） | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
 | 水文智能问答 | zhixun 知汛助手 — OpenClaw + zhixun-water-mcp → 飞书 bot（独立栈） | [zhixun-agent](https://github.com/OuyangWenyu/zhixun-agent) |
 | 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |
 | 事务追踪 | aisecretary MCP 服务 → SQLite 持久化 | [aisecretary](https://github.com/iHeadWater/aisecretary) |
 | 邮件 | himalaya CLI 邮件客户端（IMAP/SMTP 多账户；Outlook 走 ortie OAuth；仅爱玛士可用，其余 agent 拒绝访问） | — |
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |
 | Google Drive | rclone 直连云端上传论文 PDF | — |
-| 语雀知识库 | 本机 yuque-mcp 服务（Hermes + 天一接入；读取/搜索/备份/变更报告） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
-| 服务器监控 | 天一接入团队 server-monitoring MCP（HTTPS + Bearer + 内网 CA，12 个只读工具：9 运行 + 3 交付/CI） | [server-monitoring](https://gitcode.com/dlut-water/server-monitoring) |
+| 语雀知识库 | 本机 yuque-mcp 服务（个人栈侧；Hermes + 天一接入；团队侧为服务器独立部署） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
+| 🌐 服务器监控 | 天一接入团队 server-monitoring MCP（HTTPS + Bearer + 内网 CA，12 个只读工具：9 运行 + 3 交付/CI） | [server-monitoring](https://gitcode.com/dlut-water/server-monitoring) |
 | 千问办公 AI听记 | 爱玛士远程 MCP（OAuth，仅默认 profile）：听记列表 / AI 摘要 / 待办 / 转写查询与整理 | — |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 + AgentOps 健康采集 | — |
@@ -137,6 +150,7 @@ myopenclaw/
 ├── .env.example                      # 主栈环境变量模板
 ├── .env.zhixun-bot.example           # zhixun bot 环境变量模板
 ├── .env.tianyi-bot.example           # tianyi bot 环境变量模板
+├── .env.member.example               # 成员接入自检配置模板（member-check 用）
 ├── .cloud.conf.example               # 云盘路径模板
 ├── docs/                             # 文档（→ GitHub Pages）
 ├── docker/                           # 自定义镜像
@@ -147,9 +161,10 @@ myopenclaw/
 │   ├── repo-scanner-mcp/             #   研发日报 MCP
 │   ├── zotero-mcp/                   #   Zotero 文献 MCP（mylibrary 源码）
 │   ├── zhixun-bot/                   #   zhixun 水文 MCP + 兼容层
+│   ├── member-check/                 #   成员接入自检检查器（三项团队能力 MCP 握手）
 │   └── tianyi-bot/                   #   tianyi bot entrypoint + 配置模板 + 渲染脚本 + 内网 CA（ca/）
 ├── openclaw-zhixun/workspace/        # zhixun bot agent 策略文件（AGENTS.md, SOUL.md）
-├── openclaw-tianyi/workspace/        # tianyi bot agent 策略文件（AGENTS.md, SOUL.md）
+├── openclaw-tianyi/workspace/        # tianyi bot agent 策略文件（AGENTS.md, SOUL.md, ACCESS.md=成员接入指南）
 ├── hermes/                           # Hermes 配置模板 + 备份脚本
 ├── claude/                           # Claude Code / cc-connect 配置模板 + 备份脚本
 ├── openclaw/                         # OpenClaw 配置模板 + 备份脚本
@@ -162,6 +177,8 @@ myopenclaw/
 
 完整文档 → **[ouyangwenyu.github.io/myopenclaw](https://ouyangwenyu.github.io/myopenclaw)**
 
+- [部署到服务器时要看什么](https://ouyangwenyu.github.io/myopenclaw/server-deploy/) — 服务器侧（天一 + 三项团队服务）vs 个人栈（hermes 等）的分界
+- [member-check 自检](https://ouyangwenyu.github.io/myopenclaw/member-check/) — 三项团队能力的连通 + 鉴权自检
 - [快速开始](https://ouyangwenyu.github.io/myopenclaw/setup/) — 新机器从零到运行
 - [架构](https://ouyangwenyu.github.io/myopenclaw/architecture/) — 服务拓扑、数据目录、安全边界
 - [服务](https://ouyangwenyu.github.io/myopenclaw/hermes-channels/) — Hermes / OpenClaw 渠道、邮件、联系人、飞书 CLI

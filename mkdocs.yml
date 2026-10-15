@@ -48,32 +48,42 @@ plugins:
   - search:
       lang: zh
 
+# 分组即"读者路由"：服务器侧（团队）一组显式独立于其余个人栈文档。
+# ⚠️ docs/ 下每个 .md 都必须出现在本 nav（孤儿页在 --strict 下不报错、只是静默不可达）——
+# 守卫 tests/test_member_docs.py::TestDocsNavCoverage。
 nav:
   - 首页: index.md
-  - 快速开始: setup.md
-  - 架构: architecture.md
-  - 服务:
+  - 开始:
+      - 快速开始: setup.md
+      - 架构: architecture.md
+      - 可移植性: portability.md
+      - Linux 服务器部署: linux-server-setup.md
+  - 团队能力（服务器侧）:
+      - 部署到服务器时要看什么: server-deploy.md
+      - member-check 自检: member-check.md
+      - 服务器监控 MCP: server-monitoring-mcp.md
+  - Agent 与渠道:
       - Hermes 渠道: hermes-channels.md
       - OpenClaw 渠道: openclaw-channels.md
-      - 邮件 (himalaya): email.md
-      - 联系人 (cardamum): contacts.md
+      - Hermes Skill 机制: hermes-skills.md
       - 飞书 CLI (lark-cli): lark-cli.md
+  - 能力服务:
       - TDAI 长期记忆: tdai-memory.md
-      - Google Drive 论文: google-drive-rclone.md
+      - 语雀知识库（本机）: yuque-mcp-hermes.md
       - Zotero 文献 (mylibrary): zotero-cli-cc.md
-  - 能力:
+      - 论文清单 (paper-queue): paper-queue.md
+      - 事务追踪 (aisecretary): aisecretary.md
+      - zhixun 知汛助手: zhixun-feishu-bot.md
       - dailyinfo 调度: dailyinfo.md
       - 研发日报: daily-dev-report.md
-      - zhixun 知汛助手: zhixun-feishu-bot.md
-      - 事务追踪 (aisecretary): aisecretary.md
-      - 语雀知识库: yuque-mcp-hermes.md
-      - 服务器监控 MCP: server-monitoring-mcp.md
-      - 论文清单 (paper-queue): paper-queue.md
+      - 千问办公 AI听记: qwennote-mcp-hermes.md
   - 运维:
       - 调度系统: scheduling.md
-      - Hermes Skill 机制: hermes-skills.md
       - 备份系统: backup.md
       - 服务监控: monitoring.md
       - AgentOps 健康采集: agentops.md
       - DNS 配置: dns-setup.md
-      - 可移植性: portability.md
+  - 工具:
+      - Google Drive 论文: google-drive-rclone.md
+      - 联系人 (cardamum): contacts.md
+      - 邮件 (himalaya): email.md
