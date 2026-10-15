@@ -1,6 +1,6 @@
 # myopenclaw
 
-个人多 Agent 协作平台，基于 Docker Compose 一键部署。本仓库有**两条线**：个人栈（hermes 全家桶 + 个人服务，面向一人）与**服务器侧团队能力**（[天一](server-deploy.md) + 三项团队服务）。
+个人操作系统——实用Agents管理。基于 Docker Compose 一键部署，本仓库有**两条线**：个人栈（hermes 全家桶 + 个人服务，面向一人）与**服务器侧团队能力**（[天一](server-deploy.md) + 三项团队服务）。
 
 ## 我该从哪开始
 
