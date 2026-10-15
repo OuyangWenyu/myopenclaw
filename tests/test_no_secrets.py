@@ -55,6 +55,12 @@ def _public_markdown_files():
     for base in ("skills", "docs", ".claude/prds"):
         yield from (REPO_ROOT / base).rglob("*.md")
     yield from REPO_ROOT.glob("*.md")
+    # 2026-10-14 扩面：成员接入面同样是公开仓库的一部分——.env.*.example 模板
+    # （事故：.env.member.example 曾引入第三方实名，独立 review 抓出）与两个
+    # bot 的 workspace 知识文件（AGENTS/SOUL/ACCESS）。
+    yield from REPO_ROOT.glob(".env.*.example")
+    for base in ("openclaw-tianyi", "openclaw-zhixun"):
+        yield from (REPO_ROOT / base).rglob("*.md")
 
 
 def test_no_personal_emails_in_public_docs():
