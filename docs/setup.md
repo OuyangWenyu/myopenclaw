@@ -61,7 +61,7 @@ cp .cloud.conf.example .cloud.conf
 如需 zhixun 知汛助手（水文智能问答飞书机器人），额外克隆：
 
 ```bash
-git clone https://github.com/OuyangWenyu/zhixun-agent.git ../zhixun-agent
+git clone https://gitcode.com/dlut-water/zhixun-agent.git ../zhixun-agent
 ```
 
 依赖关系详见 [可移植性](portability.md)。
@@ -116,6 +116,8 @@ Docker 容器内的定时任务（备份、晨间四签、语雀日报）由 `st
 全部定时任务的总览和时序依赖详见 [调度系统](scheduling.md)。
 
 ## 5. 启动 zhixun 知汛助手（可选）
+
+知汛是**团队侧公共 bot**（与天一同类，背后的 zhixun-agent 水文 MCP 是团队服务）；本节是本机可选部署，服务器侧分界见 [部署到服务器（团队侧）时要看什么](server-deploy.md)。
 
 zhixun 知汛助手是独立 Compose 栈，不与主栈一起拉起。需要先克隆 zhixun-agent 仓库并创建配置：
 

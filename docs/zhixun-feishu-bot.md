@@ -4,6 +4,14 @@
 myopenclaw 的 Hermes、Claude Code、TDAI Memory、aisecretary、repo-scanner
 或现有 OpenClaw 实例。
 
+## 定位（团队侧）
+
+知汛与天一同类：**团队侧公共 bot**（接入层）。它背后的 **zhixun-agent 统一水文 MCP
+就是团队服务本身**（能力层，团队仓库 `gitcode.com/dlut-water/zhixun-agent`）——
+与语雀 MCP / git-contribution-stats / 服务监控并列，目标部署位置同为团队服务器。
+本文**以本机栈为主、并含「服务器准备」章节**；服务器侧专属的分步部署清单（网络/凭据/验收）
+见 [部署到服务器（团队侧）时要看什么](server-deploy.md)，知汛部分待补。
+
 ## 服务边界
 
 ```text

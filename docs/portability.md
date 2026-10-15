@@ -41,7 +41,7 @@ myopenclaw (本仓库)
 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) | `~/code/git-contribution-stats` | repo-scanner-mcp 镜像构建 |
 | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) | `~/code/yuque_mcp_server` | 本机语雀 MCP 服务（yuque-mcp）镜像构建。上游**无 tag**，镜像按 commit pin（守卫 `tests/test_yuque_mcp_local.py`）；升级 = 审查 diff 后改 pin + 重建 |
 | [mylibrary](https://github.com/OuyangWenyu/mylibrary) | `~/code/mylibrary` | hermes / zotero-mcp 镜像里的论文流水线（hydrolitagent + skills）。`start.sh` 先 rsync 进 build context；**本地没有时 Dockerfile 自动从 GitHub clone**，不会 build 失败 |
-| [zhixun-agent](https://github.com/OuyangWenyu/zhixun-agent) | `../zhixun-agent` | zhixun 栈 `zhixun-water-mcp` 镜像的 `additional_contexts.zhixun_src`（可用 `ZHIXUN_AGENT_PATH` 覆盖）。只有启动 zhixun 栈时才需要 |
+| [zhixun-agent](https://gitcode.com/dlut-water/zhixun-agent) | `../zhixun-agent` | zhixun 栈 `zhixun-water-mcp` 镜像的 `additional_contexts.zhixun_src`（可用 `ZHIXUN_AGENT_PATH` 覆盖）。只有启动 zhixun 栈时才需要 |
 
 **不需要 build 的情况**（`./scripts/start.sh` 不加 `--build`）：使用已有的 Docker 镜像即可，aisecretary / git-contribution-stats / yuque_mcp_server 这些仓库不需要存在。
 
