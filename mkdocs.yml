@@ -62,6 +62,7 @@ nav:
       - 部署到服务器时要看什么: server-deploy.md
       - member-check 自检: member-check.md
       - 服务器监控 MCP: server-monitoring-mcp.md
+      - zhixun 知汛助手: zhixun-feishu-bot.md
   - Agent 与渠道:
       - Hermes 渠道: hermes-channels.md
       - OpenClaw 渠道: openclaw-channels.md
@@ -73,7 +74,6 @@ nav:
       - Zotero 文献 (mylibrary): zotero-cli-cc.md
       - 论文清单 (paper-queue): paper-queue.md
       - 事务追踪 (aisecretary): aisecretary.md
-      - zhixun 知汛助手: zhixun-feishu-bot.md
       - dailyinfo 调度: dailyinfo.md
       - 研发日报: daily-dev-report.md
       - 千问办公 AI听记: qwennote-mcp-hermes.md

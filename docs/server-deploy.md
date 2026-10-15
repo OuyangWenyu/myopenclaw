@@ -1,12 +1,12 @@
 # 部署到服务器（团队侧）时要看什么
 
-**一句话**：服务器上部署的是「**天一 + 三项团队服务**」这一条线。**hermes 全家桶、虾酱、TDAI、文献、邮箱等属于个人栈 —— 服务器上不需要、也不要部署。**
+**一句话**：服务器上部署的是「**公共 bot（天一；知汛随后）+ 三项团队服务**」这一条线。**hermes 全家桶、虾酱、TDAI、文献、邮箱等属于个人栈 —— 服务器上不需要、也不要部署。**
 
 ## 两条线，别混
 
 | | 服务器侧（团队） | 个人栈（本仓库其余部分） |
 |---|---|---|
-| 组成 | **天一**（公共 bot）+ 三个团队 MCP 服务 | hermes 四件套、虾酱、TDAI 记忆、Zotero、论文清单、邮箱、通讯录… |
+| 组成 | **天一 / 知汛**（两个公共 bot，均 OpenClaw 栈）+ 三个团队 MCP 服务 | hermes 四件套、虾酱、TDAI 记忆、Zotero、论文清单、邮箱、通讯录… |
 | 面向 | 全团队（飞书里直接用） | 个人（Owen） |
 | 运行位置 | 团队服务器 | 本机（本仓库主 compose 一键起） |
 | 文档 | 本页 + [member-check](member-check.md) + 各服务自己的仓库文档 | 本仓库其余文档（[快速开始](setup.md)、[架构](architecture.md)…） |
@@ -25,12 +25,15 @@
        ——仅"与 repo-scanner 同网"时有意义；异地部署**必须**覆盖
      - `TIANYI_BOT_YUQUE_MCP_URL` / `TIANYI_BOT_SERVER_MONITORING_MCP_URL`：未设 = **能力关闭**
        （渲染时摘除对应条目，不是回落）——与 `.env.tianyi-bot.example` 注释一致
-3. **member-check**（可选）—— 成员/验收的连通自检工具，见 [member-check](member-check.md)
+3. **知汛**（公共 bot，水文智能问答）—— 同属团队侧、**同样要部署到服务器**
+   - 与天一一样是 **OpenClaw 栈**（不是 Hermes）；独立 compose 栈（`docker-compose.zhixun-bot.yml`）+ 水文 MCP（zhixun-water-mcp）
+   - ⏳ 服务器部署文档待补（当前仓库内只有本机栈文档：[zhixun 知汛助手](zhixun-feishu-bot.md)）
+4. **member-check**（可选）—— 成员/验收的连通自检工具，见 [member-check](member-check.md)
 
 ## 不需要什么（常见混淆）
 
 - ❌ **hermes 四个容器**（爱玛士 / 爱码士 / 道元 / finance）—— 个人栈，服务器不部署
-- ❌ **虾酱 / 知汛** —— 各有自己的运行位置，与此迁移无关
+- ❌ **虾酱** —— 个人栈的 Discord 网关，与此迁移无关（⚠️ 知汛不在此列：它是团队侧公共 bot，见上）
 - ❌ **TDAI 记忆 / Zotero / paper-queue / 邮箱 / 通讯录 / Google Drive** —— 个人服务
 
 > 完整的分步部署操作指南将在迁移落地时补齐（2026-10-14：迁移进行中）。

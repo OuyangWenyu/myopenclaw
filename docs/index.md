@@ -23,6 +23,7 @@
 - [部署到服务器时要看什么](server-deploy.md) — 服务器侧 vs 个人栈的分界（**先看这个**）
 - [member-check 自检](member-check.md) — 三项团队能力的连通 + 鉴权自检工具
 - [服务器监控 MCP](server-monitoring-mcp.md) — 天一接入团队 server-monitoring（TLS + Bearer 只读）
+- [zhixun 知汛助手](zhixun-feishu-bot.md) — 水文智能问答公共 bot（OpenClaw 栈；服务器部署文档待补）
 
 ## Agent 与渠道
 
@@ -38,7 +39,6 @@
 - [Zotero 文献系统](zotero-cli-cc.md) — Zotero MCP 共享服务 + paper pipeline + 道元文献 Agent
 - [论文清单](paper-queue.md) — 论文请求只记不下（独立 MCP 容器）
 - [AI 秘书](aisecretary.md) — 事务数据库 MCP 服务
-- [zhixun 知汛助手](zhixun-feishu-bot.md) — 水文智能问答飞书机器人
 - [dailyinfo 调度](dailyinfo.md) — AI 情报聚合与定时推送
 - [研发日报](daily-dev-report.md) — 多仓库每日采集 + 飞书推送
 - [千问办公 AI听记](qwennote-mcp-hermes.md) — 爱玛士接入听记 MCP（OAuth，仅默认 profile）
