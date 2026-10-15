@@ -7,9 +7,9 @@
         "api": "openai-completions",
         "models": [
           {
-            "id": "kimi-k2.5",
-            "name": "Kimi K2.5",
-            "reasoning": false,
+            "id": "kimi-k2.6",
+            "name": "Kimi K2.6",
+            "reasoning": true,
             "input": ["text", "image"],
             "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
             "contextWindow": 256000,
@@ -62,13 +62,13 @@
     "defaults": {
       "model": {
         "primary": "deepseek/deepseek-flash",
-        "fallbacks": ["moonshot/kimi-k2.5"]
+        "fallbacks": ["moonshot/kimi-k2.6"]
       },
       "thinkingDefault": "off",
       "reasoningDefault": "off",
       "models": {
         "deepseek/deepseek-flash": { "alias": "DeepSeek" },
-        "moonshot/kimi-k2.5": { "alias": "Kimi" },
+        "moonshot/kimi-k2.6": { "alias": "Kimi" },
         "deepseek/deepseek-chat": {},
         "xiaomi/mimo-v2.5": { "alias": "MiMo" }
       },
