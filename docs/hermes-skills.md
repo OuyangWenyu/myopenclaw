@@ -17,11 +17,13 @@
 
 | 位置 | 内容 |
 |---|---|
-| `~/.hermes/skills/devops/morning-briefing/SKILL.md`｜仓库 `skills/morning-briefing/SKILL.md` | 第 0 节硬规则：星期几**只能**来自 `scripts/today.py`，`--check-weekend` 返回 0 就必须发；事故记录在案 |
-| 同上 `scripts/today.py` | 按北京时间（UTC+8）输出日期/星期/`is_weekend`，容器 UTC 不算数 |
+| `~/.hermes/skills/devops/morning-briefing/SKILL.md`｜仓库 `skills/morning-briefing/SKILL.md` | 第 0 节硬规则：星期几**只能**来自 `scripts/today.py`，`--check-briefing-day` 返回 0 就必须发；事故记录在案 |
+| 同上 `scripts/today.py` | 按北京时间（UTC+8）输出日期/星期/`is_weekend`（事实字段）/`is_briefing_day`（闸门：周一至周六），容器 UTC 不算数 |
 | `~/.hermes/scripts/cst_today.py`｜仓库 `skills/morning-briefing/scripts/cst_today.py` | cron `--script` 预脚本（cron 只认 `~/.hermes/scripts/` 下的路径），stdout 每轮注入 prompt；薄壳转发给上面那个 `today.py`，避免两处实现漂移 |
-| cron job `260cdd03f97e` | 表达式 `30 23 * * 0-4`（北京周一–周五 07:30）、`script: cst_today.py`、prompt 含「第一步：先查日期」全文 |
+| cron job `260cdd03f97e` | 表达式 `30 23 * * 0-5`（北京周一–周六 07:30）、`script: cst_today.py`、prompt 含「第一步：先查日期」全文 |
 | `start.sh` 种子 | 新部署：预脚本**只补缺、不覆盖**（`~/.hermes` 是权威副本）；job 不存在才创建，prompt 与 `--script` 从那时起一致 |
+
+**2026-10-17 口径变更**：晨间简报改为**周一至周六**推送（周六汇总周五信息），仅周日休息；cron 表达式恢复 `0-5`，日期闸门字段由 `is_weekend` 改为 `is_briefing_day`（`--check-briefing-day`）。10-13 事故的根因（凭直觉判周末）已由硬规则 + 日期预脚本封死，并由 `tests/test_morning_briefing_today.py` 钉住周六=简报日、周日=休息日。
 
 ⚠️ 同步方向仍是**单向人工**（live → 仓库）：仓库是版本源/种子，`~/.hermes` 是 live。仓库版完整镜像仍需人工搬运 —— 引用到的 `unread_report.py` / `fetch_imap_unread.py` / `mark_read.py` 只在原生副本里（`unread_report.py` / `list_unread.py` 的展示串仍含真实邮箱地址，**不得**进公开仓库）。
 

@@ -71,13 +71,23 @@ job = next(j for j in data['jobs'] if j['id'] == '$JOB_ID')
 assert job.get('enabled') == True, f'enabled is {job.get(\"enabled\")}'
 \" 2>&1"
 
-# 6. Job schedule is weekday mornings (UTC 周日–周四 23:30 = 北京周一–周五 07:30)
-check "Schedule is 30 23 * * 0-4 (北京周一至周五 07:30)" \
+# 6. Job schedule is Mon–Sat mornings (UTC 周日–周五 23:30 = 北京周一–周六 07:30)
+check "Schedule is 30 23 * * 0-5 (北京周一至周六 07:30)" \
     "python3 -c \"
 import json
 data = json.load(open('$JOBS_FILE'))
 job = next(j for j in data['jobs'] if j['id'] == '$JOB_ID')
-assert job['schedule']['expr'] == '30 23 * * 0-4', f'schedule is {job[\"schedule\"][\"expr\"]}'
+assert job['schedule']['expr'] == '30 23 * * 0-5', f'schedule is {job[\"schedule\"][\"expr\"]}'
+\" 2>&1"
+
+check "Prompt uses --check-briefing-day gate" \
+    "python3 -c \"
+import json
+data = json.load(open('$JOBS_FILE'))
+job = next(j for j in data['jobs'] if j['id'] == '$JOB_ID')
+prompt = job.get('prompt', '')
+assert '--check-briefing-day' in prompt, 'prompt missing --check-briefing-day'
+assert '--check-weekend' not in prompt, 'prompt still references deprecated --check-weekend'
 \" 2>&1"
 
 echo ""

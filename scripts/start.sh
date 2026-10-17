@@ -679,7 +679,7 @@ if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 
         echo "   📋 Daily Command Center cron job 已存在，跳过"
       fi
 
-      # ── 工作日晨间简报（待办事务 + 未读邮件，仅工作日）────────
+      # ── 工作日晨间简报（待办事务 + 未读邮件，周一至周六推送）────────
       # 日期预脚本：cron --script 只认 ~/.hermes/scripts/ 下的路径，stdout 每轮注入 prompt。
       # ⚠️ 只补缺、不覆盖 —— ~/.hermes 下是 agent 自维护的权威副本，仓库版只是版本源/种子
       #    （2026-10-12 symlink 覆盖事故、2026-10-13 日期误判事故的教训）。
@@ -709,12 +709,12 @@ if [[ -f "${HERMES_CONFIG}" ]] && grep -q 'cron_mode: allow' "${HERMES_CONFIG}" 
 
 ```bash
 python3 /opt/data/skills/devops/morning-briefing/scripts/today.py
-python3 /opt/data/skills/devops/morning-briefing/scripts/today.py --check-weekend   # 退出码 0=工作日 1=周末
+python3 /opt/data/skills/devops/morning-briefing/scripts/today.py --check-briefing-day   # 退出码 0=简报日（周一至周六）1=休息日（周日）
 echo $?
 ```
 
-- 退出码 **0** → 今天（北京时间）是工作日，**必须**正常采集并发送简报。
-- 退出码 **1** → 才回「今天是周末，没有晨间简报。好好休息！🌴」，不做数据采集。
+- 退出码 **0** → 今天（北京时间）是简报日（周一至周六），**必须**正常采集并发送简报。
+- 退出码 **1**（仅周日）→ 才回「今天是周末，没有晨间简报。好好休息！🌴」，不做数据采集。
 - 简报标题的日期用脚本输出的北京时间日期；事务「已逾期/今日截止/本周」的分档也用它。
 - 容器时区是 UTC，本任务在北京时间 07:30 触发（= 前一天 23:30 UTC）。**千万不要自己推算星期几。**
   2026-10-13 07:30 CST 那期就是代理没查日期、凭感觉断言「今天是周末」，把整期简报吞了，用户当天追问。
@@ -722,12 +722,12 @@ echo $?
 MORNING_BRIEFING_PROMPT_EOF
 )
         docker compose exec -T hermes "${HERMES_BIN}" cron create \
-          "30 23 * * 0-4" \
+          "30 23 * * 0-5" \
           "${MORNING_BRIEFING_PROMPT}" \
           --script cst_today.py \
           --deliver "${DELIVER}" \
           --name "工作日晨间简报" 2>/dev/null && \
-          echo "   📋 工作日晨间简报 cron job 已注册 (工作日 7:30 北京)" || \
+          echo "   📋 工作日晨间简报 cron job 已注册 (北京周一至周六 7:30)" || \
           echo "   ⚠️  工作日晨间简报 cron job 注册失败"
       else
         echo "   📋 工作日晨间简报 cron job 已存在，跳过"
