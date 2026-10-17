@@ -19,7 +19,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 06:00 | Docker | yuque-mcp 调度器 | **语雀知识库快照**（变更基线） | 容器内置（`YUQUE_CHANGE_SNAPSHOT_TIME`） |
 | 07:00 | 宿主机 | launchd | 推送：arXiv 论文 | `install-dailyinfo.sh` |
 | 07:00 | Docker | yuque-mcp 调度器 | **语雀变更报告**生成（yuque-daily-digest 的数据源） | 容器内置（`YUQUE_CHANGE_REPORT_TIME`） |
-| 07:30 | Docker | Hermes cron | **工作日晨间简报**（事务 + 邮件，仅工作日） | `start.sh` 自动注册 |
+| 07:30 | Docker | Hermes cron | **工作日晨间简报**（事务 + 邮件，周一至周六） | `start.sh` 自动注册 |
 | 07:45 | 宿主机 | launchd | **git-contribution-stats 每日采集** | `install-all-schedulers.sh` |
 | 07:45 | 宿主机 | launchd | **AgentOps 健康信号采集** | `install-all-schedulers.sh` |
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
@@ -31,7 +31,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 ## 时序依赖
 
 ```
-07:30           工作日晨间简报（仅工作日）— 事务 + 邮件汇总
+07:30           工作日晨间简报（周一至周六）— 事务 + 邮件汇总
 07:45 ──────── git-contribution-stats + AgentOps 采集 ← 并行
 07:50 ──────── Daily Command Center ← 读 inbox.md + TDAI 记忆
 07:55 ──────── daily-dev-report ← 读 repo-scanner MCP (SQLite)
