@@ -22,10 +22,12 @@ bot 是能力层的客户端，别把『天一接了哪三个』当成团队服�
    （统一 Bearer token 认证、数据按迁移定案用内置 SQLite 不引 PostgreSQL、`.env` 不入库按需手动同步；
    [member-check](member-check.md) 检查的就是这三项）
 2. **水文 MCP（zhixun-agent）** —— 知汛背后的水文能力，**同为团队服务**（与上三项并列，不是 bot 的附属品）
-   - 认证与存储和前三项不同：MCP 当前仅同一 Docker 网络内访问（无认证/TLS，跨主机需另加，
-     见 [zhixun 知汛助手](zhixun-feishu-bot.md) 的安全说明）；站名索引 JSON 落盘（非 SQLite）
-   - 镜像由本仓库 zhixun 栈构建（`docker/zhixun-bot/Dockerfile.mcp`），随知汛栈部署；
-     暂不进成员直连清单——水文走知汛 bot
+   - 认证：远程服务使用 `Authorization: Bearer`（`ZHIXUN_BOT_WATER_MCP_TOKEN`），
+     知汛 bot 默认直连远程端点（`ZHIXUN_BOT_WATER_MCP_URL`），不再依赖本机 MCP 容器；
+     优先 HTTPS，明文 HTTP 仅限可信内网；站名索引 JSON 落盘（非 SQLite）
+   - 本地 `zhixun-water-mcp` 容器保留为 `--with-local-mcp` 调试回退（无认证），
+     默认不启动；镜像构建逻辑在 `docker/zhixun-bot/Dockerfile.mcp`
+   - 暂不进成员直连清单——水文走知汛 bot
 
 **接入层——公共 bot**（均 OpenClaw 栈，不是 Hermes）
 

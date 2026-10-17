@@ -12,6 +12,10 @@ services:
         PIP_INDEX_URL: ${ZHIXUN_BOT_PIP_INDEX_URL:-https://pypi.tuna.tsinghua.edu.cn/simple}
     image: myopenclaw/zhixun-water-mcp:latest
     container_name: zhixun-water-mcp
+    # 远程 water MCP 是默认数据源；本地容器只在显式
+    # `--profile local-water-mcp`（脚本参数 --with-local-mcp）时启动，用于调试。
+    profiles:
+      - local-water-mcp
     restart: unless-stopped
     working_dir: /app/mcp_servers/water
     command:
@@ -75,9 +79,11 @@ services:
       ZHIXUN_BOT_MODEL_ID: ${ZHIXUN_BOT_MODEL_ID:-deepseek-flash}
       ZHIXUN_BOT_MODEL_BASE_URL: ${ZHIXUN_BOT_MODEL_BASE_URL:-https://api.deepseek.com}
       ZHIXUN_BOT_ENABLE_WRITE_TOOLS: ${ZHIXUN_BOT_ENABLE_WRITE_TOOLS:-false}
-    depends_on:
-      zhixun-water-mcp:
-        condition: service_healthy
+      # 远程 water MCP（团队服务器上的新版 zhixun-agent）。URL/TOKEN 必填；
+      # TOKEN 由 OpenClaw 运行时展开到 headers.authorization，不落渲染产物。
+      ZHIXUN_BOT_WATER_MCP_URL: ${ZHIXUN_BOT_WATER_MCP_URL:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_WATER_MCP_URL}
+      ZHIXUN_BOT_WATER_MCP_TOKEN: ${ZHIXUN_BOT_WATER_MCP_TOKEN:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_WATER_MCP_TOKEN}
+      ZHIXUN_BOT_WATER_MCP_TRANSPORT: ${ZHIXUN_BOT_WATER_MCP_TRANSPORT:-sse}
     healthcheck:
       test:
         - CMD

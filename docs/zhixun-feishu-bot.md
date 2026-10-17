@@ -1,8 +1,9 @@
 # zhixun 独立飞书机器人
 
-该部署只运行一个 OpenClaw 飞书机器人和 zhixun 的统一水文 MCP。它不连接
-myopenclaw 的 Hermes、Claude Code、TDAI Memory、aisecretary、repo-scanner
-或现有 OpenClaw 实例。
+该部署只运行一个 OpenClaw 飞书机器人，默认直连**团队服务器上的远程
+zhixun-agent 水文 MCP**（Bearer 认证）。它不连接 myopenclaw 的 Hermes、
+Claude Code、TDAI Memory、aisecretary、repo-scanner 或现有 OpenClaw 实例。
+本地 `zhixun-water-mcp` 容器仅作为 `--with-local-mcp` 调试回退，默认不启动。
 
 ## 定位（团队侧）
 
@@ -19,38 +20,45 @@ myopenclaw 的 Hermes、Claude Code、TDAI Memory、aisecretary、repo-scanner
     │ WebSocket
     ▼
 openclaw-zhixun
-    │ SSE: http://zhixun-water-mcp:18201/sse
+    │ SSE/streamable-http + Bearer
     ▼
-zhixun-water-mcp
+远程 zhixun-agent 水文 MCP（团队服务器，新版 zhixun-core）
     │ HTTPS
     ▼
 Waterism API
 ```
 
-两个容器只加入独立的 `zhixun-bot-net`。OpenClaw 数据存放在
-`~/.openclaw-zhixun`，不能与现有 `~/.openclaw` 共用。
+默认部署只启动 `openclaw-zhixun`，加入独立的 `zhixun-bot-net`。OpenClaw
+数据存放在 `~/.openclaw-zhixun`，不能与现有 `~/.openclaw` 共用。
+
+本地调试栈仍保留 `zhixun-water-mcp` 容器（同一网络内的
+`http://zhixun-water-mcp:18201/sse`），但只有 `--with-local-mcp` 才会启动；
+它构建的兼容层（站名索引 / `related_page.url` / hydromodel 路由）在远程
+服务上是否生效，切换后必须用下面的 `mcp probe` 和真实查询验证。
 
 ## 服务器准备
 
-服务器上将两个仓库放在同一个父目录：
+服务器上只需要本仓库：
 
 ```bash
 mkdir -p /srv/agents
 cd /srv/agents
 git clone git@github.com:OuyangWenyu/myopenclaw.git
-git clone git@gitcode.com:dlut-water/zhixun-agent.git
 cd myopenclaw
 ```
+
+`../zhixun-agent` 仅在 `--with-local-mcp` 调试模式下需要（构建本地
+`zhixun-water-mcp` 镜像）；默认部署连远程 MCP，不需要克隆它，也不需要
+Docker Hub/PyPI 构建依赖。
 
 要求：
 
 - Docker Engine（启用 BuildKit）和 Docker Compose plugin 2.17+
 - OpenClaw 镜像版本**必须与主栈同版本**（当前 `2026.9.1`）—— 2.0 的配置 schema 有 breaking change，混版本会让同一份模板在不同栈上有不同解释。三栈一致性由 `tests/test-openclaw-pins.sh` 守卫
-- 服务器能够访问飞书、模型 API、Waterism API 和容器镜像/插件仓库
-- 一个独立的飞书自建应用
+- 服务器能够访问飞书、模型 API、远程 water MCP、Waterism API 和容器镜像/插件仓库
+- 一个独立的飞书自建应用；远程水 MCP 的 Bearer key
 
-默认构建会访问 Docker Hub 的 `python:3.12-slim` 和 PyPI。网络受限时，在
-`.env.zhixun-bot` 中替换：
+仅本地调试模式需要替换构建源：
 
 ```dotenv
 ZHIXUN_BOT_PYTHON_BASE_IMAGE=docker.m.daocloud.io/library/python:3.12-slim
@@ -77,6 +85,9 @@ Compose 的附加构建上下文读取 zhixun-agent 源码，不依赖 zhixun-ag
 站点名称查询时，遍历现有 `/api/v2/basins/{basin_id}/stations` 资源，建立
 并持久化名称索引。名称唯一时自动解析成站码；同名站点不会静默选取，而是
 返回候选站码与所属流域供用户确认。默认缓存 24 小时：
+
+以下变量只影响本地 `--with-local-mcp` 容器；默认部署的站名索引/相关页由
+远程服务端负责：
 
 ```dotenv
 ZHIXUN_CORE_BASE_URL=https://ws.waterism.tech:8090/api/v2
@@ -119,11 +130,22 @@ vi .env.zhixun-bot
 必须填写：
 
 ```dotenv
-ZHIXUN_AGENT_PATH=../zhixun-agent
 ZHIXUN_BOT_FEISHU_APP_ID=cli_xxx
 ZHIXUN_BOT_FEISHU_APP_SECRET=xxx
 ZHIXUN_BOT_MODEL_API_KEY=xxx
+# 远程 water MCP（团队服务器新版 zhixun-agent）
+# 当前团队远程端点：http://10.48.0.81:18202/mcp（streamable-http）
+ZHIXUN_BOT_WATER_MCP_URL=https://water.example.com/mcp
+ZHIXUN_BOT_WATER_MCP_TOKEN=xxx
+ZHIXUN_BOT_WATER_MCP_TRANSPORT=streamable-http
 ```
+
+`ZHIXUN_BOT_WATER_MCP_TRANSPORT` 取值 `streamable-http`（当前远程）或 `sse`
+（本地默认回退），按远程端点实际协议填写。`ZHIXUN_BOT_WATER_MCP_TOKEN` 只写入
+`.env.zhixun-bot`，由 OpenClaw 在运行时展开到 MCP `headers.authorization`，
+渲染产物中不会出现真实值。
+
+`ZHIXUN_AGENT_PATH=../zhixun-agent` 只在 `--with-local-mcp` 调试时使用。
 
 ### 模型：DeepSeek V4.1 Flash
 
@@ -171,21 +193,22 @@ ZHIXUN_BOT_ENABLE_WRITE_TOOLS=true
 
 ## 启动
 
-首次部署或 zhixun 代码更新后：
-
-```bash
-./scripts/start-zhixun-bot.sh --build
-```
-
-普通重启：
+默认部署（直连远程 water MCP）：
 
 ```bash
 ./scripts/start-zhixun-bot.sh
 ```
 
-脚本只操作 `docker-compose.zhixun-bot.yml` 中的两个独立服务，不会启动或
-重建主 `docker-compose.yml` 中的任何服务。OpenClaw 首次启动时会把官方
-`@openclaw/feishu` 插件安装到独立数据目录。
+本地 MCP 调试（构建 `../zhixun-agent` 并启动本机容器）：
+
+```bash
+# 先把 ZHIXUN_BOT_WATER_MCP_URL 改成 http://zhixun-water-mcp:18201/sse
+./scripts/start-zhixun-bot.sh --with-local-mcp --build
+```
+
+脚本只操作 `docker-compose.zhixun-bot.yml` 中的服务，不会启动或重建主
+`docker-compose.yml` 中的任何服务。默认只启动 `openclaw-zhixun`；OpenClaw
+首次启动时会把官方 `@openclaw/feishu` 插件安装到独立数据目录。
 
 ## 验证
 
@@ -212,7 +235,17 @@ docker compose \
 docker compose \
   --env-file .env.zhixun-bot \
   -f docker-compose.zhixun-bot.yml \
-  logs -f openclaw-zhixun zhixun-water-mcp
+  logs -f openclaw-zhixun
+```
+
+本地调试栈的 MCP 日志：
+
+```bash
+docker compose \
+  --env-file .env.zhixun-bot \
+  --profile local-water-mcp \
+  -f docker-compose.zhixun-bot.yml \
+  logs -f zhixun-water-mcp
 ```
 
 在任意已加入机器人的群中 `@机器人` 并发送：
@@ -235,12 +268,19 @@ docker compose \
   down
 ```
 
-更新：
+更新（默认部署，远程 MCP 由团队服务器维护）：
+
+```bash
+git pull --ff-only
+./scripts/start-zhixun-bot.sh
+```
+
+本地调试栈（需要更新 `../zhixun-agent` 并重建）：
 
 ```bash
 git -C ../zhixun-agent pull --ff-only
 git pull --ff-only
-./scripts/start-zhixun-bot.sh --build
+./scripts/start-zhixun-bot.sh --with-local-mcp --build
 ```
 
 ## 安全说明
@@ -252,5 +292,9 @@ git pull --ff-only
   所有可联系或拉入机器人的飞书用户调用 zhixun MCP，请仅向信任的组织成员发布。
 - OpenClaw 工具策略只允许 `bundle-mcp`，飞书文档、云盘、知识库、群管理等
   原生工具全部关闭。
-- 如果服务器需要跨主机访问 MCP，应增加 TLS 和认证；当前配置只支持同一
-  Docker 网络内访问。
+- 远程 water MCP 使用 `Authorization: Bearer`。token 只存放在 gitignored 的
+  `.env.zhixun-bot`，由 OpenClaw 运行时展开；渲染出的 `openclaw.json` 里只有
+  `${ZHIXUN_BOT_WATER_MCP_TOKEN}` 字面量。优先使用 HTTPS；明文 HTTP 只限于
+  可信内网。
+- 本机 `zhixun-water-mcp` 调试容器没有认证（与远程服务不同），只在
+  `--with-local-mcp` 时启用，不要把它暴露到宿主机或跨主机网络。

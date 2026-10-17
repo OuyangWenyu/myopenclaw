@@ -24,6 +24,7 @@ pass "shell and Node syntax"
 
 docker compose \
   --env-file .env.zhixun-bot.example \
+  --profile local-water-mcp \
   -f docker-compose.zhixun-bot.yml \
   config --format json > "${TMP_DIR}/compose.json"
 
@@ -39,6 +40,8 @@ assert set(services) == {"openclaw-zhixun", "zhixun-water-mcp"}
 assert set(config["networks"]) == {"zhixun-bot-net"}
 
 mcp = services["zhixun-water-mcp"]
+# 本地 MCP 只在显式 profile 下启动；默认部署连远程 water MCP。
+assert mcp["profiles"] == ["local-water-mcp"]
 build = mcp["build"]
 assert build["context"].endswith("/docker/zhixun-bot")
 assert build["dockerfile"] == "Dockerfile.mcp"
@@ -52,6 +55,13 @@ assert mcp["environment"]["ZHIXUN_MCP_STATION_INDEX_PATH"] == "/var/lib/zhixun-w
 assert mcp["environment"]["ZHIXUN_MCP_STATION_INDEX_TTL_SECONDS"] == "86400"
 assert mcp["environment"]["ZHIXUN_MCP_STATION_INDEX_WORKERS"] == "12"
 assert mcp["volumes"][0]["target"] == "/var/lib/zhixun-water-mcp"
+
+bot = services["openclaw-zhixun"]
+# 默认部署不再依赖本地 MCP —— bot 直连远程服务。
+assert "depends_on" not in bot
+assert bot["environment"]["ZHIXUN_BOT_WATER_MCP_URL"] == "replace_me"
+assert bot["environment"]["ZHIXUN_BOT_WATER_MCP_TOKEN"] == "replace_me"
+assert bot["environment"]["ZHIXUN_BOT_WATER_MCP_TRANSPORT"] == "streamable-http"
 
 for service in services.values():
     assert "ports" not in service
@@ -444,6 +454,7 @@ pass "station and basin queries include verified related pages"
 render() {
   local write_tools="$1"
   local output="$2"
+  local transport="${3:-sse}"
   env \
     ZHIXUN_BOT_FEISHU_APP_ID=cli_test \
     ZHIXUN_BOT_FEISHU_APP_SECRET=test_secret \
@@ -452,6 +463,9 @@ render() {
     ZHIXUN_BOT_MODEL_ID=deepseek-chat \
     ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com \
     ZHIXUN_BOT_ENABLE_WRITE_TOOLS="${write_tools}" \
+    ZHIXUN_BOT_WATER_MCP_URL=https://water.example.com/sse \
+    ZHIXUN_BOT_WATER_MCP_TOKEN=water_secret \
+    ZHIXUN_BOT_WATER_MCP_TRANSPORT="${transport}" \
     node docker/zhixun-bot/render-config.mjs \
       docker/zhixun-bot/openclaw.json.template \
       "${output}"
@@ -459,8 +473,26 @@ render() {
 
 render false "${TMP_DIR}/read-only.json"
 render true "${TMP_DIR}/write-enabled.json"
+render false "${TMP_DIR}/streamable.json" streamable-http
 
-python3 - "${TMP_DIR}/read-only.json" "${TMP_DIR}/write-enabled.json" <<'PY'
+# 缺 token 必须 fail-loud，不能渲染出一份无 Authorization 的配置。
+if env -u ZHIXUN_BOT_WATER_MCP_TOKEN \
+    ZHIXUN_BOT_FEISHU_APP_ID=cli_test \
+    ZHIXUN_BOT_FEISHU_APP_SECRET=test_secret \
+    ZHIXUN_BOT_FEISHU_STREAMING=false \
+    ZHIXUN_BOT_MODEL_API_KEY=model_secret \
+    ZHIXUN_BOT_MODEL_ID=deepseek-chat \
+    ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com \
+    ZHIXUN_BOT_WATER_MCP_URL=https://water.example.com/sse \
+    node docker/zhixun-bot/render-config.mjs \
+      docker/zhixun-bot/openclaw.json.template \
+      "${TMP_DIR}/missing-token.json" >/dev/null 2>&1; then
+  echo "❌ 缺少 ZHIXUN_BOT_WATER_MCP_TOKEN 时渲染必须失败"
+  exit 1
+fi
+pass "missing water MCP token fails loud"
+
+python3 - "${TMP_DIR}/read-only.json" "${TMP_DIR}/write-enabled.json" "${TMP_DIR}/streamable.json" <<'PY'
 import json
 import sys
 
@@ -468,6 +500,8 @@ with open(sys.argv[1], encoding="utf-8") as stream:
     read_only = json.load(stream)
 with open(sys.argv[2], encoding="utf-8") as stream:
     write_enabled = json.load(stream)
+with open(sys.argv[3], encoding="utf-8") as stream:
+    streamable = json.load(stream)
 
 # 2.0 把 agents.list（数组 + default: true）改为按 id 键控的 agents.entries
 agent = read_only["agents"]["entries"]["zhixun-water"]
@@ -490,14 +524,22 @@ assert binding["agentId"] == "zhixun-water"
 assert binding["match"] == {"channel": "feishu"}
 
 server = read_only["mcp"]["servers"]["water_unified"]
-assert server["url"] == "http://zhixun-water-mcp:18201/sse"
+assert server["url"] == "https://water.example.com/sse"
+assert server["headers"]["authorization"] == "Bearer ${ZHIXUN_BOT_WATER_MCP_TOKEN}"
+assert server["transport"] == "sse"
 assert "dispatch_task_execute" in server["toolFilter"]["exclude"]
+assert "realtime_forecast_submit" in server["toolFilter"]["exclude"]
 assert "hydromodel_list" in server["toolFilter"]["exclude"]
 assert "toolFilter" not in write_enabled["mcp"]["servers"]["water_unified"]
+assert streamable["mcp"]["servers"]["water_unified"]["transport"] == "streamable-http"
 
 serialized = json.dumps(read_only)
 assert "__FEISHU_" not in serialized
 assert "__MODEL_" not in serialized
+assert "__WATER_" not in serialized
+# 真实 token 不落渲染产物；header 里只保留运行时展开的字面量。
+assert "water_secret" not in serialized
+assert "${ZHIXUN_BOT_WATER_MCP_TOKEN}" in serialized
 assert read_only["agents"]["defaults"]["model"]["primary"] == "deepseek/deepseek-chat"
 assert read_only["models"]["providers"]["deepseek"]["apiKey"] == "model_secret"
 PY

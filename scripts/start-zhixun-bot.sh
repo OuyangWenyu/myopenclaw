@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================
 # start-zhixun-bot.sh — 在服务器启动独立 zhixun 飞书机器人
-# 用法: ./scripts/start-zhixun-bot.sh [--build]
+# 用法: ./scripts/start-zhixun-bot.sh [--build] [--with-local-mcp]
+#   --with-local-mcp  额外启动本机 zhixun-water-mcp（调试用，默认不启动；
+#                     bot 默认连 .env.zhixun-bot 里的远程 water MCP）
 # =============================================================
 set -euo pipefail
 
@@ -21,6 +23,8 @@ required_vars=(
   ZHIXUN_BOT_FEISHU_APP_ID
   ZHIXUN_BOT_FEISHU_APP_SECRET
   ZHIXUN_BOT_MODEL_API_KEY
+  ZHIXUN_BOT_WATER_MCP_URL
+  ZHIXUN_BOT_WATER_MCP_TOKEN
 )
 
 for name in "${required_vars[@]}"; do
@@ -31,16 +35,42 @@ for name in "${required_vars[@]}"; do
   fi
 done
 
-zhixun_path="$(grep -E '^ZHIXUN_AGENT_PATH=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
-zhixun_path="${zhixun_path:-../zhixun-agent}"
-if [[ "${zhixun_path}" != /* ]]; then
-  zhixun_path="${REPO_ROOT}/${zhixun_path}"
+water_url="$(grep -E '^ZHIXUN_BOT_WATER_MCP_URL=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+if [[ ! "${water_url}" =~ ^https?:// ]]; then
+  echo "❌ ZHIXUN_BOT_WATER_MCP_URL 必须以 http:// 或 https:// 开头: ${water_url}"
+  exit 1
 fi
 
-if [[ ! -f "${zhixun_path}/mcp_servers/water/mcp_server_unified.py" ]]; then
-  echo "❌ ZHIXUN_AGENT_PATH 无效: ${zhixun_path}"
-  echo "   需要新版 zhixun-agent，并包含 mcp_servers/water/mcp_server_unified.py。"
-  exit 1
+build_requested=false
+with_local_mcp=false
+for arg in "$@"; do
+  case "${arg}" in
+    --build)
+      build_requested=true
+      ;;
+    --with-local-mcp)
+      with_local_mcp=true
+      ;;
+    *)
+      echo "❌ 未知参数: ${arg}"
+      echo "用法: ./scripts/start-zhixun-bot.sh [--build] [--with-local-mcp]"
+      exit 1
+      ;;
+  esac
+done
+
+if [[ "${with_local_mcp}" == "true" ]]; then
+  zhixun_path="$(grep -E '^ZHIXUN_AGENT_PATH=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+  zhixun_path="${zhixun_path:-../zhixun-agent}"
+  if [[ "${zhixun_path}" != /* ]]; then
+    zhixun_path="${REPO_ROOT}/${zhixun_path}"
+  fi
+
+  if [[ ! -f "${zhixun_path}/mcp_servers/water/mcp_server_unified.py" ]]; then
+    echo "❌ ZHIXUN_AGENT_PATH 无效: ${zhixun_path}"
+    echo "   需要新版 zhixun-agent，并包含 mcp_servers/water/mcp_server_unified.py。"
+    exit 1
+  fi
 fi
 
 data_dir="$(grep -E '^ZHIXUN_BOT_DATA_DIR=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
@@ -62,28 +92,23 @@ if [[ "${data_dir}" == "${main_openclaw_dir}" ]] \
   exit 1
 fi
 
-build_requested=false
-if [[ "${1:-}" == "--build" ]]; then
-  build_requested=true
-elif [[ -n "${1:-}" ]]; then
-  echo "❌ 未知参数: $1"
-  echo "用法: ./scripts/start-zhixun-bot.sh [--build]"
-  exit 1
+compose_args=(--env-file "${ENV_FILE}" -f "${COMPOSE_FILE}")
+if [[ "${with_local_mcp}" == "true" ]]; then
+  compose_args+=(--profile local-water-mcp)
 fi
 
 echo "🔍 校验 zhixun 机器人 Compose 配置..."
-docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" config --quiet
+docker compose "${compose_args[@]}" config --quiet
 
 echo "🚀 启动独立 zhixun 飞书机器人..."
+up_args=(up -d --force-recreate)
 if [[ "${build_requested}" == "true" ]]; then
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" \
-    up -d --force-recreate --build
-else
-  docker compose --env-file "${ENV_FILE}" -f "${COMPOSE_FILE}" \
-    up -d --force-recreate
+  up_args+=(--build)
 fi
+docker compose "${compose_args[@]}" "${up_args[@]}"
 
 echo "✅ 启动命令已提交"
+echo "   远程 MCP: ${water_url}"
 echo "   状态: docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml ps"
 echo "   日志: docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml logs -f openclaw-zhixun"
 echo "   MCP:  docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml exec openclaw-zhixun node /app/openclaw.mjs mcp probe water_unified --json"

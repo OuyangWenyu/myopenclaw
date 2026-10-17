@@ -51,8 +51,11 @@
   "mcp": {
     "servers": {
       "water_unified": {
-        "url": "http://zhixun-water-mcp:18201/sse",
+        "url": "__WATER_MCP_URL__",
         "transport": "sse",
+        "headers": {
+          "authorization": "Bearer ${ZHIXUN_BOT_WATER_MCP_TOKEN}"
+        },
         "connectionTimeoutMs": 10000,
         "requestTimeoutMs": 120000,
         "supportsParallelToolCalls": true,
@@ -69,6 +72,7 @@
             "dispatch_task_create",
             "dispatch_task_update_conditions",
             "dispatch_task_execute",
+            "realtime_forecast_submit",
             "item_add",
             "item_add_batch",
             "item_update",

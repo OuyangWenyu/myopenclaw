@@ -27,7 +27,7 @@
 | 晨间四签 | Hermes cron skill → TDAI/AgentOps/语雀 MCP 等信号 → 飞书推送 | — |
 | AI 情报聚合 | dailyinfo 多源抓取 + AI 摘要 → 飞书 / Discord 推送 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) |
 | 🌐 研发日报 | repo-scanner MCP 采集 35 仓库 → Hermes skill → 飞书推送；天一 bot 复用同源读能力（团队服务，服务器部署见 [server-deploy](docs/server-deploy.md)） | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
-| 🌐 水文智能问答 | zhixun 知汛助手 — OpenClaw + zhixun-water-mcp → 飞书 bot（**团队公共 bot**；背后的 zhixun-agent 水文 MCP 即**团队服务**；独立栈；服务器侧部署清单待补，见 [server-deploy](docs/server-deploy.md)） | [zhixun-agent](https://gitcode.com/dlut-water/zhixun-agent) |
+| 🌐 水文智能问答 | zhixun 知汛助手 — OpenClaw → **远程水文 MCP（Bearer）** → 飞书 bot（**团队公共 bot**；背后的 zhixun-agent 水文 MCP 即**团队服务**；独立栈；本机 MCP 容器仅 `--with-local-mcp` 调试；服务器侧部署清单待补，见 [server-deploy](docs/server-deploy.md)） | [zhixun-agent](https://gitcode.com/dlut-water/zhixun-agent) |
 | 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |
 | 事务追踪 | aisecretary MCP 服务 → SQLite 持久化 | [aisecretary](https://github.com/iHeadWater/aisecretary) |
 | 邮件 | himalaya CLI 邮件客户端（IMAP/SMTP 多账户；Outlook 走 ortie OAuth；仅爱玛士可用，其余 agent 拒绝访问） | — |
@@ -136,7 +136,7 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 | freshrss | 8081 | 主栈 | RSS 聚合（dailyinfo 数据源） |
 | uptime-kuma | 3001 | 主栈 | 服务监控面板 |
 | backup-cron | — | 主栈 | 定时快照备份 |
-| zhixun-water-mcp | 18201 | zhixun 栈 | 水文 MCP（43 tools），兼容 zhixun-core v2 |
+| zhixun-water-mcp | 18201 | zhixun 栈（`--with-local-mcp`） | 本地水文 MCP 调试回退（默认不启动；生产连远程 Bearer 服务） |
 | openclaw-zhixun | 18791 | zhixun 栈 | 知汛助手 — OpenClaw 飞书 bot（独立网络 + 数据目录） |
 | openclaw-tianyi | 18792 | tianyi 栈 | 天一研发助手 — OpenClaw 飞书 bot（共享主栈网络，复用 repo-scanner-mcp，gh/gc 写 GitHub/GitCode issue；可选接入 server-monitoring 监控 MCP） |
 

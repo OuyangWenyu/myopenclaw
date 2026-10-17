@@ -178,13 +178,14 @@ cat /tmp/report.txt | docker compose exec -T hermes python3 /opt/hermes-skills/d
 
 # zhixun 飞书机器人（知汛助手）— 独立 Compose 栈，水文查询专用
 # 使用独立的 .env.zhixun-bot 配置 + docker-compose.zhixun-bot.yml
-# 依赖外部 zhixun-agent 仓库（../zhixun-agent，需提前 clone）
-./scripts/start-zhixun-bot.sh --build                        # 首次启动（构建 MCP 镜像 + 拉取 OpenClaw）
-./scripts/start-zhixun-bot.sh                                # 启动（使用已有镜像）
+# 默认连远程 water MCP（Bearer，团队服务器新版 zhixun-agent / zhixun-core）；
+# 本机 zhixun-water-mcp 容器仅在 --with-local-mcp 调试时启动（需要 ../zhixun-agent）
+./scripts/start-zhixun-bot.sh                                # 启动（默认，远程 MCP）
+./scripts/start-zhixun-bot.sh --with-local-mcp --build       # 本地 MCP 调试（构建 MCP 镜像 + 拉取 OpenClaw）
 docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml ps     # 服务状态
 docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml logs -f openclaw-zhixun  # 网关日志
-docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml logs -f zhixun-water-mcp  # MCP 日志
-docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml exec openclaw-zhixun node /app/openclaw.mjs mcp probe water_unified --json  # MCP 工具列表（43 tools）
+docker compose --env-file .env.zhixun-bot --profile local-water-mcp -f docker-compose.zhixun-bot.yml logs -f zhixun-water-mcp  # 本地 MCP 日志（调试）
+docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml exec openclaw-zhixun node /app/openclaw.mjs mcp probe water_unified --json  # MCP 工具列表（远程服务）
 docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml stop   # 停止服务
 
 # tianyi 飞书机器人（天一研发助手）— 独立 Compose 栈，GitHub/GitCode 仓库访问专用
@@ -303,9 +304,9 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 **zhixun bot stack** (`docker-compose.zhixun-bot.yml`, independent `zhixun-bot-net` network, managed separately from the main stack):
 
-10. **zhixun-water-mcp** — Custom image (`docker/zhixun-bot/Dockerfile.mcp`) using `python:3.12-slim` + MCP + httpx + pypinyin. SSE MCP server on port 18201. Wraps the upstream Water MCP from zhixun-agent with 3 compatibility layers: `zhixun_core_v2_compat.py` (station name index, v2 response parsing), `related_page_compat.py` (auto-attaches frontend page links to query results), `briefing_compat.py` (hydromodel routing). 43 MCP tools total, 15 write tools filtered by default. Build uses BuildKit multi-context to copy `mcp_servers/water/` from `../zhixun-agent`. Resource limits: 1G/1 CPU.
+10. **zhixun-water-mcp** — **仅本地调试 profile（`local-water-mcp`，默认不启动）**。Custom image (`docker/zhixun-bot/Dockerfile.mcp`) using `python:3.12-slim` + MCP + httpx + pypinyin. SSE MCP server on port 18201. Wraps the upstream Water MCP from zhixun-agent with 3 compatibility layers: `zhixun_core_v2_compat.py` (station name index, v2 response parsing), `related_page_compat.py` (auto-attaches frontend page links to query results), `briefing_compat.py` (hydromodel routing). Build uses BuildKit multi-context to copy `mcp_servers/water/` from `../zhixun-agent`. Resource limits: 1G/1 CPU. 生产路径是远程 MCP（见下一条）。
 
-11. **openclaw-zhixun** — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.9.1` image with custom entrypoint. Port 18791 (loopback only, not exposed). Connected to Feishu via independent bot (`ZHIXUN_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-flash with independent API key. Only MCP tools allowed (no code execution, browser, or file access). Uses `render-config.mjs` to inject credentials into `openclaw.json.template` at startup. Resource limits: 2G/1 CPU.
+11. **openclaw-zhixun** — Stock `docker.m.daocloud.io/openclaw/openclaw:2026.9.1` image with custom entrypoint. Port 18791 (loopback only, not exposed). Connected to Feishu via independent bot (`ZHIXUN_BOT_FEISHU_APP_ID/SECRET`), group-open (`groupPolicy: open` + `requireMention: true`) + DM-open. Model: deepseek-flash with independent API key. Only MCP tools allowed (no code execution, browser, or file access). **默认直连远程 water MCP**：`ZHIXUN_BOT_WATER_MCP_URL` + `ZHIXUN_BOT_WATER_MCP_TOKEN`（Bearer，运行时展开到 `headers.authorization`）+ 可选 `ZHIXUN_BOT_WATER_MCP_TRANSPORT`（`sse` 默认 / `streamable-http`）。Uses `render-config.mjs` to inject credentials into `openclaw.json.template` at startup. Resource limits: 2G/1 CPU.
 
 **tianyi bot stack** (`docker-compose.tianyi-bot.yml`, shares `myopenclaw-net` network with main stack, managed separately):
 
@@ -362,7 +363,7 @@ docker compose --env-file .env.zhixun-bot -f docker-compose.zhixun-bot.yml run -
 
 - **Zotero access model — write vs read-only**: 爱码士 (coder) has full write access via `ZOTERO_API_KEY` for paper injection. 道元 (daoyuan) has **read-only** access via `DAOYUAN_ZOTERO_API_KEY` — can query the library but cannot create/modify items. This separation is enforced at the Zotero API key level (read-only key only has "Allow library access", no write permission).
 
-- **zhixun bot — fully isolated stack**: ... Full docs: `docs/zhixun-feishu-bot.md`.
+- **zhixun bot — fully isolated stack, remote water MCP**: 默认部署只启动 `openclaw-zhixun`，直连团队服务器上的远程 water MCP（`ZHIXUN_BOT_WATER_MCP_URL` + `Bearer ${ZHIXUN_BOT_WATER_MCP_TOKEN}`，运行时展开，渲染产物不落真实 key；可选 `ZHIXUN_BOT_WATER_MCP_TRANSPORT=sse|streamable-http`）。远程服务背后是新版 zhixun-core，**不能改用本机容器代替**。本机 `zhixun-water-mcp` 降级为 `local-water-mcp` profile（`--with-local-mcp`）调试回退；本地兼容层（站名索引 / `related_page.url` / hydromodel 路由）在远程是否生效需用 `mcp probe` + 真实查询验证。守卫：`tests/test-zhixun-bot.sh`（渲染产物含 `${...}` 字面量、不含真实 token；缺 token 渲染失败；本地 MCP 有 profile、bot 无 depends_on）、`tests/test-bot-rendered-config.sh`（渲染产物过目标版本 config validate）。Full docs: `docs/zhixun-feishu-bot.md`.
 
 - **tianyi bot (天一) — shared-network stack**: The tianyi feishu bot runs as a separate Compose stack but shares `myopenclaw-net` with the main stack (unlike zhixun's fully isolated network). This allows it to reuse the existing `repo-scanner-mcp` for read operations (daily reports, commits, authors). For write operations, the entrypoint installs `gh` CLI (APT) and `gitcode-cli` (npm) at startup — the same pattern used by the Hermes Dockerfile. The agent uses `profile: "coding"` (terminal + MCP) rather than `bundle-mcp`, so it can run CLI commands directly. Startup dependency: main stack must be running first (`scripts/start.sh` before `scripts/start-tianyi-bot.sh`). Data dir: `~/.openclaw-tianyi`.
 
@@ -428,7 +429,7 @@ When the system DNS (e.g., overseas DNS servers) cannot resolve Chinese domains,
 - `docker/<service>/Dockerfile` — custom images (hermes, claude-code, backup-cron)
 - `docker/paper-queue-mcp/` — 论文清单的 MCP 服务（FastMCP + streamable HTTP）+ 契约 `schema.sql`。**独立容器**是刻意的，见 Key Design Decisions
 - `docker/member-check/` — 成员接入自检检查器（MCP 握手 + token 校验，token 不回显；`scripts/member-check.sh` 薄包装 + `.env.member` 配置（gitignored））
-- `docker/zhixun-bot/` — zhixun bot MCP Dockerfile + compat layers + config template
+- `docker/zhixun-bot/` — zhixun bot 远程 MCP 配置模板/渲染器 + 本地调试 MCP Dockerfile/compat layers
 - `docker/tianyi-bot/` — tianyi bot entrypoint + config template + render script + 内网 CA（`ca/`，公钥材料随仓库提交）
 - `openclaw/skills/paper-queue/` — 虾酱的论文清单 skill（只剩 SKILL.md；契约与 MCP 服务已搬到 `docker/paper-queue-mcp/`），由 `start.sh` 的 `install_paper_queue()` 拷到 `~/.openclaw/skills/`（openclaw-gateway **没有** skills 挂载，所以是拷贝不是 bind mount）
 - `openclaw/plugins/paper-queue-actor/` — 身份注入插件（三钩子），同样按仓库为源、`start.sh` 拷贝到 `~/.openclaw/extensions/`

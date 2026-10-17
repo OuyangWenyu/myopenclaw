@@ -20,12 +20,26 @@ for (const name of required) {
   }
 }
 
+// 远程 water MCP 是唯一数据源（本地容器没有认证、且背后 zhixun-core 版本较旧）。
+// URL / TOKEN 必填：TOKEN 由 OpenClaw 运行时展开到 headers.authorization，
+// 渲染产物里只有字面量 `${ZHIXUN_BOT_WATER_MCP_TOKEN}`，不会落真实凭据。
+const waterMcpUrl = (process.env.ZHIXUN_BOT_WATER_MCP_URL ?? "").trim();
+const waterMcpToken = (process.env.ZHIXUN_BOT_WATER_MCP_TOKEN ?? "").trim();
+
+if (!waterMcpUrl) {
+  throw new Error("missing required environment variable: ZHIXUN_BOT_WATER_MCP_URL");
+}
+if (!waterMcpToken) {
+  throw new Error("missing required environment variable: ZHIXUN_BOT_WATER_MCP_TOKEN");
+}
+
 const replacements = new Map([
   ["__FEISHU_APP_ID__", process.env.ZHIXUN_BOT_FEISHU_APP_ID],
   ["__FEISHU_APP_SECRET__", process.env.ZHIXUN_BOT_FEISHU_APP_SECRET],
   ["__MODEL_API_KEY__", process.env.ZHIXUN_BOT_MODEL_API_KEY],
   ["__MODEL_ID__", process.env.ZHIXUN_BOT_MODEL_ID],
   ["__MODEL_BASE_URL__", process.env.ZHIXUN_BOT_MODEL_BASE_URL],
+  ["__WATER_MCP_URL__", waterMcpUrl],
 ]);
 
 function replace(value) {
@@ -62,6 +76,18 @@ const feishuStreaming =
 // shape via `openclaw doctor --fix`），写布尔会让**每次启动渲染出的配置都
 // schema-invalid**。取值：partial=开启流式卡片（默认），off=只发完成后的整条回复。
 config.channels.feishu.streaming = { mode: feishuStreaming ? "partial" : "off" };
+
+// 远程端点协议由部署方决定：sse（默认）或 streamable-http。
+// 非法值直接抛错，避免渲染出一份 schema 不接受、或连不上的配置。
+const waterTransport = (process.env.ZHIXUN_BOT_WATER_MCP_TRANSPORT ?? "sse")
+  .trim()
+  .toLowerCase();
+if (!["sse", "streamable-http"].includes(waterTransport)) {
+  throw new Error(
+    `invalid ZHIXUN_BOT_WATER_MCP_TRANSPORT: ${waterTransport} (expected "sse" or "streamable-http")`,
+  );
+}
+config.mcp.servers.water_unified.transport = waterTransport;
 
 if (enableWriteTools) {
   delete config.mcp.servers.water_unified.toolFilter;
