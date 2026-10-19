@@ -22,6 +22,7 @@ BACKUP_DOCKERFILE = (REPO_ROOT / "docker" / "backup-cron" / "Dockerfile").read_t
 BACKUP_ALL = (REPO_ROOT / "scripts" / "backup-all-docker.sh").read_text()
 OPENCLAW_EXAMPLE = REPO_ROOT / "openclaw" / "config" / "openclaw.json.example"
 TIANYI_TEMPLATE = REPO_ROOT / "docker" / "tianyi-bot" / "openclaw.json.template"
+ZHIXUN_TEMPLATE = REPO_ROOT / "docker" / "zhixun-bot" / "openclaw.json.template"
 
 
 def compose_service_block(name: str) -> str:
@@ -628,5 +629,44 @@ class TestTianyiGlmFallback:
         keys_match = bool(tianyi_key) and tianyi_key == main_key
         assert keys_match, (
             "天一 GLM 兜底 key 是主 .env GLM_API_KEY 的第二份拷贝 —— 轮换时必须两处同改，"
+            "否则兜底只在主模型故障时静默 401"
+        )
+
+
+class TestZhixunGlmFallback:
+    """知汛 GLM 兜底（2026-10-19）：模板声明 fallbacks + 两份 key 拷贝必须同值。
+
+    与天一同一套机制；知汛此前无兜底（2026-10-15 事故里主模型过载时整条链路挂掉）。
+    端点必须是国内 open.bigmodel.cn，避免漂到国际站 api.z.ai。
+    """
+
+    def _read_env(self, path: Path) -> dict[str, str]:
+        pairs: dict[str, str] = {}
+        for raw in path.read_text(encoding="utf-8", errors="replace").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+            key, _, value = line.partition("=")
+            pairs[key.strip()] = value.strip()
+        return pairs
+
+    def test_template_declares_glm_fallback(self):
+        tpl = ZHIXUN_TEMPLATE.read_text(encoding="utf-8")
+        assert '"fallbacks": ["zhipu/glm-5.3-flash"]' in tpl
+        assert '"id": "glm-5.3-flash"' in tpl
+        assert "https://open.bigmodel.cn/api/paas/v4" in tpl
+
+    def test_glm_key_is_second_copy_of_main_env(self):
+        main_path = REPO_ROOT / ".env"
+        zhixun_path = REPO_ROOT / ".env.zhixun-bot"
+        if not main_path.exists() or not zhixun_path.exists():
+            pytest.skip(".env / .env.zhixun-bot 不齐（未部署）")
+        main_key = self._read_env(main_path).get("GLM_API_KEY", "")
+        if not main_key:
+            pytest.skip(".env 未配置 GLM_API_KEY")
+        zhixun_key = self._read_env(zhixun_path).get("ZHIXUN_BOT_GLM_API_KEY", "")
+        keys_match = bool(zhixun_key) and zhixun_key == main_key
+        assert keys_match, (
+            "知汛 GLM 兜底 key 是主 .env GLM_API_KEY 的第二份拷贝 —— 轮换时必须两处同改，"
             "否则兜底只在主模型故障时静默 401"
         )

@@ -462,6 +462,7 @@ render() {
     ZHIXUN_BOT_MODEL_API_KEY=model_secret \
     ZHIXUN_BOT_MODEL_ID=deepseek-chat \
     ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com \
+    ZHIXUN_BOT_GLM_API_KEY=glm_secret \
     ZHIXUN_BOT_ENABLE_WRITE_TOOLS="${write_tools}" \
     ZHIXUN_BOT_WATER_MCP_URL=https://water.example.com/sse \
     ZHIXUN_BOT_WATER_MCP_TOKEN=water_secret \
@@ -474,6 +475,22 @@ render() {
 render false "${TMP_DIR}/read-only.json"
 render true "${TMP_DIR}/write-enabled.json"
 render false "${TMP_DIR}/streamable.json" streamable-http
+
+# 无 GLM key = 无兜底：模板里的 zhipu provider 与 fallbacks 必须被整段摘除，
+# 不能留下 apiKey 为空串的条目（那会让 config validate 或运行时失败）。
+env \
+  ZHIXUN_BOT_FEISHU_APP_ID=cli_test \
+  ZHIXUN_BOT_FEISHU_APP_SECRET=test_secret \
+  ZHIXUN_BOT_FEISHU_STREAMING=false \
+  ZHIXUN_BOT_MODEL_API_KEY=model_secret \
+  ZHIXUN_BOT_MODEL_ID=deepseek-chat \
+  ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com \
+  ZHIXUN_BOT_WATER_MCP_URL=https://water.example.com/sse \
+  ZHIXUN_BOT_WATER_MCP_TOKEN=water_secret \
+  ZHIXUN_BOT_WATER_MCP_TRANSPORT=sse \
+  node docker/zhixun-bot/render-config.mjs \
+    docker/zhixun-bot/openclaw.json.template \
+    "${TMP_DIR}/no-glm.json"
 
 # 缺 token 必须 fail-loud，不能渲染出一份无 Authorization 的配置。
 if env -u ZHIXUN_BOT_WATER_MCP_TOKEN \
@@ -492,7 +509,7 @@ if env -u ZHIXUN_BOT_WATER_MCP_TOKEN \
 fi
 pass "missing water MCP token fails loud"
 
-python3 - "${TMP_DIR}/read-only.json" "${TMP_DIR}/write-enabled.json" "${TMP_DIR}/streamable.json" <<'PY'
+python3 - "${TMP_DIR}/read-only.json" "${TMP_DIR}/write-enabled.json" "${TMP_DIR}/streamable.json" "${TMP_DIR}/no-glm.json" <<'PY'
 import json
 import sys
 
@@ -502,6 +519,8 @@ with open(sys.argv[2], encoding="utf-8") as stream:
     write_enabled = json.load(stream)
 with open(sys.argv[3], encoding="utf-8") as stream:
     streamable = json.load(stream)
+with open(sys.argv[4], encoding="utf-8") as stream:
+    no_glm = json.load(stream)
 
 # 2.0 把 agents.list（数组 + default: true）改为按 id 键控的 agents.entries
 agent = read_only["agents"]["entries"]["zhixun-water"]
@@ -542,6 +561,19 @@ assert "water_secret" not in serialized
 assert "${ZHIXUN_BOT_WATER_MCP_TOKEN}" in serialized
 assert read_only["agents"]["defaults"]["model"]["primary"] == "deepseek/deepseek-chat"
 assert read_only["models"]["providers"]["deepseek"]["apiKey"] == "model_secret"
+
+# GLM 兜底：必须钉国内智谱端点，且 key 正确注入。
+model = read_only["agents"]["defaults"]["model"]
+assert model["fallbacks"] == ["zhipu/glm-5.3-flash"]
+zhipu = read_only["models"]["providers"]["zhipu"]
+assert zhipu["baseUrl"] == "https://open.bigmodel.cn/api/paas/v4"
+assert zhipu["apiKey"] == "glm_secret"
+assert zhipu["models"][0]["id"] == "glm-5.3-flash"
+
+# 无 key 时兜底整段摘除（不是留空 apiKey）。
+assert "zhipu" not in no_glm["models"]["providers"]
+assert "fallbacks" not in no_glm["agents"]["defaults"]["model"]
+assert "__GLM_" not in json.dumps(no_glm)
 PY
 pass "rendered group binding and MCP tool policy"
 

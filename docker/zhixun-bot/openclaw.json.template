@@ -23,13 +23,35 @@
             "maxTokens": 8192
           }
         ]
+      },
+      "zhipu": {
+        "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+        "apiKey": "__GLM_API_KEY__",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "glm-5.3-flash",
+            "name": "GLM 5.3 Flash（兜底）",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
       }
     }
   },
   "agents": {
     "defaults": {
       "model": {
-        "primary": "deepseek/__MODEL_ID__"
+        "primary": "deepseek/__MODEL_ID__",
+        "fallbacks": ["zhipu/glm-5.3-flash"]
       }
     },
     "entries": {

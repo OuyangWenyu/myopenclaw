@@ -35,6 +35,14 @@ for name in "${required_vars[@]}"; do
   fi
 done
 
+# ── GLM 兜底（可选）：一行可见性；空/replace_me = 未配置（不阻塞启动）──────
+glm_key="$(grep -E '^ZHIXUN_BOT_GLM_API_KEY=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+if [[ -n "${glm_key}" && "${glm_key}" != "replace_me" && "${glm_key}" != *"xxxx"* ]]; then
+  echo "✅ GLM 兜底已配置（zhipu/glm-5.3-flash，国内端点）"
+else
+  echo "⚠️  GLM 兜底未配置（可选）——主模型故障时无自动切换；填 ZHIXUN_BOT_GLM_API_KEY 启用"
+fi
+
 water_url="$(grep -E '^ZHIXUN_BOT_WATER_MCP_URL=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
 if [[ ! "${water_url}" =~ ^https?:// ]]; then
   echo "❌ ZHIXUN_BOT_WATER_MCP_URL 必须以 http:// 或 https:// 开头: ${water_url}"

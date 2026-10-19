@@ -67,10 +67,11 @@ services:
     environment:
       HOME: /home/node
       TZ: ${TZ:-Asia/Shanghai}
-      # OpenClaw custom providers may resolve the legacy built-in key name;
-      # keep both aliases while the displayed provider remains zhipu.
+      # 主模型（DeepSeek）与兜底模型（智谱 GLM）各自独立的 key。
+      # 两个别名都指向各自 provider 的真实 key —— 不能让 ZHIPU_API_KEY 继续
+      # 持有 DeepSeek key，否则自定义 zhipu provider 走环境变量解析时会 401。
       ZHIXUN_BOT_MODEL_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
-      ZHIPU_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
+      ZHIPU_API_KEY: ${ZHIXUN_BOT_GLM_API_KEY:-}
       DEEPSEEK_API_KEY: ${ZHIXUN_BOT_MODEL_API_KEY:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_MODEL_API_KEY}
       ZHIXUN_BOT_FEISHU_APP_ID: ${ZHIXUN_BOT_FEISHU_APP_ID:?请设置飞书 App ID}
       ZHIXUN_BOT_FEISHU_APP_SECRET: ${ZHIXUN_BOT_FEISHU_APP_SECRET:?请设置飞书 App Secret}
@@ -78,6 +79,8 @@ services:
       ZHIXUN_BOT_FEISHU_STREAMING: ${ZHIXUN_BOT_FEISHU_STREAMING:-false}
       ZHIXUN_BOT_MODEL_ID: ${ZHIXUN_BOT_MODEL_ID:-deepseek-flash}
       ZHIXUN_BOT_MODEL_BASE_URL: ${ZHIXUN_BOT_MODEL_BASE_URL:-https://api.deepseek.com}
+      # GLM 兜底模型（可选）：主模型不可用时自动切换（fallbacks = zhipu/glm-5.3-flash）
+      ZHIXUN_BOT_GLM_API_KEY: ${ZHIXUN_BOT_GLM_API_KEY:-}
       ZHIXUN_BOT_ENABLE_WRITE_TOOLS: ${ZHIXUN_BOT_ENABLE_WRITE_TOOLS:-false}
       # 远程 water MCP（团队服务器上的新版 zhixun-agent）。URL/TOKEN 必填；
       # TOKEN 由 OpenClaw 运行时展开到 headers.authorization，不落渲染产物。

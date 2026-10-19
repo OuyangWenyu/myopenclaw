@@ -177,7 +177,7 @@ render_and_validate() {
 # （TIANYI_ENVS_COMMON 公共假环境定义在上方「端点参数化」段——主循环与断言共用一份。）
 
 for spec in \
-    "zhixun|docker/zhixun-bot/openclaw.json.template|docker/zhixun-bot/render-config.mjs|ZHIXUN_BOT_FEISHU_APP_ID=dummy_id ZHIXUN_BOT_FEISHU_APP_SECRET=dummy_secret ZHIXUN_BOT_MODEL_API_KEY=dummy_key ZHIXUN_BOT_MODEL_ID=deepseek-flash ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com ZHIXUN_BOT_FEISHU_STREAMING=STREAMING_VAL ZHIXUN_BOT_WATER_MCP_URL=https://water.example.com/sse ZHIXUN_BOT_WATER_MCP_TOKEN=dummy_water_token ZHIXUN_BOT_WATER_MCP_TRANSPORT=sse" \
+    "zhixun|docker/zhixun-bot/openclaw.json.template|docker/zhixun-bot/render-config.mjs|ZHIXUN_BOT_FEISHU_APP_ID=dummy_id ZHIXUN_BOT_FEISHU_APP_SECRET=dummy_secret ZHIXUN_BOT_MODEL_API_KEY=dummy_key ZHIXUN_BOT_MODEL_ID=deepseek-flash ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com ZHIXUN_BOT_FEISHU_STREAMING=STREAMING_VAL ZHIXUN_BOT_WATER_MCP_URL=https://water.example.com/sse ZHIXUN_BOT_WATER_MCP_TOKEN=dummy_water_token ZHIXUN_BOT_WATER_MCP_TRANSPORT=sse ZHIXUN_BOT_GLM_API_KEY=dummy_glm_key" \
     "tianyi|docker/tianyi-bot/openclaw.json.template|docker/tianyi-bot/render-config.mjs|${TIANYI_ENVS_COMMON}"
 do
     label="${spec%%|*}"; rest="${spec#*|}"

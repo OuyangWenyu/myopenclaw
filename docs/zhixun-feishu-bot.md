@@ -158,6 +158,19 @@ ZHIXUN_BOT_MODEL_ID=deepseek-flash
 ZHIXUN_BOT_MODEL_BASE_URL=https://api.deepseek.com
 ```
 
+### 兜底模型：GLM 5.3 Flash（国内智谱）
+
+主模型不可用时 OpenClaw 自动切换到 `zhipu/glm-5.3-flash`（机制与天一、虾酱
+的 `agents.defaults.model.fallbacks` 同款）。固定走**国内**端点
+`https://open.bigmodel.cn/api/paas/v4`（不是国际站 `api.z.ai`）：
+
+```dotenv
+ZHIXUN_BOT_GLM_API_KEY=你的智谱 API Key
+```
+
+该 key 是主 `.env` 中 `GLM_API_KEY` 的第二份拷贝——轮换时两处同改。不配置 =
+无兜底（其余能力不受影响，渲染器会摘除 `zhipu` provider 与 `fallbacks`）。
+
 默认使用普通文本回复，不展示流式卡片底部的 `Agent`、`Model`、`Provider`
 运行元信息。如需逐字流式卡片，可设置：
 

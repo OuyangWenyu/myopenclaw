@@ -39,6 +39,8 @@ const replacements = new Map([
   ["__MODEL_API_KEY__", process.env.ZHIXUN_BOT_MODEL_API_KEY],
   ["__MODEL_ID__", process.env.ZHIXUN_BOT_MODEL_ID],
   ["__MODEL_BASE_URL__", process.env.ZHIXUN_BOT_MODEL_BASE_URL],
+  // GLM 兜底模型 key（可选）：替换占位符；无 key 时见下方摘除逻辑
+  ["__GLM_API_KEY__", (process.env.ZHIXUN_BOT_GLM_API_KEY ?? "").trim()],
   ["__WATER_MCP_URL__", waterMcpUrl],
 ]);
 
@@ -66,6 +68,22 @@ function replace(value) {
 
 const template = JSON.parse(fs.readFileSync(templatePath, "utf8"));
 const config = replace(template);
+
+// GLM 兜底模型（可选）：无 key 时摘除 zhipu provider 与 fallbacks 条目。
+// 与天一的兜底机制同款（agents.defaults.model.fallbacks）——主模型不可用时
+// OpenClaw 自动切换；不配兜底 ≠ 起不来（其余能力不受影响）。
+const glmKey = (process.env.ZHIXUN_BOT_GLM_API_KEY ?? "").trim();
+if (!glmKey) {
+  delete config.models.providers.zhipu;
+  const model = config.agents?.defaults?.model;
+  if (model && Array.isArray(model.fallbacks)) {
+    model.fallbacks = model.fallbacks.filter((m) => m !== "zhipu/glm-5.3-flash");
+    if (model.fallbacks.length === 0) {
+      delete model.fallbacks;
+    }
+  }
+}
+
 const enableWriteTools =
   (process.env.ZHIXUN_BOT_ENABLE_WRITE_TOOLS ?? "false").toLowerCase() === "true";
 const feishuStreaming =
