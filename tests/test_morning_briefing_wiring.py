@@ -1,14 +1,17 @@
 """晨间简报「日期误判成周末」修复的接线守卫（2026-10-13 事故）。
 
-当日 07:30（北京）那期：代理**零工具调用**、凭直觉断言「今天是周末」，整期简报被吞
-（旧表达式 `0-5` 还让 job 在北京时间周六也跑，session 里躺着上一期合法的周末话术）。
-修复分三层：skill 硬规则 + cron 日期预脚本（stdout 每轮注入 prompt）+ 表达式修正。
+当日 07:30（北京）那期：代理**零工具调用**、凭直觉断言「今天是周末」，整期简报被吞。
+修复分三层：skill 硬规则 + cron 日期预脚本（stdout 每轮注入 prompt）+ 表达式临时缩到 `0-4`。
+
+2026-10-17 产品口径回归：周六上午也要推（汇总周五信息），仅周日休息。硬规则与预脚本
+已封死「凭直觉判周末」，故表达式恢复 `0-5`（UTC 周日–周五 = 北京周一–周六），
+并由 tests/test_morning_briefing_today.py 钉住周六=简报日、周日=休息日。
 
 live 在 `~/.hermes`（agent 自维护，见 docs/hermes-skills.md），本测试钉的是**仓库种子**
 不退回旧行为：
   ① 仓库版带 `scripts/{today,cst_today}.py`（版本源完整，换机/重建才有修复）；
   ② `cst_today.py` 仍是薄壳（转发到 skill 的 `today.py`，禁止两处实现漂移）；
-  ③ `start.sh` 新部署种子：job 挂 `--script cst_today.py`、表达式 `30 23 * * 0-4`、
+  ③ `start.sh` 新部署种子：job 挂 `--script cst_today.py`、表达式 `30 23 * * 0-5`、
      prompt 含「第一步：先查日期」；预脚本**只补缺、不覆盖**（不得用仓库版盖掉 live）。
 
 Run: uv run --with pytest pytest tests/test_morning_briefing_wiring.py -v
@@ -44,7 +47,7 @@ class TestRepoCopyCarriesTheFix:
 
     def test_skill_doc_has_date_first_rule(self):
         skill = (SKILL_DIR / "SKILL.md").read_text()
-        assert "--check-weekend" in skill and "is_weekend" in skill, (
+        assert "--check-briefing-day" in skill and "is_briefing_day" in skill, (
             "SKILL.md 丢了「星期几只认脚本输出」的硬规则"
         )
 
@@ -58,10 +61,10 @@ class TestStartShSeedsCorrectly:
             "start.sh 创建晨间简报 job 时没挂 --script cst_today.py —— 新部署仍会凭直觉判周末"
         )
 
-    def test_schedule_is_beijing_weekdays(self):
-        assert '"30 23 * * 0-4"' in self._text(), (
-            "表达式应为 30 23 * * 0-4（UTC 周日–周四 23:30 = 北京周一–周五 07:30）；"
-            "0-5 会让它在北京时间周六也跑"
+    def test_schedule_is_beijing_monday_to_saturday(self):
+        assert '"30 23 * * 0-5"' in self._text(), (
+            "表达式应为 30 23 * * 0-5（UTC 周日–周五 23:30 = 北京周一–周六 07:30）；"
+            "0-4 会漏掉周六上午那期（周五信息）"
         )
 
     def test_pre_script_seed_never_overwrites_live(self):
@@ -72,6 +75,6 @@ class TestStartShSeedsCorrectly:
 
     def test_prompt_requires_date_check_first(self):
         text = self._text()
-        assert "千万不要自己推算星期几" in text and "--check-weekend" in text, (
+        assert "千万不要自己推算星期几" in text and "--check-briefing-day" in text, (
             "start.sh 种子 prompt 丢了「第一步：先查日期」—— 新部署的 job 又会凭直觉判周末"
         )

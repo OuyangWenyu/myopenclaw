@@ -14,7 +14,7 @@ myopenclaw (本仓库)
 │   ├── ~/code/git-contribution-stats/ ← build context for repo-scanner-mcp
 │   ├── ~/code/yuque_mcp_server/     ← build context for 本机语雀 MCP 服务（无 tag，按 commit pin）
 │   ├── ~/code/mylibrary/            ← 论文流水线代码（缺失时 build 从 GitHub clone）
-│   └── ../zhixun-agent/             ← zhixun 栈 MCP 镜像的额外 build context
+│   └── ../zhixun-agent/             ← 仅本地调试 profile 的 MCP 镜像 build context
 │
 ├── [可选·软依赖·运行时 graceful skip]
 │   └── ~/code/dailyinfo/            ← 宿主机 launchd 调度（每日论文/资讯抓取推送）
@@ -41,7 +41,7 @@ myopenclaw (本仓库)
 | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) | `~/code/git-contribution-stats` | repo-scanner-mcp 镜像构建 |
 | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) | `~/code/yuque_mcp_server` | 本机语雀 MCP 服务（yuque-mcp）镜像构建。上游**无 tag**，镜像按 commit pin（守卫 `tests/test_yuque_mcp_local.py`）；升级 = 审查 diff 后改 pin + 重建 |
 | [mylibrary](https://github.com/OuyangWenyu/mylibrary) | `~/code/mylibrary` | hermes / zotero-mcp 镜像里的论文流水线（hydrolitagent + skills）。`start.sh` 先 rsync 进 build context；**本地没有时 Dockerfile 自动从 GitHub clone**，不会 build 失败 |
-| [zhixun-agent](https://github.com/OuyangWenyu/zhixun-agent) | `../zhixun-agent` | zhixun 栈 `zhixun-water-mcp` 镜像的 `additional_contexts.zhixun_src`（可用 `ZHIXUN_AGENT_PATH` 覆盖）。只有启动 zhixun 栈时才需要 |
+| [zhixun-agent](https://gitcode.com/dlut-water/zhixun-agent) | `../zhixun-agent` | 仅本地调试 profile 的 `zhixun-water-mcp` 镜像需要（`additional_contexts.zhixun_src`，可用 `ZHIXUN_AGENT_PATH` 覆盖）。默认部署连远程水文 MCP，不需要此仓库 |
 
 **不需要 build 的情况**（`./scripts/start.sh` 不加 `--build`）：使用已有的 Docker 镜像即可，aisecretary / git-contribution-stats / yuque_mcp_server 这些仓库不需要存在。
 
@@ -61,7 +61,7 @@ myopenclaw (本仓库)
 
 此脚本克隆 aisecretary / git-contribution-stats / yuque_mcp_server / dailyinfo 四个仓库到正确路径。GitHub 私有仓库需要 `gh auth login` 先；yuque_mcp_server 在 GitCode 且公开，免认证。
 
-`mylibrary` 与 `zhixun-agent` **不在**这个脚本里：前者缺失时 build 会自动从 GitHub clone；后者按需手动 clone（见[快速开始](setup.md)第 3 步）。
+`mylibrary` 与 `zhixun-agent` **不在**这个脚本里：前者缺失时 build 会自动从 GitHub clone；后者只在 `--with-local-mcp` 调试时需要，按需手动 clone（见[快速开始](setup.md)第 3 步）。默认部署连远程水文 MCP，不需要它。
 
 ## 配置文件的机器差异
 

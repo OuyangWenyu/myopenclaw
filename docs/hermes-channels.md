@@ -85,7 +85,7 @@ Discord 网关 (`gateway.discord.gg`) 在国内可能间歇性 DNS 解析失败�
 
 ## coder profile 模型
 
-首次启动时 `start.sh` 自动创建 `~/.hermes/profiles/coder/config.yaml`，默认模型 `deepseek-flash`（DeepSeek API，`DEEPSEEK_API_KEY`），备用模型 `glm-5.1`（z.ai）。
+首次启动时 `start.sh` 自动创建 `~/.hermes/profiles/coder/config.yaml`，默认模型 `deepseek-flash`（DeepSeek API，`DEEPSEEK_API_KEY`），备用模型 `glm-5.3-flash`（z.ai，**国内端点 `open.bigmodel.cn`**）。2026-10-15 起三个有兜底的 profile（爱玛士/爱码士/道元）统一该兜底，两个配套要点（守卫 `tests/test_hermes_fallback_glm.py`）：glm-5.3-flash **强制思考**，必须配 `agent.reasoning_overrides: {glm-5.3-flash: low}`（否则全局 thinking=off 被智谱 400；low 也是国内端点词表 `low/high/max` 里最省的档）；zai 凭据的探测缓存会漂到国外 `api.z.ai`，端点必须钉 `open.bigmodel.cn`。
 
 **既有 profile 的模型迁移**：`start.sh` 每次启动都会调用 `scripts/ensure_hermes_model.py`，幂等地把历史遗留的模型名迁移到 canonical 的 `deepseek-flash` —— 只改已知历史取值（`mimo-v2.5` / `mimo-v2.5-pro`、以及非 canonical 的 `deepseek-v4-*`），**不覆盖**操作者手选的其他模型（与 `ensure_hermes_web_search.py` 同一原则）。脚本用文本手术改写，不依赖宿主机 PyYAML、不破坏注释与 key 顺序。
 

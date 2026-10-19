@@ -41,6 +41,7 @@ set -euo pipefail
 #   xiaomimimo.com  — 小米 MiMo api.xiaomimimo.com（虾酱 TTS 语音回复依赖此域）
 #   xiaomi.com      — 小米 MiMo CNAME 链 (mimo-pri-alisgp.alb.xiaomi.com)
 #   workbuddy.cn    — WorkBuddy 主域（www.workbuddy.cn 官网）
+#   bilicdn1.com    — B 站 www.bilibili.com CNAME 终端（bilibili-upload 上传 skill 用）
 #   ⚠️ 漏配的后果不是"解析失败"，而是**静默回落到默认 DNS**（境外 VPN 场景下是 1.1.1.3），
 #      拿到海外 CDN 节点 → 流量被 VPN 隧道吸走 → 飞书登录页/文件下载变慢甚至不通。
 #      2026-09-28 实测：queniurc.com 漏配时 accounts.feishu.cn 解析到 155.102.54.x（走 utun4），
@@ -49,6 +50,8 @@ RESOLVER_DOMAINS=(
   alibabadns.com
   aliyunddos1022.com
   bigmodel.cn
+  bilibili.com
+  bilicdn1.com
   bytedns1.com
   cdnbuild.net
   cdngslb.com

@@ -23,13 +23,35 @@
             "maxTokens": 8192
           }
         ]
+      },
+      "zhipu": {
+        "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+        "apiKey": "__GLM_API_KEY__",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "glm-5.3-flash",
+            "name": "GLM 5.3 Flash（兜底）",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": {
+              "input": 0,
+              "output": 0,
+              "cacheRead": 0,
+              "cacheWrite": 0
+            },
+            "contextWindow": 128000,
+            "maxTokens": 8192
+          }
+        ]
       }
     }
   },
   "agents": {
     "defaults": {
       "model": {
-        "primary": "deepseek/__MODEL_ID__"
+        "primary": "deepseek/__MODEL_ID__",
+        "fallbacks": ["zhipu/glm-5.3-flash"]
       }
     },
     "entries": {
@@ -51,8 +73,11 @@
   "mcp": {
     "servers": {
       "water_unified": {
-        "url": "http://zhixun-water-mcp:18201/sse",
+        "url": "__WATER_MCP_URL__",
         "transport": "sse",
+        "headers": {
+          "authorization": "Bearer ${ZHIXUN_BOT_WATER_MCP_TOKEN}"
+        },
         "connectionTimeoutMs": 10000,
         "requestTimeoutMs": 120000,
         "supportsParallelToolCalls": true,
@@ -69,6 +94,7 @@
             "dispatch_task_create",
             "dispatch_task_update_conditions",
             "dispatch_task_execute",
+            "realtime_forecast_submit",
             "item_add",
             "item_add_batch",
             "item_update",

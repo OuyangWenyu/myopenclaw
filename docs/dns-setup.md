@@ -7,7 +7,7 @@
 | 服务 | 域名 | 影响范围 |
 |------|------|----------|
 | DeepSeek API | api.deepseek.com | Hermes / OpenClaw 默认模型 |
-| 智谱 GLM API | open.bigmodel.cn | 爱码士备用模型（zai / glm-5.1） |
+| 智谱 GLM API | open.bigmodel.cn | Hermes 各 profile 备用模型（zai / glm-5.3-flash） |
 | 钉钉 Stream | api.dingtalk.com, wss-open-connection.dingtalk.com | Hermes / OpenClaw 钉钉机器人 |
 | 飞书 WebSocket | open.feishu.cn, msg-frontier.feishu.cn | Hermes 飞书机器人 |
 | Moonshot API | api.moonshot.cn | OpenClaw 备用模型 |

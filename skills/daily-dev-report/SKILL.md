@@ -81,7 +81,7 @@ arguments: {}
 你拿到确定性数据后，用**你自己的 LLM 能力**对数据进行深度分析。特别注意：
 
 1. **不要编造任何信息** — 数据里没有的，就不要写
-2. **用 email_name_mapping.csv 映射用户名** — 如果 MCP 返回的 author 是 Git 用户名（如 `owenyy`），尝试从 `/opt/hermes-skills/daily-dev-report/email_name_mapping.csv` 查找对应的真实姓名
+2. **姓名已由 MCP 归一** — 报告的 author 字段已是中文显示名（`author_names` 映射在 MCP 侧完成，无需再查表）；若出现未收录的 Git 用户名，照原样引用，**不要自行猜测身份**
 3. **忽略 trivial commits** — 如 "update docs"、"bump version"、"fix typo"、bot 自动提交。除非某人当天只有这种 commit
 4. **重点关注**：
    - 代码量大的提交（additions/deletions 突出）

@@ -1,12 +1,12 @@
 # myopenclaw
 
-个人操作系统——实用Agents管理。基于 Docker Compose 一键部署，本仓库有**两条线**：个人栈（hermes 全家桶 + 个人服务，面向一人）与**服务器侧团队能力**（[天一](server-deploy.md) + 三项团队服务）。
+个人操作系统——实用Agents管理。基于 Docker Compose 一键部署，本仓库有**两条线**：个人栈（hermes 全家桶 + 个人服务，面向一人）与**服务器侧团队能力**（公共 bot [天一](server-deploy.md) / [知汛](zhixun-feishu-bot.md) + 团队服务：语雀 / 仓库统计 / 服务监控 / 水文 MCP）。
 
 ## 我该从哪开始
 
 | 你是 | 从这里开始 |
 |---|---|
-| **团队成员**（想用团队能力） | 飞书里直接问 **天一**（零配置）；想接进自己的 agent → [部署到服务器时要看什么](server-deploy.md) |
+| **团队成员**（想用团队能力） | 飞书里直接问 **天一**（零配置；水文问答找 **知汛**）；想接进自己的 agent → [部署到服务器时要看什么](server-deploy.md) |
 | **部署服务器**（团队侧） | [部署到服务器时要看什么](server-deploy.md) —— 先搞清"服务器 vs 个人栈"的分界 |
 | **部署个人栈**（本仓库主 compose） | [快速开始](setup.md) → [架构](architecture.md) |
 | **了解全貌** | [架构](architecture.md) |
@@ -21,9 +21,9 @@
 ## 团队能力（服务器侧）
 
 - [部署到服务器时要看什么](server-deploy.md) — 服务器侧 vs 个人栈的分界（**先看这个**）
-- [member-check 自检](member-check.md) — 三项团队能力的连通 + 鉴权自检工具
+- [member-check 自检](member-check.md) — 成员直连三项团队能力的连通 + 鉴权自检工具
 - [服务器监控 MCP](server-monitoring-mcp.md) — 天一接入团队 server-monitoring（TLS + Bearer 只读）
-- [zhixun 知汛助手](zhixun-feishu-bot.md) — 水文智能问答公共 bot（OpenClaw 栈；服务器部署文档待补）
+- [zhixun 知汛助手](zhixun-feishu-bot.md) — 团队公共 bot：水文智能问答（OpenClaw 栈；背后 zhixun-agent 水文 MCP 即团队服务；服务器侧部署清单待补）
 
 ## Agent 与渠道
 

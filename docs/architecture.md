@@ -1,6 +1,6 @@
 # 架构
 
-myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈 2 个服务 + tianyi 独立栈 1 个服务组成（不含 profile-gated 的 openclaw-cli）。主栈运行在共享的 `myopenclaw-net` 桥接网络上，zhixun 栈运行在独立的 `zhixun-bot-net` 上；tianyi 栈为独立 Compose 但**共享主栈 `myopenclaw-net`**（复用 repo-scanner-mcp）。
+myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot，另有 profile-gated 的本地 MCP 调试容器）+ tianyi 独立栈 1 个服务组成（不含 profile-gated 的 openclaw-cli）。主栈运行在共享的 `myopenclaw-net` 桥接网络上，zhixun 栈运行在独立的 `zhixun-bot-net` 上；tianyi 栈为独立 Compose 但**共享主栈 `myopenclaw-net`**（复用 repo-scanner-mcp）。
 
 ## 服务拓扑
 
@@ -34,8 +34,8 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| zhixun-water-mcp | 18201 | 水文 MCP 服务（43 tools），包装 zhixun-agent 源码 + v2 兼容层 |
-| openclaw-zhixun | 18791 | OpenClaw gateway（知汛助手），飞书 bot，仅 MCP 工具无代码执行 |
+| zhixun-water-mcp | 18201 | **可选调试回退**（默认不启动，仅 `--with-local-mcp`）：本地水文 MCP + v2 兼容层 |
+| openclaw-zhixun | 18791 | OpenClaw gateway（知汛助手），飞书 bot，仅 MCP 工具无代码执行；默认连远程水文 MCP（Bearer） |
 
 ### tianyi 独立栈（`docker-compose.tianyi-bot.yml`，共享 `myopenclaw-net`）
 
@@ -65,7 +65,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 | `~/.lark-cli` | `/opt/lark-config` | hermes | lark-cli 配置 |
 | `~/.uptime-kuma` | `/app/data` | uptime-kuma | 监控 SQLite + 配置 |
 | `~/.openclaw-zhixun` | `/home/node/.openclaw` | openclaw-zhixun | zhixun bot 配置和插件 |
-| `~/.openclaw-zhixun-mcp` | `/var/lib/zhixun-water-mcp` | zhixun-water-mcp | 水文站点名称索引缓存 |
+| `~/.openclaw-zhixun-mcp` | `/var/lib/zhixun-water-mcp` | zhixun-water-mcp（仅本地调试 profile） | 水文站点名称索引缓存 |
 | `~/.openclaw-tianyi` | `/home/node/.openclaw` | openclaw-tianyi | tianyi bot 配置和插件 |
 | `~/code` + `~/Code` | `/home/node/code` + `/home/node/Code` | claude-code | 代码仓库 |
 
@@ -79,7 +79,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈 2 个服务 + tiany
 
 - **OpenClaw 虾酱 = 协作网关**。不持有个人密钥，可安全开放到多人场景。配置与个人身份无关，适合工作流编排。
 
-- **OpenClaw 知汛 = 独立水文 bot**。完全隔离的 Compose 栈，独立网络、独立飞书应用凭据、独立模型 API Key。不接入主栈的 Hermes、长期记忆或任何其他共享服务。仅开放 MCP 查询工具，写工具默认关闭。
+- **OpenClaw 知汛 = 团队侧公共水文 bot**（与天一同类，服务器侧见 [server-deploy](server-deploy.md)；背后 zhixun-agent 水文 MCP 是团队服务）。完全隔离的 Compose 栈，独立网络、独立飞书应用凭据、独立模型 API Key。默认直连团队服务器上的**远程水文 MCP**（`Authorization: Bearer`，背后是新版 zhixun-core）；本地 `zhixun-water-mcp` 容器仅 `--with-local-mcp` 调试时启动。不接入主栈的 Hermes、长期记忆或任何其他共享服务。仅开放 MCP 查询工具，写工具默认关闭。
 
 - **Hermes profile 内部隔离**：四个 profile（爱玛士 / 爱码士 / 道元 / finance）是隔离实例 —— 默认 profile 的 home 就是 `~/.hermes`（配置 = 根 `config.yaml`），其余 profile 在 `~/.hermes/profiles/<name>/` 各有独立配置与 token 目录。个人数据类接入（如千问办公 AI听记 MCP）刻意只注册默认 profile。验证某 profile 的真实视图必须 `hermes -p <profile> mcp list`（裸 `hermes mcp list` 读到的是默认 profile 的配置）。详见 [千问办公 AI听记](qwennote-mcp-hermes.md)。
 

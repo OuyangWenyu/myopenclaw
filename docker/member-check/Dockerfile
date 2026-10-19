@@ -1,5 +1,5 @@
 # ── member-check 检查器 ──────────────────────────────────────────────
-# 成员接入自检：对三个团队服务做 MCP 握手 + token 校验（token 从不打印）。
+# 成员接入自检：对成员直连三项团队能力做 MCP 握手 + token 校验（token 从不打印）。
 # 逻辑全在容器内 ⇒ Windows 成员也能用（只需 docker，无需 bash/python/uv）。
 #
 # mcp pin 与 scripts/check_server_monitoring_mcp.py 一致（mcp==2.2.0）：
