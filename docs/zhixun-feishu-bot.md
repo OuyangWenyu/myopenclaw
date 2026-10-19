@@ -144,7 +144,7 @@ ZHIXUN_BOT_WATER_MCP_TRANSPORT=streamable-http
 `ZHIXUN_BOT_WATER_MCP_TOKEN_FILE` 为容器内只读挂载的 token 文件路径。文件需归运行 UID
 所有，权限为 0600。entrypoint 会把 token 加入网关的运行时环境，配置文件仍只保留变量引用；
 不能同时配置 env token 与 token 文件。若要升级已有本地 Water MCP 并开放私网认证入口，使用
-[Water MCP 认证覆盖部署说明](../docker/zhixun-bot-auth/README.md)，无需改变默认远程部署方式。
+仓库内的 `docker/zhixun-bot-auth/README.md` 认证覆盖部署说明，无需改变默认远程部署方式。
 
 `ZHIXUN_BOT_WATER_MCP_TRANSPORT` 取值 `streamable-http`（当前远程）或 `sse`
 （本地默认回退），按远程端点实际协议填写。`ZHIXUN_BOT_WATER_MCP_TOKEN` 只写入
