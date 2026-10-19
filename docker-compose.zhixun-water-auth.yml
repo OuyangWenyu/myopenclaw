@@ -1,6 +1,8 @@
 # Apply after the existing docker-compose.zhixun-bot.yml.
 services:
   zhixun-water-mcp:
+    profiles: !reset []
+    build: !reset null
     image: ${ZHIXUN_WATER_AUTH_IMAGE:?Set the verified authentication image}
     command: [python, /opt/water-auth/authenticated_entrypoint.py, sse, --host, 0.0.0.0, --port, "18201"]
     ports:
@@ -12,8 +14,12 @@ services:
 
   openclaw-zhixun:
     environment:
-      ZHIXUN_WATER_TOKEN_FILE: /run/secrets/water-mcp-token
+      ZHIXUN_BOT_WATER_MCP_URL: http://zhixun-water-mcp:18201/sse
+      ZHIXUN_BOT_WATER_MCP_TRANSPORT: sse
+      ZHIXUN_BOT_WATER_MCP_TOKEN: ""
+      ZHIXUN_BOT_WATER_MCP_TOKEN_FILE: /run/secrets/water-mcp-token
+    depends_on:
+      zhixun-water-mcp:
+        condition: service_healthy
     volumes:
       - ${ZHIXUN_WATER_TOKEN_FILE:?Set the OpenClaw token path}:/run/secrets/water-mcp-token:ro
-      - ${ZHIXUN_WATER_AUTH_DIR:?Set the authentication adapter directory}/render-config.mjs:/opt/zhixun-bot/render-config.mjs:ro
-      - ${ZHIXUN_WATER_ORIGINAL_RENDERER:?Set the original renderer path}:/opt/water-auth/original-render-config.mjs:ro

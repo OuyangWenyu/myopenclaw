@@ -82,10 +82,12 @@ services:
       # GLM 兜底模型（可选）：主模型不可用时自动切换（fallbacks = zhipu/glm-5.3-flash）
       ZHIXUN_BOT_GLM_API_KEY: ${ZHIXUN_BOT_GLM_API_KEY:-}
       ZHIXUN_BOT_ENABLE_WRITE_TOOLS: ${ZHIXUN_BOT_ENABLE_WRITE_TOOLS:-false}
-      # 远程 water MCP（团队服务器上的新版 zhixun-agent）。URL/TOKEN 必填；
+      # 默认远程 water MCP。URL 和凭据必填（env token 或 token 文件）；
       # TOKEN 由 OpenClaw 运行时展开到 headers.authorization，不落渲染产物。
-      ZHIXUN_BOT_WATER_MCP_URL: ${ZHIXUN_BOT_WATER_MCP_URL:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_WATER_MCP_URL}
-      ZHIXUN_BOT_WATER_MCP_TOKEN: ${ZHIXUN_BOT_WATER_MCP_TOKEN:?请在 .env.zhixun-bot 中设置 ZHIXUN_BOT_WATER_MCP_TOKEN}
+      # Startup validates URL and either credential source after Compose overlays merge.
+      ZHIXUN_BOT_WATER_MCP_URL: ${ZHIXUN_BOT_WATER_MCP_URL:-}
+      ZHIXUN_BOT_WATER_MCP_TOKEN: ${ZHIXUN_BOT_WATER_MCP_TOKEN:-}
+      ZHIXUN_BOT_WATER_MCP_TOKEN_FILE: ${ZHIXUN_BOT_WATER_MCP_TOKEN_FILE:-}
       ZHIXUN_BOT_WATER_MCP_TRANSPORT: ${ZHIXUN_BOT_WATER_MCP_TRANSPORT:-sse}
     healthcheck:
       test:
