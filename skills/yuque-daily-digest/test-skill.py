@@ -6,7 +6,7 @@ Requirements:
   - Valid YAML frontmatter
   - Self-contained: all orchestration inline (no external script refs)
   - Drives yuque-mcp tools: list_repos / get_change_summary / get_doc_content
-  - [SILENT] protocol: no-change silent, failure MUST warn (never silent)
+  - No-change push protocol: no-change days MUST push a short digest; failure MUST warn
   - Output format: plain text + emoji, no "###" markdown headers
   - Cron-compatible: works in fresh session (no context dependencies)
 
@@ -92,15 +92,14 @@ def main():
         "Must call get_change_summary separately per repo"
     )
 
-    # ── [SILENT] protocol ─────────────────────────────────────
-    check("[SILENT]" in content, "Missing [SILENT] protocol")
+    # ── No-change push protocol (2026-10-19) ──────────────────
     check(
-        re.search(r"仅限|只能|仅.*无变更", content) and "[SILENT]" in content,
-        "[SILENT] must be limited to clean no-change case"
+        re.search(r"无变更.{0,40}(不要静默|必须推送|也推送|仍.{0,4}推送)", content, re.S),
+        "No-change case must still push a short digest (not silent)"
     )
     check(
-        re.search(r"无变更|没有任何变更|没有变更", content) and "[SILENT]" in content,
-        "No-change case must map to [SILENT]"
+        "[SILENT]" in content and re.search(r"重复.{0,20}job|同名重复", content),
+        "[SILENT] must be limited to duplicate-job dedup"
     )
     # Failure cases must NOT be silent — they must produce a warning push
     failure_markers = ["not_available", "initialized", "401", "未纳入监控"]
@@ -175,7 +174,7 @@ def main():
     print("   Frontmatter: OK")
     print("   Self-contained: OK (no external script refs)")
     print("   yuque-mcp orchestration: OK")
-    print("   [SILENT] protocol: OK")
+    print("   No-change push protocol: OK")
     print("   Output format: OK")
     print("   Security rules: OK")
     print("   Cron-compatible: OK")
