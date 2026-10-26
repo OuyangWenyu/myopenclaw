@@ -9,6 +9,7 @@ import json
 import os
 import shutil
 import subprocess
+import tarfile
 from pathlib import Path
 
 import pytest
@@ -362,6 +363,55 @@ class TestOpenclawAgentDbHotCopy:
         assert rows.stdout.strip() == "1", "热备副本读不出数据"
         assert (snap / "agents" / "main" / "agent" / "models.json").exists()
         assert not list(snap.rglob("*-journal")), "热备的 -journal 残影不该进快照"
+
+
+class TestOpenclawImportArchive:
+    """2.0 迁移留下的旧会话归档：每日快照排除，改为压缩存档一次（2026-10-26）。
+
+    归档 = agents/<id>/session-sqlite-import-archive：main 一份 2444 个
+    *.imported-* / 286MB，2026-09-14 之后没有任何文件变化。旧实现每天完整
+    复制进快照：30 天保留窗口 ≈ 8.6GB 全是同一份静态内容。
+    """
+
+    SCRIPT = REPO_ROOT / "openclaw" / "scripts" / "backup.sh"
+
+    def test_excluded_from_daily_rsync(self):
+        assert '--exclude="*/session-sqlite-import-archive/"' in self.SCRIPT.read_text(), (
+            "静态归档必须排除出每日 rsync，否则每天重复复制 286MB"
+        )
+
+    def test_tarballed_once_and_absent_from_snapshot(self, tmp_path):
+        archive = tmp_path / ".openclaw" / "agents" / "main" / "session-sqlite-import-archive"
+        archive.mkdir(parents=True)
+        (archive / "old.jsonl.imported-1").write_text("hello")
+        agent = tmp_path / ".openclaw" / "agents" / "main" / "agent"
+        agent.mkdir(parents=True)
+        subprocess.run(
+            ["sqlite3", str(agent / "openclaw-agent.sqlite"), "CREATE TABLE t (x);"],
+            check=True, capture_output=True,
+        )
+        env = {
+            **os.environ,
+            "HOME": str(tmp_path),
+            "BACKUP_ROOT": str(tmp_path / "bk"),
+            "BACKUP_SKIP_PRUNE": "1",
+        }
+        subprocess.run(["bash", str(self.SCRIPT), "2026-10-26_120000"],
+                       env=env, check=True, capture_output=True)
+
+        snap = tmp_path / "bk" / "openclaw" / "2026-10-26_120000"
+        assert not (snap / "agents" / "main" / "session-sqlite-import-archive").exists(), (
+            "静态归档不该出现在每日快照里"
+        )
+        tgz = tmp_path / "bk" / "archive" / "openclaw-main-session-sqlite-import-archive.tar.gz"
+        assert tgz.exists(), "必须留下一个压缩存档"
+        with tarfile.open(tgz) as tf:
+            assert "old.jsonl.imported-1" in [Path(n).name for n in tf.getnames()]
+
+        first_mtime = tgz.stat().st_mtime_ns
+        subprocess.run(["bash", str(self.SCRIPT), "2026-10-26_130000"],
+                       env=env, check=True, capture_output=True)
+        assert tgz.stat().st_mtime_ns == first_mtime, "压缩包只建一次，不该每天重写"
 
 
 @pytest.mark.skipif(shutil.which("sqlite3") is None,

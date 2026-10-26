@@ -146,7 +146,13 @@ for f in hermes/scripts/backup.sh openclaw/scripts/backup.sh claude/scripts/back
           "! grep -q '! -name \"latest\" -mtime' '${REPO_ROOT}/${f}'"
     check "${f} 排除本次快照不被删除" \
           "grep -q \"latest | \\\"\\\${TIMESTAMP}\\\"\" '${REPO_ROOT}/${f}'"
+    check "${f} 使用带重试的 prune_old_snapshot（不裸 rm -rf）" \
+          "grep -q 'prune_old_snapshot' '${REPO_ROOT}/${f}'"
+    check "${f} latest/ 同步走带重试的 sync_latest_retry" \
+          "grep -q 'sync_latest_retry' '${REPO_ROOT}/${f}'"
 done
+check "共享删除实现 scripts/lib/backup-prune.sh 存在" \
+      "[[ -f '${REPO_ROOT}/scripts/lib/backup-prune.sh' ]]"
 
 # ══ 场景 5：初始备份（容器启动）不得执行 prune ═══════════════════════
 echo "── 场景 5: BACKUP_SKIP_PRUNE=1 时保留策略不执行 ──"
@@ -162,6 +168,101 @@ check "本次快照已正常创建" \
       "[[ -d '${BACKUP_ROOT}/hermes/2026-09-13_120000' ]]"
 check "日志标注了跳过清理" "grep -q '跳过' '${FAKE}/out.log'"
 teardown_fixture
+echo
+
+# ══ 场景 6：云盘删除滞后（ENOTEMPTY）必须重试，不能判整轮备份失败 ═══
+echo "── 场景 6: 旧快照删除遇 ENOTEMPTY 时重试 ──"
+# 2026-10-16 ~ 10-26 线上事故：virtiofs → Google Drive 在一次 rm -rf 删掉
+# 一批文件后仍报 "Directory not empty"；裸 rm -rf + set -e 让 openclaw 连续
+# 11 天被记为「备份失败」——快照其实每次完整，只是过期快照没删净。
+setup_fixture
+mkdir -p "${BACKUP_ROOT}/hermes/2020-01-01_000000/agents/main/big-archive"
+for i in $(seq 1 20); do
+    echo x > "${BACKUP_ROOT}/hermes/2020-01-01_000000/agents/main/big-archive/f${i}"
+done
+mkdir -p "${BACKUP_ROOT}/hermes/latest"
+
+# 假 rm：第一次删过期快照只删一部分就报 ENOTEMPTY（模拟云盘删除滞后），之后放行
+mkdir -p "${FAKE}/bin"
+cat > "${FAKE}/bin/rm" <<'SHIM'
+#!/usr/bin/env bash
+real="/bin/rm"
+last="${!#}"
+if [[ " $* " == *" -rf "* && "${last}" == *"2020-01-01_000000"* ]]; then
+    if [[ ! -f "${FAKE_STATE_DIR}/failed-once" ]]; then
+        : > "${FAKE_STATE_DIR}/failed-once"
+        echo "rm: can't remove '${last}': Directory not empty" >&2
+        exit 1
+    fi
+fi
+exec "${real}" "$@"
+SHIM
+chmod +x "${FAKE}/bin/rm"
+
+_old_path="${PATH}"
+export PATH="${FAKE}/bin:${PATH}"
+export FAKE_STATE_DIR="${FAKE}"
+export PRUNE_RETRY_SLEEP=0
+run_backup "${RECENT_TS}"
+RC=$?
+export PATH="${_old_path}"
+unset FAKE_STATE_DIR PRUNE_RETRY_SLEEP
+
+check "模拟 ENOTEMPTY 的假 rm 确实被触发（防测试假绿）" \
+      "[[ -f '${FAKE}/failed-once' ]]"
+check "首次删除报 ENOTEMPTY 时备份仍以 0 退出" "[[ ${RC} -eq 0 ]]"
+check "重试后过期快照被删净" "[[ ! -e '${BACKUP_ROOT}/hermes/2020-01-01_000000' ]]"
+check "本次快照仍在" "[[ -d '${BACKUP_ROOT}/hermes/${RECENT_TS}' ]]"
+teardown_fixture
+echo
+
+# ══ 场景 7：latest/ 同步遇删除滞后（rsync 只告警、退出码 0）要重试 ═══
+echo "── 场景 7: latest/ 同步的删除滞后重试 ──"
+# rsync --delete 删不掉目标里多余的目录时只打印 "cannot delete non-empty
+# directory" 且退出码仍是 0 —— 每天重演同一行警告，latest/ 留下一个空目录。
+# 单测共享函数（用 shell 函数替身模拟 rsync；用状态文件跨子 shell 计数）。
+SYNC_TMP="$(mktemp -d)"
+(
+    export CALL_FILE="${SYNC_TMP}/calls1"
+    PRUNE_RETRY_SLEEP=0
+    . "${REPO_ROOT}/scripts/lib/backup-prune.sh"
+    rsync() {
+        local n=0
+        [[ -f "${CALL_FILE}" ]] && n=$(cat "${CALL_FILE}")
+        n=$((n + 1))
+        echo "${n}" > "${CALL_FILE}"
+        [[ ${n} -lt 2 ]] && echo "cannot delete non-empty directory: stale-dir"
+        return 0
+    }
+    sync_latest_retry /tmp/dest /tmp/latest
+    echo "rc=$?"
+    echo "calls=$(cat "${CALL_FILE}")"
+) > "${SYNC_TMP}/run1.log" 2>&1
+check "首次删除告警后重试一次即成功" \
+      "grep -q 'rc=0' '${SYNC_TMP}/run1.log' && grep -q 'calls=2' '${SYNC_TMP}/run1.log'"
+
+(
+    export CALL_FILE="${SYNC_TMP}/calls2"
+    PRUNE_RETRY_SLEEP=0
+    PRUNE_RETRY_ATTEMPTS=3
+    . "${REPO_ROOT}/scripts/lib/backup-prune.sh"
+    rsync() {
+        local n=0
+        [[ -f "${CALL_FILE}" ]] && n=$(cat "${CALL_FILE}")
+        n=$((n + 1))
+        echo "${n}" > "${CALL_FILE}"
+        echo "cannot delete non-empty directory: stale-dir"
+        return 0
+    }
+    sync_latest_retry /tmp/dest /tmp/latest
+    echo "rc=$?"
+    echo "calls=$(cat "${CALL_FILE}")"
+) > "${SYNC_TMP}/run2.log" 2>&1
+check "持续告警时重试固定次数后放行（不判整轮备份失败）" \
+      "grep -q 'rc=0' '${SYNC_TMP}/run2.log' && grep -q 'calls=3' '${SYNC_TMP}/run2.log'"
+check "持续告警有明确提示" \
+      "grep -q 'latest/ 同步有删除残留' '${SYNC_TMP}/run2.log'"
+rm -rf "${SYNC_TMP}"
 echo
 
 echo

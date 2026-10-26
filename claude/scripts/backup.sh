@@ -15,6 +15,23 @@ CLAUDE_DATA="${HOME}/.claude"
 CC_DATA="${HOME}/.cc-connect"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 
+# 旧快照删除需要重试：云盘（virtiofs → Google Drive）批量 unlink 后会短暂
+# 报 ENOTEMPTY，裸 rm -rf 在 set -e 下会把整轮备份判为失败（见 lib 注释）。
+for _prune_lib in "${SCRIPT_DIR}/lib/backup-prune.sh" \
+                  "${SCRIPT_DIR}/../lib/backup-prune.sh" \
+                  "${SCRIPT_DIR}/../../scripts/lib/backup-prune.sh"; do
+  if [[ -f "${_prune_lib}" ]]; then
+    # shellcheck source=../../scripts/lib/backup-prune.sh
+    . "${_prune_lib}"
+    break
+  fi
+done
+if ! declare -f prune_old_snapshot >/dev/null; then
+  echo "❌ 找不到 scripts/lib/backup-prune.sh，无法安全清理旧快照" >&2
+  exit 1
+fi
+PRUNE_FAILED=0
+
 if [[ -z "${BACKUP_ROOT:-}" ]]; then
   echo "❌ BACKUP_ROOT 未设置，请通过 scripts/backup-all.sh 调用，或手动 export BACKUP_ROOT=/path/to/backup"
   exit 1
@@ -59,7 +76,8 @@ fi
 echo "   ✅ 快照完成: ${DEST}"
 
 # ── 同步到 latest/ ────────────────────────────────────────────
-rsync -a --delete "${DEST}/" "${LATEST}/"
+# 云盘删除滞后会让 rsync --delete 留下空目录（只告警、退出码 0），交给共享重试。
+sync_latest_retry "${DEST}" "${LATEST}"
 echo "   ✅ latest/ 已更新"
 
 # ── 清理超过保留天数的旧快照 ────────────────────────────────────
@@ -92,9 +110,14 @@ if [[ -n "${CUTOFF:-}" ]]; then
     esac
     if [[ "${name%%_*}" < "${CUTOFF}" ]]; then
       echo "   🗑  删除旧快照: ${d%/}"
-      rm -rf "${d}"
+      prune_old_snapshot "${d}" || PRUNE_FAILED=1
     fi
   done
+fi
+
+if [[ "${PRUNE_FAILED:-0}" -eq 1 ]]; then
+  echo "   ⚠️  有旧快照未能删除：本次新快照与 latest/ 均完整，仅保留策略未生效" >&2
+  exit 1
 fi
 
 echo "   备份完成 (claude)"

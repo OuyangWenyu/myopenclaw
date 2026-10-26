@@ -14,6 +14,24 @@ TIMESTAMP="${1:-$(date +%Y-%m-%d_%H%M%S)}"
 OPENCLAW_DATA="${HOME}/.openclaw"
 BACKUP_KEEP_DAYS="${BACKUP_KEEP_DAYS:-30}"
 
+# 旧快照删除需要重试：云盘（virtiofs → Google Drive）批量 unlink 后会短暂
+# 报 ENOTEMPTY，裸 rm -rf 在 set -e 下会把整轮备份判为失败（见 lib 注释）。
+for _prune_lib in "${SCRIPT_DIR}/lib/backup-prune.sh" \
+                  "${SCRIPT_DIR}/../lib/backup-prune.sh" \
+                  "${SCRIPT_DIR}/../../scripts/lib/backup-prune.sh"; do
+  if [[ -f "${_prune_lib}" ]]; then
+    # shellcheck source=../../scripts/lib/backup-prune.sh
+    . "${_prune_lib}"
+    break
+  fi
+done
+if ! declare -f prune_old_snapshot >/dev/null; then
+  echo "❌ 找不到 scripts/lib/backup-prune.sh，无法安全清理旧快照" >&2
+  exit 1
+fi
+PRUNE_FAILED=0
+ARCHIVE_FAILED=0
+
 if [[ -z "${BACKUP_ROOT:-}" ]]; then
   echo "❌ BACKUP_ROOT 未设置，请通过 scripts/backup-all.sh 调用，或手动 export BACKUP_ROOT=/path/to/backup"
   exit 1
@@ -41,6 +59,8 @@ fi
 # 撞上写事务会拷到没有 journal 可回滚的半写状态。它改由下面的 .backup 热备。
 # 同目录的 0 字节 *.lock.sqlite 与 4KB generation-writer（实测无表、空库）是
 # 占位文件，裸 rsync 就是对它们状态的忠实还原，不另行热备。
+# session-sqlite-import-archive 是 2.0 迁移的静态归档，不逐日复制 —— 见下方
+# 单独的压缩存档逻辑。
 if [[ -d "${OPENCLAW_DATA}/agents" ]]; then
   rsync -a \
     --exclude="*/agent/*.tmp" \
@@ -48,8 +68,36 @@ if [[ -d "${OPENCLAW_DATA}/agents" ]]; then
     --exclude="*/sessions/" \
     --exclude="*/agent/openclaw-agent.sqlite" \
     --exclude="*/agent/openclaw-agent.sqlite-journal" \
+    --exclude="*/session-sqlite-import-archive/" \
     "${OPENCLAW_DATA}/agents/" "${DEST}/agents/"
 fi
+
+# ── 旧会话导入归档：静态大件，压缩存档一次，不重复进每日快照 ──────
+# 2026-09-14 的 2.0 会话迁移把旧 JSONL 原件移进 agents/<id>/session-sqlite-import-
+# archive（实测 main 一份 2444 个 *.imported-*、286MB，此后再无任何文件变化）。
+# 旧实现每天把它完整复制进快照：30 天保留窗口 ≈ 8.6GB 全是同一份静态内容。
+# 现在排除出每日 rsync，在 ${BACKUP_ROOT}/archive/ 存一个 tar.gz（实测 62MB），
+# 只建一次。源目录原地保留、不删除；云端仍有一份，只是不再每天重复。
+# 压缩失败会判 failed：每日快照已排除它，否则云端副本会静默消失。
+for archive_src in "${OPENCLAW_DATA}"/agents/*/session-sqlite-import-archive; do
+  [[ -d "${archive_src}" ]] || continue
+  agent_name="$(basename "$(dirname "${archive_src}")")"
+  archive_tgz="${BACKUP_ROOT}/archive/openclaw-${agent_name}-session-sqlite-import-archive.tar.gz"
+  if [[ -f "${archive_tgz}" ]]; then
+    echo "   ⏭  旧会话归档压缩包已存在: ${archive_tgz}"
+    continue
+  fi
+  mkdir -p "${BACKUP_ROOT}/archive"
+  archive_tmp="${archive_tgz}.tmp.$$"
+  if tar -czf "${archive_tmp}" -C "${archive_src}" .; then
+    mv -f "${archive_tmp}" "${archive_tgz}"
+    echo "   ✅ 旧会话归档已压缩存档: ${archive_tgz}"
+  else
+    rm -f "${archive_tmp}"
+    echo "   ❌ 旧会话归档压缩失败（每日快照已排除它，云端暂无新副本）" >&2
+    ARCHIVE_FAILED=1
+  fi
+done
 
 # ── 活库热备（先写 .tmp、成功才 mv，理由同 backup-data.sh）────
 # 会话库是回滚模式，`-readonly` 即可（挂 ro 上也能 .backup，实测）。读事务会
@@ -105,7 +153,8 @@ hot_copy readonly "memory-tdai/memories.sqlite"
 echo "   ✅ 快照完成: ${DEST}"
 
 # ── 同步到 latest/（--delete 确保不残留旧文件）─────────────────
-rsync -a --delete "${DEST}/" "${LATEST}/"
+# 云盘删除滞后会让 rsync --delete 留下空目录（只告警、退出码 0），交给共享重试。
+sync_latest_retry "${DEST}" "${LATEST}"
 echo "   ✅ latest/ 已更新"
 
 # ── 清理超过保留天数的旧快照 ────────────────────────────────────
@@ -138,9 +187,19 @@ if [[ -n "${CUTOFF:-}" ]]; then
     esac
     if [[ "${name%%_*}" < "${CUTOFF}" ]]; then
       echo "   🗑  删除旧快照: ${d%/}"
-      rm -rf "${d}"
+      prune_old_snapshot "${d}" || PRUNE_FAILED=1
     fi
   done
+fi
+
+if [[ "${ARCHIVE_FAILED:-0}" -eq 1 ]]; then
+  echo "   ❌ 旧会话归档未完成压缩存档：本次快照不含该归档，云端副本缺失" >&2
+  exit 1
+fi
+
+if [[ "${PRUNE_FAILED:-0}" -eq 1 ]]; then
+  echo "   ⚠️  有旧快照未能删除：本次新快照与 latest/ 均完整，仅保留策略未生效" >&2
+  exit 1
 fi
 
 echo "   备份完成 (openclaw)"
