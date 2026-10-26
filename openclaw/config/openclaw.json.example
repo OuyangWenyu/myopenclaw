@@ -66,6 +66,7 @@
       },
       "thinkingDefault": "off",
       "reasoningDefault": "off",
+      "heartbeat": { "every": "0m" },
       "models": {
         "deepseek/deepseek-flash": { "alias": "DeepSeek" },
         "moonshot/kimi-k2.6": { "alias": "Kimi" },
