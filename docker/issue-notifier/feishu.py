@@ -20,6 +20,8 @@ _EVENT_LABELS = {
     "closed": "关闭",
     "reopened": "重新打开",
     "merged": "已合并",
+    "review_requested": "请求 review",
+    "review_request_removed": "取消 review",
 }
 _AUTH_BUSINESS_CODES = frozenset({99991661, 99991663, 99991668})
 _EVENT_TEMPLATES = {
@@ -29,6 +31,8 @@ _EVENT_TEMPLATES = {
     "closed": "grey",
     "reopened": "orange",
     "merged": "purple",
+    "review_requested": "blue",
+    "review_request_removed": "orange",
 }
 
 

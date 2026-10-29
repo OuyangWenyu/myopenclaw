@@ -91,6 +91,13 @@ class TestCard:
         )
         assert "已合并" in json.dumps(card, ensure_ascii=False)
 
+    def test_review_event_label(self):
+        card = build_card(
+            _event(event_type="review_requested", subject={"login": "example-gitcode"}),
+            [_person()],
+        )
+        assert "请求 review" in json.dumps(card, ensure_ascii=False)
+
     def test_untrusted_title_is_plain_text_and_foreign_url_is_dropped(self):
         card = build_card(
             _event(

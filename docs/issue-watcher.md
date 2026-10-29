@@ -24,7 +24,8 @@ GitHub/GitCode ─→ issue_watcher（stats，10 min）
 
 ## 事件与卡片
 
-- 事件：`assigned` / `unassigned` / `opened` / `closed` / `reopened` / `merged`。
+- 事件：`assigned` / `unassigned` / `review_requested` / `review_request_removed` /
+  `opened` / `closed` / `reopened` / `merged`。
 - 卡片：平台 + 仓库 + `#编号` + 事件类型 + 标题 + 人员 + 「打开」按钮。
 - 分配事件按人拆；状态事件使用事件时的 assignee 快照。
 - 通知路径**不经过 LLM**，模板直出。
