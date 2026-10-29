@@ -64,6 +64,12 @@ CODER_FEISHU_APP_SECRET=xxx
 ISSUE_NOTIFIER_POLL_SECONDS=60
 ISSUE_WATCHER_POLL_SECONDS=600
 REPO_SCANNER_WATCH_OWNS_ISSUES=1
+
+# MCP 认证（scripts/ensure_issue_watcher_auth.py 幂等生成/合并；勿手抄）
+HERMES_REPO_SCANNER_KEY=xxx               # Hermes 默认 profile 使用
+TIANYI_BOT_REPO_SCANNER_KEY=xxx           # 天一使用；.env.tianyi-bot 必须同值
+ISSUE_NOTIFIER_MCP_TOKEN=xxx              # notifier 轮询使用
+GIT_STATS_API_KEYS={"<key>":"hermes",...} # 服务端 key→用户名映射
 ```
 
 app 模式只注入 **hermes-coder 应用**（`CODER_FEISHU_*`）；compose 刻意不转发
@@ -132,10 +138,18 @@ docker compose exec issue-notifier cat /data/status.json
 - MCP 调用有 30s 超时；服务重启/网络抖动不会把 notifier 卡死。
 - `httpx`/`mcp` 客户端日志级别降到 WARNING（避免每 60s 6 行噪音）。
 
-> **MCP 认证（残余风险）**：`repo-scanner-mcp` 仍未启用 `GIT_STATS_API_KEYS`，
-> 宿主端口已改绑 `127.0.0.1:8001`（LAN 不可达），但 `myopenclaw-net` 内任意容器
-> 仍可无认证读取私有仓库 issue 标题/assignee。启用认证需要同时给 Hermes/天一的
-> MCP 配置和 notifier 的 `_fetch_events` 加 `Authorization: Bearer`，属于后续加固项。
+> **MCP 认证**：`repo-scanner-mcp` 启用 per-user Bearer（`GIT_STATS_API_KEYS`，
+> `key → 用户名`）。三个消费者各持一把 key：Hermes 默认 profile 的
+> `mcp_servers.repo-scanner.headers`、天一模板的 `headers`、notifier 的
+> `ISSUE_NOTIFIER_MCP_TOKEN`。`scripts/ensure_issue_watcher_auth.py` 幂等生成/合并
+> 根 `.env` 里的三把 key，`scripts/ensure_hermes_repo_scanner_auth.py` 幂等补
+> Hermes header；`./scripts/start.sh` 启动前自动运行两者。`/health` 不鉴权
+> （Docker/Uptime Kuma 探针），其余路径无 key 一律 401。
+>
+> **轮换**：删除/修改根 `.env` 里的 key 后重跑 `./scripts/start.sh`（会重建
+> repo-scanner/notifier/Hermes 容器使新值生效）。天一那份在 `.env.tianyi-bot`
+> 的 `TIANYI_BOT_REPO_SCANNER_KEY`，必须与根 `.env` 同值——两份不一致时天一
+> 会 401，且不会自动同步。
 
 ## 故障排查
 
