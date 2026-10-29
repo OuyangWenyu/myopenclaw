@@ -985,3 +985,88 @@ class TestBackupHeartbeat:
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+class TestIssueWatcherSignals:
+    NOW = datetime(2026, 10, 29, 12, 0)
+
+    def test_healthy_watcher_is_silent(self, tmp_path):
+        from scripts.collect_agentops import check_issue_watcher
+
+        path = tmp_path / "watcher.json"
+        path.write_text(json.dumps({
+            "last_poll_epoch": self.NOW.timestamp(),
+            "repos": 40,
+            "error_repos": 0,
+            "oldest_success_at": "2026-10-29T11:55:00Z",
+        }))
+        assert check_issue_watcher(path, now=self.NOW, poll_seconds=600) == []
+
+    def test_missing_status_is_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_watcher
+
+        items = check_issue_watcher(tmp_path / "missing.json", now=self.NOW)
+        assert items and items[0]["title"] == "issue-watcher 状态缺失"
+
+    def test_stale_poll_is_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_watcher
+
+        path = tmp_path / "watcher.json"
+        path.write_text(json.dumps({
+            "last_poll_epoch": (self.NOW - timedelta(hours=2)).timestamp(),
+            "repos": 40,
+            "error_repos": 0,
+        }))
+        items = check_issue_watcher(path, now=self.NOW, poll_seconds=600)
+        assert items and items[0]["title"] == "issue-watcher 轮询停滞"
+
+    def test_repo_errors_are_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_watcher
+
+        path = tmp_path / "watcher.json"
+        path.write_text(json.dumps({
+            "last_poll_epoch": self.NOW.timestamp(),
+            "repos": 40,
+            "error_repos": 2,
+        }))
+        items = check_issue_watcher(path, now=self.NOW, poll_seconds=600)
+        assert items and items[0]["title"] == "issue-watcher 有仓库取数失败"
+
+
+class TestIssueNotifierSignals:
+    NOW = datetime(2026, 10, 29, 12, 0)
+
+    def test_healthy_notifier_is_silent(self, tmp_path):
+        from scripts.collect_agentops import check_issue_notifier
+
+        path = tmp_path / "notifier.json"
+        path.write_text(json.dumps({
+            "last_success_epoch": self.NOW.timestamp(),
+            "send_failed": 0,
+            "dead": 0,
+        }))
+        assert check_issue_notifier(path, now=self.NOW) == []
+
+    def test_send_failure_is_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_notifier
+
+        path = tmp_path / "notifier.json"
+        path.write_text(json.dumps({
+            "last_success_epoch": self.NOW.timestamp(),
+            "send_failed": 1,
+            "pending": 1,
+        }))
+        items = check_issue_notifier(path, now=self.NOW)
+        assert items and items[0]["title"] == "飞书通知发送失败"
+
+    def test_dead_card_is_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_notifier
+
+        path = tmp_path / "notifier.json"
+        path.write_text(json.dumps({
+            "last_success_epoch": self.NOW.timestamp(),
+            "send_failed": 0,
+            "dead": 1,
+        }))
+        items = check_issue_notifier(path, now=self.NOW)
+        assert items and items[0]["title"] == "飞书通知进入死信"

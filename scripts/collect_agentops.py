@@ -39,6 +39,25 @@ RESTART_THRESHOLD_HOURS = int(os.environ.get("AGENTOPS_RESTART_THRESHOLD", "2"))
 BACKUP_STALE_HOURS = int(os.environ.get("AGENTOPS_BACKUP_STALE_HOURS", "24"))
 DISK_THRESHOLD_PERCENT = int(os.environ.get("AGENTOPS_DISK_THRESHOLD", "85"))
 
+# issue watcher / notifier heartbeats
+WATCHER_STATUS_PATH = Path(
+    os.environ.get(
+        "AGENTOPS_WATCHER_STATUS",
+        os.path.expanduser("~/.myagentdata/repo-scanner/watcher-status.json"),
+    )
+)
+NOTIFIER_STATUS_PATH = Path(
+    os.environ.get(
+        "AGENTOPS_NOTIFIER_STATUS",
+        os.path.expanduser("~/.myagentdata/issue-notifier/status.json"),
+    )
+)
+try:
+    WATCHER_POLL_SECONDS = int(os.environ.get("ISSUE_WATCHER_POLL_SECONDS", "600"))
+except ValueError:
+    WATCHER_POLL_SECONDS = 600
+NOTIFIER_STALE_SECONDS = 300
+
 # Paths
 BACKUP_ROOT = os.environ.get(
     "AGENTOPS_BACKUP_ROOT",
@@ -697,6 +716,146 @@ def merge_ledger(existing_content, auto_items):
 # =============================================================
 
 
+def _read_status(path: Path) -> dict | None:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else None
+    except (OSError, ValueError):
+        return None
+
+
+def _epoch_age(epoch, now: datetime) -> float | None:
+    try:
+        return max(0.0, (now - datetime.fromtimestamp(float(epoch))).total_seconds())
+    except (TypeError, ValueError, OSError):
+        return None
+
+
+def _status_item(source: str, title: str, status: str, evidence: str, why: str, action: str) -> dict:
+    return {
+        "title": title,
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "source": f"auto | {source}",
+        "status": status,
+        "owner": "owen",
+        "evidence": evidence,
+        "why_it_matters": why,
+        "suggested_next_action": action,
+        "needs_human_decision": True,
+    }
+
+
+def check_issue_watcher(
+    status_path: Path | None = None,
+    *,
+    now: datetime | None = None,
+    poll_seconds: int | None = None,
+) -> list[dict]:
+    """Alert when the issue watcher stops polling or cannot read repos."""
+    path = Path(status_path) if status_path else WATCHER_STATUS_PATH
+    now = now or datetime.now()
+    interval = poll_seconds or WATCHER_POLL_SECONDS
+
+    data = _read_status(path)
+    if data is None:
+        return [_status_item(
+            "issue-watcher",
+            "issue-watcher 状态缺失",
+            "watch",
+            f"{path} 不存在或不可读",
+            "watcher 是 issue/PR 事件的唯一来源；状态缺失时通知链路无法证明在工作",
+            "docker compose ps repo-scanner-mcp; docker compose logs --tail 50 repo-scanner-mcp",
+        )]
+
+    age = _epoch_age(data.get("last_poll_epoch"), now)
+    threshold = max(1800, 3 * interval)
+    if age is None or age > threshold:
+        return [_status_item(
+            "issue-watcher",
+            "issue-watcher 轮询停滞",
+            "new" if age is None else "watch",
+            f"last_poll_epoch={data.get('last_poll_epoch')}，age={age}s，阈值={threshold}s",
+            "watcher 卡死会让所有 issue/PR 通知静默停止",
+            "docker compose logs --tail 100 repo-scanner-mcp；检查健康检查与快照",
+        )]
+
+    if int(data.get("repos") or 0) == 0:
+        return [_status_item(
+            "issue-watcher",
+            "issue-watcher 尚未完成首次轮询",
+            "watch",
+            f"repos=0，last_poll_epoch={data.get('last_poll_epoch')}",
+            "首次 baseline 未完成前不会产生任何事件",
+            "查看 watcher 日志；确认 configs/repos.toml 与 token",
+        )]
+
+    if int(data.get("error_repos") or 0) > 0:
+        return [_status_item(
+            "issue-watcher",
+            "issue-watcher 有仓库取数失败",
+            "watch",
+            f"error_repos={data.get('error_repos')}，oldest_success_at={data.get('oldest_success_at')}",
+            "持续 401/403/404 会让对应仓库的分配变动完全不被通知",
+            "检查 ISSUE_WATCHER_GITHUB_TOKEN/GitCode token 与仓库访问权限；查看 watcher 日志",
+        )]
+
+    return []
+
+
+def check_issue_notifier(
+    status_path: Path | None = None,
+    *,
+    now: datetime | None = None,
+) -> list[dict]:
+    """Alert on notifier poll stalls, send failures and dead-lettered cards."""
+    path = Path(status_path) if status_path else NOTIFIER_STATUS_PATH
+    now = now or datetime.now()
+
+    data = _read_status(path)
+    if data is None:
+        return [_status_item(
+            "issue-notifier",
+            "issue-notifier 状态缺失",
+            "watch",
+            f"{path} 不存在或不可读",
+            "没有 notifier 心跳就无法证明事件会被推送到飞书",
+            "docker compose ps issue-notifier; docker compose logs --tail 50 issue-notifier",
+        )]
+
+    age = _epoch_age(data.get("last_success_epoch"), now)
+    if age is None or age > NOTIFIER_STALE_SECONDS:
+        return [_status_item(
+            "issue-notifier",
+            "issue-notifier 轮询停滞",
+            "new" if age is None else "watch",
+            f"last_success_epoch={data.get('last_success_epoch')}，age={age}s",
+            "轮询停滞时事件会积压，飞书群收不到新通知",
+            "检查 repo-scanner MCP 与 ISSUE_NOTIFIER_MCP_TOKEN；查看 notifier 日志",
+        )]
+
+    if int(data.get("send_failed") or 0) > 0:
+        return [_status_item(
+            "issue-notifier",
+            "飞书通知发送失败",
+            "new",
+            f"send_failed={data.get('send_failed')}，pending={data.get('pending')}",
+            "发送失败会持续重试 24h；超时后卡片进入死信，通知永久丢失",
+            "检查 CODER_FEISHU_* / chat_id / 群成员权限；查看 notifier 日志",
+        )]
+
+    if int(data.get("dead") or 0) > 0:
+        return [_status_item(
+            "issue-notifier",
+            "飞书通知进入死信",
+            "new",
+            f"dead={data.get('dead')}",
+            "死信卡片不会自动重发，对应事件已丢失",
+            "修复发送链路后执行: docker compose exec issue-notifier python /app/main.py --requeue-dead",
+        )]
+
+    return []
+
+
 def collect_all_signals():
     """Run all signal detectors and return combined list of ledger items.
 
@@ -722,6 +881,10 @@ def collect_all_signals():
 
     # Hermes tirith 安全扫描器可用性（静默失效，无其它信号能发现）
     items.extend(check_tirith_binary())
+
+    # issue/PR watcher + Feishu notifier heartbeats
+    items.extend(check_issue_watcher())
+    items.extend(check_issue_notifier())
 
     return items
 
