@@ -110,3 +110,22 @@ def test_per_user_repo_scanner_keys_wired():
 def test_notifier_healthcheck_uses_status_env_path():
     text = (REPO_ROOT / "docker" / "issue-notifier" / "Dockerfile").read_text()
     assert "ISSUE_NOTIFIER_STATUS" in text
+
+
+def test_uptime_kuma_repo_scanner_probe_requires_401():
+    text = (REPO_ROOT / "scripts" / "setup-uptime-kuma.sh").read_text()
+    assert r'Repo Scanner MCP|http|http://repo-scanner-mcp:8001/mcp||[\"401\"]' in text
+    # Existing monitors must converge, not stay skipped forever.
+    assert "UPDATED" in text and "UPDATE monitor" in text
+
+
+def test_start_sh_fails_closed_when_api_keys_missing():
+    # The old guard matched the commented template line, so a failed helper
+    # left the MCP unauthenticated with no warning. Anchor the check and make
+    # helper failures fatal.
+    assert "grep -qE '^GIT_STATS_API_KEYS=.'" in START_SH
+    assert 'if ! _auth_out="$(python3 "${_auth_helper}" 2>&1)"; then' in START_SH
+    assert "MCP 认证配置失败" in START_SH
+    # A rotated tianyi key must recreate its container (env is frozen).
+    assert "synced tianyi key" in START_SH
+    assert "start-tianyi-bot.sh" in START_SH

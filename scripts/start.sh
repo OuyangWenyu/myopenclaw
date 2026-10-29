@@ -620,15 +620,42 @@ fi
 # 服务端 GIT_STATS_API_KEYS 与三个消费者 key 同一来源；Hermes 配置里的
 # headers 也在启动前幂等补上（Hermes 只在启动时读配置）。
 _hermes_auth_changed=false
-if [[ -f "${REPO_ROOT}/scripts/ensure_issue_watcher_auth.py" ]]; then
-  _auth_out="$(python3 "${REPO_ROOT}/scripts/ensure_issue_watcher_auth.py" 2>&1 || true)"
+_auth_helper="${REPO_ROOT}/scripts/ensure_issue_watcher_auth.py"
+if [[ ! -f "${_auth_helper}" ]]; then
+  echo "❌ 缺少 ${_auth_helper}；repo-scanner MCP 会在无认证状态运行，拒绝启动"
+  echo "   从仓库完整检出后重试"
+  exit 1
+fi
+# 认证是硬门槛：helper 失败或没写出 key map 就不启动。旧写法用 `|| true` +
+# 未锚定的 grep，模板里的注释行 `# GIT_STATS_API_KEYS=...` 会让检查假绿，
+# 结果 MCP 在整个 myopenclaw-net 上无认证裸奔（任何容器可读私有 issue）。
+if ! _auth_out="$(python3 "${_auth_helper}" 2>&1)"; then
   echo "${_auth_out}"
-  if ! grep -q "GIT_STATS_API_KEYS" "${REPO_ROOT}/.env" 2>/dev/null; then
-    echo "   ⚠️  issue-watcher MCP key 生成失败，repo-scanner MCP 将保持无认证"
+  echo "❌ issue-watcher MCP 认证配置失败；拒绝启动（避免无认证暴露私有 issue）"
+  exit 1
+fi
+echo "${_auth_out}"
+if ! grep -qE '^GIT_STATS_API_KEYS=.' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "❌ .env 缺少 GIT_STATS_API_KEYS；拒绝启动（避免无认证暴露私有 issue）"
+  exit 1
+fi
+# 天一用自己的 --env-file；容器 env 在创建时冻结。key 轮换后只改文件不重建，
+# 天一仍拿旧 key，表现为工具调用 401（entrypoint 探 /health 是放行的，看不出来）。
+if grep -q "synced tianyi key" <<< "${_auth_out}" \
+  && docker inspect openclaw-tianyi --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
+  echo "🔄 天一 key 已轮换，重建 openclaw-tianyi 使新 key 生效..."
+  if "${REPO_ROOT}/scripts/start-tianyi-bot.sh" >/dev/null 2>&1; then
+    echo "   ✅ 天一端已重建"
+  else
+    echo "   ⚠️  天一端重建失败；请手动运行 ./scripts/start-tianyi-bot.sh（否则天一 repo-scanner 调用会 401）"
   fi
 fi
 if [[ -f "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" ]]; then
-  _hermes_auth_out="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" 2>&1 || true)"
+  if ! _hermes_auth_out="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" 2>&1)"; then
+    echo "${_hermes_auth_out}"
+    echo "❌ Hermes repo-scanner Bearer header 配置失败；拒绝启动"
+    exit 1
+  fi
   echo "${_hermes_auth_out}"
   if grep -q "added repo-scanner Bearer header" <<< "${_hermes_auth_out}"; then
     _hermes_auth_changed=true
