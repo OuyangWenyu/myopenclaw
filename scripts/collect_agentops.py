@@ -56,7 +56,13 @@ try:
     WATCHER_POLL_SECONDS = int(os.environ.get("ISSUE_WATCHER_POLL_SECONDS", "600"))
 except ValueError:
     WATCHER_POLL_SECONDS = 600
-NOTIFIER_STALE_SECONDS = 300
+try:
+    NOTIFIER_POLL_SECONDS = int(os.environ.get("ISSUE_NOTIFIER_POLL_SECONDS", "60"))
+except ValueError:
+    NOTIFIER_POLL_SECONDS = 60
+# Threshold follows the configured interval; the floor avoids false alarms
+# from a deliberately short poll and keeps the old 300s behavior.
+NOTIFIER_STALE_SECONDS = max(300, 3 * NOTIFIER_POLL_SECONDS)
 
 # Paths
 BACKUP_ROOT = os.environ.get(
@@ -731,6 +737,17 @@ def _epoch_age(epoch, now: datetime) -> float | None:
         return None
 
 
+def _iso_age(value, now: datetime) -> float | None:
+    """Age in seconds of a UTC ISO-8601 timestamp, or None if unparseable."""
+    if not value:
+        return None
+    try:
+        moment = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return max(0.0, now.timestamp() - moment.timestamp())
+
+
 def _status_item(source: str, title: str, status: str, evidence: str, why: str, action: str) -> dict:
     return {
         "title": title,
@@ -799,6 +816,42 @@ def check_issue_watcher(
             "检查 ISSUE_WATCHER_GITHUB_TOKEN/GitCode token 与仓库访问权限；查看 watcher 日志",
         )]
 
+    # last_error/error_repos only cover failures inside poll_repo's try; a DB
+    # error before it used to leave a fresh heartbeat with no error. The
+    # oldest successful repo is the backstop.
+    oldest_age = _iso_age(data.get("oldest_success_at"), now)
+    oldest_threshold = max(3600, 6 * interval)
+    if oldest_age is None or oldest_age > oldest_threshold:
+        return [_status_item(
+            "issue-watcher",
+            "issue-watcher 有仓库长期未成功轮询",
+            "watch" if oldest_age is not None else "new",
+            f"oldest_success_at={data.get('oldest_success_at')}，age={oldest_age}s，阈值={oldest_threshold}s",
+            "部分仓库可能已停止产生事件，但 error_repos 仍为 0（失败发生在记录错误之前）",
+            "查看 watcher 日志的 poll failed；检查 SQLite 锁与数据卷",
+        )]
+
+    daily = data.get("daily_sync")
+    if isinstance(daily, dict):
+        today = now.strftime("%Y-%m-%d")
+        yesterday = (now - timedelta(days=1)).strftime("%Y-%m-%d")
+        marker_date = daily.get("date")
+        done = bool(daily.get("done"))
+        failed_daily = (
+            marker_date not in (today, yesterday)
+            or (marker_date == yesterday and not done)
+            or (marker_date == today and now.hour >= 10 and not done)
+        )
+        if failed_daily:
+            return [_status_item(
+                "issue-watcher",
+                "issue-watcher 每日全量采集未完成",
+                "watch",
+                f"daily_sync={daily}",
+                "宿主 launchd 退役后，全量 commits/branches 只靠服务内 07:45 任务；失败会让研发日报静默缺数据",
+                "查看 watcher 日志的 daily sync；修复后等待下一次小时重试或重启服务",
+            )]
+
     return []
 
 
@@ -841,6 +894,19 @@ def check_issue_notifier(
             f"send_failed={data.get('send_failed')}，pending={data.get('pending')}",
             "发送失败会持续重试 24h；超时后卡片进入死信，通知永久丢失",
             "检查 CODER_FEISHU_* / chat_id / 群成员权限；查看 notifier 日志",
+        )]
+
+    pending = int(data.get("pending") or 0)
+    pending_age = data.get("oldest_pending_age")
+    backlog_threshold = max(900, 10 * NOTIFIER_POLL_SECONDS)
+    if pending > 0 and isinstance(pending_age, (int, float)) and pending_age > backlog_threshold:
+        return [_status_item(
+            "issue-notifier",
+            "飞书通知积压",
+            "watch",
+            f"pending={pending}，oldest_pending_age={int(pending_age)}s，阈值={backlog_threshold}s",
+            "发送在成功但追不上积压时，send_failed 每轮为 0，群消息会滞后数小时而所有心跳正常",
+            "检查 Feishu 限流/网络与 notifier 日志；必要时提高 --once 的发送预算",
         )]
 
     if int(data.get("dead") or 0) > 0:

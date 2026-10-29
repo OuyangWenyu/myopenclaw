@@ -1032,6 +1032,38 @@ class TestIssueWatcherSignals:
         items = check_issue_watcher(path, now=self.NOW, poll_seconds=600)
         assert items and items[0]["title"] == "issue-watcher 有仓库取数失败"
 
+    def test_old_oldest_success_is_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_watcher
+
+        path = tmp_path / "watcher.json"
+        path.write_text(json.dumps({
+            "last_poll_epoch": self.NOW.timestamp(),
+            "repos": 40,
+            "error_repos": 0,
+            "oldest_success_at": "2026-10-28T12:00:00Z",
+        }))
+        items = check_issue_watcher(path, now=self.NOW, poll_seconds=600)
+        assert items and items[0]["title"] == "issue-watcher 有仓库长期未成功轮询"
+
+    def test_failed_daily_sync_is_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_watcher
+
+        path = tmp_path / "watcher.json"
+        path.write_text(json.dumps({
+            "last_poll_epoch": self.NOW.timestamp(),
+            "repos": 40,
+            "error_repos": 0,
+            "oldest_success_at": "2026-10-29T11:55:00Z",
+            "daily_sync": {
+                "date": "2026-10-28",
+                "attempts": 3,
+                "done": False,
+                "failed": ["HTTP 500"],
+            },
+        }))
+        items = check_issue_watcher(path, now=self.NOW, poll_seconds=600)
+        assert items and items[0]["title"] == "issue-watcher 每日全量采集未完成"
+
 
 class TestIssueNotifierSignals:
     NOW = datetime(2026, 10, 29, 12, 0)
@@ -1070,3 +1102,17 @@ class TestIssueNotifierSignals:
         }))
         items = check_issue_notifier(path, now=self.NOW)
         assert items and items[0]["title"] == "飞书通知进入死信"
+
+    def test_pending_backlog_is_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_notifier
+
+        path = tmp_path / "notifier.json"
+        path.write_text(json.dumps({
+            "last_success_epoch": self.NOW.timestamp(),
+            "send_failed": 0,
+            "dead": 0,
+            "pending": 80,
+            "oldest_pending_age": 7200,
+        }))
+        items = check_issue_notifier(path, now=self.NOW)
+        assert items and items[0]["title"] == "飞书通知积压"
