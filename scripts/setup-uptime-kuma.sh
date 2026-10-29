@@ -95,7 +95,9 @@ declare -a MONITORS=(
     "OpenClaw Gateway|http|http://openclaw-gateway:18789/healthz||[\"200-299\"]"
     "aisecretary|http|http://aisecretary:8000/health||[\"200-299\"]"
     "TDAI Memory|http|http://tdai-memory:8420/health||[\"200-299\"]"
-    "Repo Scanner MCP|http|http://repo-scanner-mcp:8001/health||[\"200-299\"]"
+    # Like yuque: probe /mcp without a token and accept only 401. 200 means the
+    # Bearer middleware is not installed (fail-open), which must turn red.
+    "Repo Scanner MCP|http|http://repo-scanner-mcp:8001/mcp||[\"401\"]"
     "FreshRSS|http|http://dailyinfo_freshrss:80||[\"200-399\"]"
     # 不带 token 探 /sse 得到 401 —— "活着 + key 已配置"的双重信号。只接受 401：
     # key 意外为空时上游是无认证直通（200），接受 2xx 会让这个 fail-open 状态
@@ -123,6 +125,7 @@ declare -a MONITORS=(
 
 # ── 幂等创建监控项 ────────────────────────────────────────────
 ADDED=0
+UPDATED=0
 SKIPPED=0
 
 for entry in "${MONITORS[@]}"; do
@@ -134,9 +137,28 @@ for entry in "${MONITORS[@]}"; do
     esc_container=$(sql_escape <<< "${container}")
     esc_auth_user=$(sql_escape <<< "${auth_user:-}")
     esc_auth_pass=$(sql_escape <<< "${auth_pass:-}")
+    STATUS_JSON="${status_codes:-[\"200-299\"]}"
 
     EXISTS=$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM monitor WHERE name='${esc_name}';")
     if [[ "${EXISTS}" -gt 0 ]]; then
+        if [[ "${mon_type}" == "http" ]]; then
+            # Converge existing HTTP monitors to the declarative definition.
+            # Without this, changing a probe (e.g. /health 2xx -> /mcp 401)
+            # silently leaves the old, blind monitor in place.
+            CURRENT=$(sqlite3 "${KUMA_DB}" \
+                "SELECT url || '|' || accepted_statuscodes_json FROM monitor WHERE name='${esc_name}';")
+            DESIRED="${esc_url}|${STATUS_JSON}"
+            if [[ "${CURRENT}" != "${DESIRED}" ]]; then
+                sqlite3 "${KUMA_DB}" "
+                    UPDATE monitor
+                    SET url='${esc_url}', accepted_statuscodes_json='${STATUS_JSON}'
+                    WHERE name='${esc_name}';
+                "
+                UPDATED=$((UPDATED + 1))
+                log "   🔄 已更新: ${name} (${CURRENT} → ${DESIRED})"
+                continue
+            fi
+        fi
         SKIPPED=$((SKIPPED + 1))
         continue
     fi
@@ -147,7 +169,6 @@ for entry in "${MONITORS[@]}"; do
             VALUES ('${esc_name}', 'docker', ${DOCKER_HOST_ID}, '${esc_container}', 1, ${USER_ID}, 60);
         "
     else
-        STATUS_JSON="${status_codes:-[\"200-299\"]}"
         sqlite3 "${KUMA_DB}" "
             INSERT INTO monitor (name, type, url, active, user_id, interval, accepted_statuscodes_json, basic_auth_user, basic_auth_pass)
             VALUES ('${esc_name}', 'http', '${esc_url}', 1, ${USER_ID}, 60, '${STATUS_JSON}', '${esc_auth_user}', '${esc_auth_pass}');
@@ -158,7 +179,7 @@ for entry in "${MONITORS[@]}"; do
 done
 
 log ""
-log "📊 注册结果: ${ADDED} 新增, ${SKIPPED} 已存在（跳过）"
+log "📊 注册结果: ${ADDED} 新增, ${UPDATED} 更新, ${SKIPPED} 已存在（跳过）"
 
 # ── 通知渠道检查 ──────────────────────────────────────────────
 NOTIF_COUNT=$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM notification WHERE active=1;" 2>/dev/null || echo "0")
@@ -171,7 +192,7 @@ if [[ "${NOTIF_COUNT}" -eq 0 ]]; then
 fi
 
 # ── 仅在新增监控项时重启容器 ──────────────────────────────
-if [[ ${ADDED} -gt 0 ]]; then
+if [[ $((ADDED + UPDATED)) -gt 0 ]]; then
     log ""
     log "🔄 重启 Uptime Kuma 以加载新配置..."
     docker compose restart uptime-kuma >/dev/null 2>&1
