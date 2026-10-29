@@ -1,0 +1,17 @@
+# issue-notifier people mapping.
+#
+# Copy to ~/.myagentdata/issue-notifier/config.toml and fill the real
+# usernames. This file is committed (public repo) — keep placeholders here.
+#
+# Matching rules:
+#   * platform=github  -> compare event login with `github`
+#   * platform=gitcode -> compare event login with `gitcode`
+#   * assignment events use the event subject (one person)
+#   * opened/closed/reopened/merged use the event-time assignee snapshot
+#
+# The notify destination and Feishu credentials live in .env, not here.
+
+[[people]]
+name = "示例成员"
+gitcode = "example-gitcode"
+github = "example-github"
