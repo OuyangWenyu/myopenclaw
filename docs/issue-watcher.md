@@ -131,9 +131,9 @@ docker compose exec issue-notifier cat /data/status.json
   发送失败留在 outbox，下一轮（60s）重试；**持续失败 24 小时**才移入 `dead`
   （短时故障/机器人被移出群再拉回不会永久丢通知）。
 - 恢复：`docker compose exec issue-notifier python /app/main.py --requeue-dead`
-  把 dead 卡片移回 outbox（attempts 归零）；dead 默认保留 7 天，之后可用
-  `--purge-dead` 清理（card_json 含私有标题；state 随 data 备份，stats DB 本身
-  也含这些标题，属既定备份边界）。
+  把 dead 卡片移回 outbox（attempts 归零）；dead 保留 7 天，daemon 每天自动
+  清理更早的卡片，也可用 `--purge-dead` 手动清理（card_json 含私有标题；
+  state 随 data 备份，stats DB 本身也含这些标题，属既定备份边界）。
 - 每次 poll 的发送有 20s 预算，Feishu 黑洞不会把轮询拖死；单张失败不阻塞同批其他卡片。
 - `pending`/`dead` 计数来自 `COUNT(*)`。
 - Feishu/MCP 异常文本在落日志/`last_error` 前会脱敏（`access_token=`、`Bearer`、
