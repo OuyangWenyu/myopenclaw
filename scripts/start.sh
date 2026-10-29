@@ -611,6 +611,25 @@ else
     echo "   📚 zotero-mcp: mylibrary 本地未找到，build 时将使用 GitHub clone"
 fi
 
+# ── repo-scanner MCP 每用户 Bearer ───────────────────────────────
+# 服务端 GIT_STATS_API_KEYS 与三个消费者 key 同一来源；Hermes 配置里的
+# headers 也在启动前幂等补上（Hermes 只在启动时读配置）。
+_hermes_auth_changed=false
+if [[ -f "${REPO_ROOT}/scripts/ensure_issue_watcher_auth.py" ]]; then
+  _auth_out="$(python3 "${REPO_ROOT}/scripts/ensure_issue_watcher_auth.py" 2>&1 || true)"
+  echo "${_auth_out}"
+  if ! grep -q "GIT_STATS_API_KEYS" "${REPO_ROOT}/.env" 2>/dev/null; then
+    echo "   ⚠️  issue-watcher MCP key 生成失败，repo-scanner MCP 将保持无认证"
+  fi
+fi
+if [[ -f "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" ]]; then
+  _hermes_auth_out="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" 2>&1 || true)"
+  echo "${_hermes_auth_out}"
+  if grep -q "added repo-scanner Bearer header" <<< "${_hermes_auth_out}"; then
+    _hermes_auth_changed=true
+  fi
+fi
+
 echo "🚀 启动服务..."
 if [[ -n "${BACKUP_ROOT:-}" ]]; then
   echo "   备份目录: ${BACKUP_ROOT}"
@@ -624,6 +643,15 @@ _openclaw_started_before="$(docker inspect openclaw-gateway --format '{{.State.S
 
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
+
+if [[ "${_hermes_auth_changed}" == "true" ]]; then
+  echo "🔄 Hermes repo-scanner auth 已变更，重启 hermes 服务使其生效..."
+  if docker compose restart hermes hermes-coder hermes-finance hermes-daoyuan >/dev/null 2>&1; then
+    echo "   ✅ 已重启"
+  else
+    echo "   ⚠️  重启失败，请手动: docker compose restart hermes hermes-coder hermes-finance hermes-daoyuan"
+  fi
+fi
 
 # mcp.servers / plugins.load 的配置变更不会热加载，必须重启网关才生效
 # （实测日志：config change requires gateway restart (plugins.load)）。

@@ -30,6 +30,7 @@ services:
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
+      - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
       - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
@@ -112,6 +113,7 @@ services:
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
+      - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
       - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
@@ -184,6 +186,7 @@ services:
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
+      - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
@@ -246,6 +249,7 @@ services:
     environment:
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
+      - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
@@ -576,6 +580,10 @@ services:
       - ../git-contribution-stats/configs:/app/configs:ro
     environment:
       - REPO_SCANNER_DB_PATH=/data/repos.sqlite
+      # Per-user MCP keys: {"<hermes-key>":"hermes","<tianyi-key>":"tianyi",
+      # "<notifier-key>":"notifier"} generated into .env by
+      # scripts/ensure_issue_watcher_auth.py.
+      - GIT_STATS_API_KEYS=${GIT_STATS_API_KEYS:-}
       # Dedicated classic PAT with repo + Issues read. Do not also forward
       # GH_TOKEN: least privilege for a read-only watcher.
       - GITHUB_TOKEN=${ISSUE_WATCHER_GITHUB_TOKEN:-}
@@ -605,6 +613,7 @@ services:
       - ${HOME}/.myagentdata/issue-notifier:/data
     environment:
       - ISSUE_NOTIFIER_MCP_URL=http://repo-scanner-mcp:8001/mcp
+      - ISSUE_NOTIFIER_MCP_TOKEN=${ISSUE_NOTIFIER_MCP_TOKEN:-}
       - ISSUE_NOTIFIER_CONFIG=/data/config.toml
       - ISSUE_NOTIFIER_STATE=/data/state.sqlite
       - ISSUE_NOTIFIER_STATUS=/data/status.json

@@ -33,6 +33,7 @@ def test_repo_scanner_uses_combined_watcher_image():
         e.startswith("REPO_SCANNER_WATCH_OWNS_ISSUES=") for e in env
     )
     assert any(e.startswith("ISSUE_WATCHER_POLL_SECONDS=") for e in env)
+    assert any(e.startswith("GIT_STATS_API_KEYS=") for e in env)
     # Least privilege: no main gh token, no main Feishu app secret.
     assert not any(e.startswith("GH_TOKEN=") for e in env)
 
@@ -44,6 +45,7 @@ def test_issue_notifier_service_wiring():
     assert "repo-scanner-mcp" in svc["depends_on"]
     env = svc["environment"]
     assert any(e.startswith("ISSUE_NOTIFIER_MCP_URL=http://repo-scanner-mcp:8001/mcp") for e in env)
+    assert any(e.startswith("ISSUE_NOTIFIER_MCP_TOKEN=") for e in env)
     assert any(e.startswith("CODER_FEISHU_APP_ID=") for e in env)
     assert not any(e.startswith("FEISHU_APP_SECRET=") for e in env)
     assert "no-new-privileges:true" in svc["security_opt"]
@@ -71,3 +73,31 @@ def test_backup_includes_notifier_state():
 def test_example_config_has_no_real_usernames_or_chat():
     assert "example-gitcode" in EXAMPLE_CONFIG
     assert not _FEISHU_ID.search(EXAMPLE_CONFIG)
+
+
+def test_per_user_repo_scanner_keys_wired():
+    # Four Hermes profiles consume the repo-scanner MCP.
+    for name in ("hermes", "hermes-coder", "hermes-finance", "hermes-daoyuan"):
+        env = COMPOSE["services"][name]["environment"]
+        assert any(e.startswith("HERMES_REPO_SCANNER_KEY=") for e in env), name
+
+    tianyi_compose = yaml.safe_load(
+        (REPO_ROOT / "docker-compose.tianyi-bot.yml").read_text()
+    )
+    tianyi_env = tianyi_compose["services"]["openclaw-tianyi"]["environment"]
+    assert any(str(v).startswith("TIANYI_BOT_REPO_SCANNER_KEY=") for v in tianyi_env.values()) or any(
+        str(e).startswith("TIANYI_BOT_REPO_SCANNER_KEY=") for e in tianyi_env
+    ) or "TIANYI_BOT_REPO_SCANNER_KEY" in tianyi_env
+
+    template = (REPO_ROOT / "docker" / "tianyi-bot" / "openclaw.json.template").read_text()
+    assert "Bearer ${TIANYI_BOT_REPO_SCANNER_KEY}" in template
+
+    assert "ensure_issue_watcher_auth.py" in START_SH
+    assert "ensure_hermes_repo_scanner_auth.py" in START_SH
+    for var in (
+        "HERMES_REPO_SCANNER_KEY",
+        "TIANYI_BOT_REPO_SCANNER_KEY",
+        "ISSUE_NOTIFIER_MCP_TOKEN",
+        "GIT_STATS_API_KEYS",
+    ):
+        assert var in ENV_EXAMPLE
