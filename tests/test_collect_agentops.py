@@ -1103,6 +1103,19 @@ class TestIssueNotifierSignals:
         items = check_issue_notifier(path, now=self.NOW)
         assert items and items[0]["title"] == "飞书通知进入死信"
 
+    def test_placeholder_config_is_a_signal(self, tmp_path):
+        from scripts.collect_agentops import check_issue_notifier
+
+        path = tmp_path / "notifier.json"
+        path.write_text(json.dumps({
+            "last_success_epoch": self.NOW.timestamp(),
+            "send_failed": 0,
+            "dead": 0,
+            "placeholder_config": True,
+        }))
+        items = check_issue_notifier(path, now=self.NOW)
+        assert items and items[0]["title"] == "issue-notifier 仍是示例人员配置"
+
     def test_pending_backlog_is_a_signal(self, tmp_path):
         from scripts.collect_agentops import check_issue_notifier
 

@@ -896,6 +896,16 @@ def check_issue_notifier(
             "检查 CODER_FEISHU_* / chat_id / 群成员权限；查看 notifier 日志",
         )]
 
+    if data.get("placeholder_config"):
+        return [_status_item(
+            "issue-notifier",
+            "issue-notifier 仍是示例人员配置",
+            "new",
+            "config.toml 仍包含 example-gitcode/example-github 或“示例成员”",
+            "轮询与发送都会显示健康，但任何真实事件都匹配不到人，群里永远收不到通知",
+            "编辑 ~/.myagentdata/issue-notifier/config.toml 填真实账号后重启 issue-notifier",
+        )]
+
     pending = int(data.get("pending") or 0)
     pending_age = data.get("oldest_pending_age")
     backlog_threshold = max(900, 10 * NOTIFIER_POLL_SECONDS)

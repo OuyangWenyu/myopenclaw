@@ -197,6 +197,29 @@ class TestConfigValidation:
         with pytest.raises(notifier_config.ConfigError):
             notifier_config.load_config(cfg)
 
+    def _webhook_config(self, tmp_path, people):
+        cfg = tmp_path / "config.toml"
+        cfg.write_text(people, encoding="utf-8")
+        return notifier_config.load_config(cfg)
+
+    def test_example_people_are_flagged(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ISSUE_NOTIFIER_FEISHU_MODE", "webhook")
+        monkeypatch.setenv("ISSUE_NOTIFIER_FEISHU_WEBHOOK", "https://example/hook")
+        config = self._webhook_config(
+            tmp_path,
+            '[[people]]\nname = "示例成员"\ngitcode = "example-gitcode"\n',
+        )
+        assert config.placeholder_people is True
+
+    def test_real_people_are_not_flagged(self, tmp_path, monkeypatch):
+        monkeypatch.setenv("ISSUE_NOTIFIER_FEISHU_MODE", "webhook")
+        monkeypatch.setenv("ISSUE_NOTIFIER_FEISHU_WEBHOOK", "https://example/hook")
+        config = self._webhook_config(
+            tmp_path,
+            '[[people]]\nname = "真实成员"\ngitcode = "real-user"\n',
+        )
+        assert config.placeholder_people is False
+
 
 class TestCursorValidation:
     def _config(self, tmp_path, notify_existing=False):

@@ -45,6 +45,8 @@ class Config:
     notify_existing: bool
     # empty = all watched repos; entries are "platform/owner/repo"
     allowed_repos: frozenset[str] = frozenset()
+    # True when the seeded example config is still in place (no event can match).
+    placeholder_people: bool = False
 
     @property
     def app_mode(self) -> bool:
@@ -110,6 +112,12 @@ def load_config(path: str | Path) -> Config:
     except ValueError:
         poll_seconds = 60
 
+    placeholder_people = any(
+        person.name == "示例成员"
+        or (person.gitcode or "").startswith("example-")
+        or (person.github or "").startswith("example-")
+        for person in people
+    )
     return Config(
         mcp_url=_env("ISSUE_NOTIFIER_MCP_URL", "http://repo-scanner-mcp:8001/mcp"),
         mcp_token=_env("ISSUE_NOTIFIER_MCP_TOKEN") or None,
@@ -123,4 +131,5 @@ def load_config(path: str | Path) -> Config:
         notify_existing=_env("ISSUE_NOTIFIER_NOTIFY_EXISTING", "0").lower()
         in {"1", "true", "yes"},
         allowed_repos=allowed_repos,
+        placeholder_people=placeholder_people,
     )

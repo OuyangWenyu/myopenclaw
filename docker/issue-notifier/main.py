@@ -136,6 +136,7 @@ def process_payload(
     payload: dict[str, Any],
     *,
     dry_run: bool = False,
+    counters: dict[str, int] | None = None,
 ) -> tuple[int, int]:
     """Enqueue matched events; return (seen, queued)."""
     cursor = state.get_cursor()
@@ -175,12 +176,16 @@ def process_payload(
             f"{event.get('platform')}/{event.get('owner')}/{event.get('repo')}".casefold()
         )
         if config.allowed_repos and repo_key not in config.allowed_repos:
+            if counters is not None:
+                counters["filtered_repo"] += 1
             continue
         event_key = event.get("event_key") or ""
         if event_key and state.is_known(event_key):
             continue
         people = matched_people(config.people, event)
         if not people:
+            if counters is not None:
+                counters["unmatched"] += 1
             continue
         card = build_card(event, people)
         if dry_run:
@@ -252,7 +257,10 @@ def run_once(
             "watcher reports %s repo(s) with errors; oldest success: %s",
             watcher.get("error_repos"), watcher.get("oldest_success_at"),
         )
-    seen, queued = process_payload(config, state, payload, dry_run=dry_run)
+    counters = {"filtered_repo": 0, "unmatched": 0}
+    seen, queued = process_payload(
+        config, state, payload, dry_run=dry_run, counters=counters
+    )
     sent, failed = (0, 0) if dry_run else flush_outbox(state, sender)
     snap = snapshot(state)
     status = {
@@ -260,6 +268,9 @@ def run_once(
         "last_success_epoch": int(time.time()),
         "events_seen": seen,
         "events_queued": queued,
+        "events_filtered_repo": counters["filtered_repo"],
+        "events_unmatched": counters["unmatched"],
+        "placeholder_config": config.placeholder_people,
         "events_sent": sent,
         "send_failed": failed,
         "cursor": snap["cursor"],
