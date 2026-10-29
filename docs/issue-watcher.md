@@ -112,7 +112,7 @@ docker compose exec issue-notifier cat /data/status.json
 `status.json` 字段：`last_poll_epoch` / `last_success_epoch` / `events_seen` /
 `events_queued` / `events_filtered_repo` / `events_unmatched` / `events_sent` /
 `send_failed` / `cursor` / `pending` / `oldest_pending_age` / `dead` /
-`placeholder_config` / `last_send_error` / `watcher` / `last_error`。
+`placeholder_config` / `poll_seconds` / `last_send_error` / `watcher` / `last_error`。
 容器 healthcheck 要求 `last_success_epoch` 在 `max(300, 3×ISSUE_NOTIFIER_POLL_SECONDS)`
 内、`send_failed` 为 0；`dead` 不再让容器永久 unhealthy（由 AgentOps 单独告警），
 死信超过 7 天由 daemon 自动清理。
