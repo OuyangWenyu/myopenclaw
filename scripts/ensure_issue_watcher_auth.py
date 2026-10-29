@@ -87,7 +87,9 @@ def build_key_map(pairs: dict[str, str]) -> str:
     # rotated key stays valid forever ("one key per consumer", but the old key
     # is still in the map). Preserve operator entries for other consumers.
     key_map = {
-        key: user for key, user in key_map.items() if user not in CONSUMER_USERS
+        key: user
+        for key, user in key_map.items()
+        if not isinstance(user, str) or user.strip().casefold() not in CONSUMER_USERS
     }
     for var, user in CONSUMERS.items():
         key_map[pairs[var]] = user
