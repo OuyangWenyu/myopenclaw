@@ -225,6 +225,16 @@ class TestCursorValidation:
             notifier_main.process_payload(config, state, payload)
         state.close()
 
+    def test_null_events_does_not_advance_cursor(self, tmp_path):
+        state = State(tmp_path / "state.sqlite")
+        state.set_cursor(3)
+        config = self._config(tmp_path)
+        payload = {"events": None, "next_cursor": 9, "latest_event_id": 9}
+        with pytest.raises(RuntimeError):
+            notifier_main.process_payload(config, state, payload)
+        assert state.get_cursor() == 3
+        state.close()
+
 
 class TestFeishuSender:
     class Resp:
@@ -364,6 +374,17 @@ class TestAllowedRepos:
             {"events": [other, allowed], "next_cursor": 2, "latest_event_id": 2},
         ) == (2, 1)
         assert len(state.pending()) == 1
+        state.close()
+
+    def test_allowlist_is_case_insensitive(self, tmp_path):
+        config = self._config(tmp_path, ["GitCode/DLUT-Water/Server-Monitoring"])
+        state = State(tmp_path / "state.sqlite")
+        state.set_cursor(0)
+        assert notifier_main.process_payload(
+            config,
+            state,
+            {"events": [_event()], "next_cursor": 1, "latest_event_id": 1},
+        ) == (1, 1)
         state.close()
 
 

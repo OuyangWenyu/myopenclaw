@@ -6,9 +6,12 @@ so the backup pipeline can hot-copy it with ``-readonly``.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("issue-notifier.state")
 
 DDL = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -82,11 +85,20 @@ class State:
         )
 
     def enqueue(self, event_id: int, event_key: str, card_json: str) -> None:
-        self.conn.execute(
+        cur = self.conn.execute(
             "INSERT OR IGNORE INTO outbox(event_id, event_key, card_json) "
             "VALUES (?, ?, ?)",
             (int(event_id), event_key, card_json),
         )
+        if cur.rowcount == 0:
+            # Same event_id/key already queued, sent or dead. Normal dedup, but
+            # log it because a restored state.sqlite against a recreated stats DB
+            # can make this a silent loss of a genuinely new event.
+            logger.warning(
+                "outbox ignored event id=%s key=%s (id/key collision)",
+                event_id,
+                event_key[:12],
+            )
         self.conn.commit()
 
     def pending(self) -> list[sqlite3.Row]:
@@ -114,6 +126,21 @@ class State:
 
     def pending_count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM outbox").fetchone()[0])
+
+    def oldest_pending_age(self) -> int | None:
+        """Age (seconds) of the oldest queued card; None when the outbox is empty."""
+        row = self.conn.execute(
+            "SELECT CAST((julianday('now') - julianday(MIN(created_at))) * 86400 AS INTEGER) "
+            "FROM outbox"
+        ).fetchone()
+        return int(row[0]) if row and row[0] is not None else None
+
+    def last_pending_error(self) -> str:
+        row = self.conn.execute(
+            "SELECT last_error FROM outbox WHERE last_error IS NOT NULL "
+            "ORDER BY event_id DESC LIMIT 1"
+        ).fetchone()
+        return str(row[0]) if row and row[0] else ""
 
     def dead_count(self) -> int:
         return int(self.conn.execute("SELECT COUNT(*) FROM dead").fetchone()[0])
@@ -169,5 +196,6 @@ def snapshot(state: State) -> dict[str, Any]:
     return {
         "cursor": state.get_cursor(),
         "pending": state.pending_count(),
+        "oldest_pending_age": state.oldest_pending_age(),
         "dead": state.dead_count(),
     }

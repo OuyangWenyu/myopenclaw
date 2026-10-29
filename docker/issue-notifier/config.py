@@ -66,7 +66,9 @@ def load_config(path: str | Path) -> Config:
     if config_path.is_file():
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
         allowed_repos = frozenset(
-            str(item).strip() for item in (data.get("allowed_repos") or []) if str(item).strip()
+            str(item).strip().casefold()
+            for item in (data.get("allowed_repos") or [])
+            if str(item).strip()
         )
         for entry in data.get("people", []) or []:
             name = (entry.get("name") or entry.get("gitcode") or entry.get("github") or "").strip()

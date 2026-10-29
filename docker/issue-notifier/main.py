@@ -36,6 +36,10 @@ DEFAULT_STATUS = Path(os.environ.get("ISSUE_NOTIFIER_STATUS", "/data/status.json
 MAX_RETRY_AGE_SECONDS = 24 * 3600
 # Do not let one poll block for minutes if Feishu is blackholed.
 FLUSH_BUDGET_SECONDS = 20
+# Dead cards contain private titles; purge them after the documented 7 days
+# even if nobody runs --purge-dead manually.
+PURGE_DEAD_AFTER_DAYS = 7
+PURGE_INTERVAL_SECONDS = 24 * 3600
 
 
 def _age_seconds(created_at: str | None) -> float:
@@ -103,9 +107,27 @@ def fetch_events(
 
 def _write_status(path: Path, **values: Any) -> None:
     Path(path).parent.mkdir(parents=True, exist_ok=True)
-    tmp = Path(str(path) + ".tmp")
+    # A manual --once can race the daemon; a shared .tmp path would let one
+    # process replace the file out from under the other.
+    tmp = Path(f"{path}.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(values, ensure_ascii=False, indent=2), encoding="utf-8")
     tmp.replace(path)
+
+
+def _write_failure_status(path: Path, error: str) -> None:
+    """Preserve the last good counters (dead/pending/cursor) on poll failure."""
+    try:
+        existing = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(existing, dict):
+            existing = {}
+    except (OSError, ValueError):
+        existing = {}
+    existing.update(
+        last_poll_epoch=int(time.time()),
+        last_success_epoch=0,
+        last_error=error,
+    )
+    _write_status(path, **existing)
 
 
 def process_payload(
@@ -139,11 +161,19 @@ def process_payload(
         logger.info("first run: baseline cursor=%s (notify_existing=false)", latest)
         return 0, 0
 
+    events = payload.get("events")
+    if not isinstance(events, list):
+        # {"events": null} or a contract change must not look like "no events"
+        # while the cursor advances.
+        raise RuntimeError(f"get_issue_events events must be a list, got {type(events).__name__}")
+
     seen = 0
     queued = 0
-    for event in payload.get("events") or []:
+    for event in events:
         seen += 1
-        repo_key = f"{event.get('platform')}/{event.get('owner')}/{event.get('repo')}"
+        repo_key = (
+            f"{event.get('platform')}/{event.get('owner')}/{event.get('repo')}".casefold()
+        )
         if config.allowed_repos and repo_key not in config.allowed_repos:
             continue
         event_key = event.get("event_key") or ""
@@ -234,7 +264,9 @@ def run_once(
         "send_failed": failed,
         "cursor": snap["cursor"],
         "pending": snap["pending"],
+        "oldest_pending_age": snap["oldest_pending_age"],
         "dead": snap["dead"],
+        "last_send_error": state.last_pending_error() if failed else "",
         "watcher": watcher,
         "last_error": f"{failed} send failure(s)" if failed else "",
     }
@@ -278,29 +310,32 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.purge_dead:
-        count = state.purge_dead()
-        logger.info("purged %d dead card(s) older than 7 days", count)
+        count = state.purge_dead(older_than_days=PURGE_DEAD_AFTER_DAYS)
+        logger.info(
+            "purged %d dead card(s) older than %d days",
+            count,
+            PURGE_DEAD_AFTER_DAYS,
+        )
         state.close()
         return 0
 
     if args.once or args.dry_run:
         try:
             status = run_once(config, state, sender, dry_run=args.dry_run)
-            _write_status(args.status, **status)
+            # --dry-run must not overwrite the daemon's health signal.
+            if not args.dry_run:
+                _write_status(args.status, **status)
             logger.info("run complete: %s", status)
             return 0
         except Exception as exc:  # noqa: BLE001
             logger.error("run failed: %s", redact_error(exc))
-            _write_status(
-                args.status,
-                last_poll_epoch=int(time.time()),
-                last_success_epoch=0,
-                last_error=redact_error(exc),
-            )
+            if not args.dry_run:
+                _write_failure_status(args.status, redact_error(exc))
             return 1
         finally:
             state.close()
 
+    last_purge = 0.0
     try:
         while True:
             try:
@@ -313,12 +348,19 @@ def main(argv: list[str] | None = None) -> int:
                 )
             except Exception as exc:  # noqa: BLE001 - keep polling
                 logger.error("poll failed: %s", redact_error(exc))
-                _write_status(
-                    args.status,
-                    last_poll_epoch=int(time.time()),
-                    last_success_epoch=0,
-                    last_error=redact_error(exc),
-                )
+                _write_failure_status(args.status, redact_error(exc))
+            if time.time() - last_purge >= PURGE_INTERVAL_SECONDS:
+                try:
+                    count = state.purge_dead(older_than_days=PURGE_DEAD_AFTER_DAYS)
+                    if count:
+                        logger.info(
+                            "purged %d dead card(s) older than %d days",
+                            count,
+                            PURGE_DEAD_AFTER_DAYS,
+                        )
+                except Exception:  # noqa: BLE001 - purge must not stop polling
+                    logger.exception("dead-card purge failed")
+                last_purge = time.time()
             time.sleep(config.poll_seconds)
     finally:
         state.close()
