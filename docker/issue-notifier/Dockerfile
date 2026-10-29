@@ -16,6 +16,6 @@ ENV ISSUE_NOTIFIER_STATUS=/data/status.json
 # Freshness check: successful poll within 5 minutes AND no send failures.
 # A permanently poisoned card must not look healthy while nothing is delivered.
 HEALTHCHECK --interval=60s --timeout=5s --retries=3 \
-    CMD python3 -c "import json,time; d=json.load(open('/data/status.json')); assert time.time()-d.get('last_success_epoch',0) < 300, 'poll stale'; assert not d.get('send_failed'), 'send failing'; assert not d.get('dead'), 'dead-lettered cards'"
+    CMD python3 -c "import json,os,time; path=os.environ.get('ISSUE_NOTIFIER_STATUS','/data/status.json'); d=json.load(open(path)); assert time.time()-d.get('last_success_epoch',0) < 300, 'poll stale'; assert not d.get('send_failed'), 'send failing'; assert not d.get('dead'), 'dead-lettered cards'"
 
 CMD ["python", "/app/main.py"]

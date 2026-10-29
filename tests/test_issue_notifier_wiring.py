@@ -101,3 +101,8 @@ def test_per_user_repo_scanner_keys_wired():
         "GIT_STATS_API_KEYS",
     ):
         assert var in ENV_EXAMPLE
+
+
+def test_notifier_healthcheck_uses_status_env_path():
+    text = (REPO_ROOT / "docker" / "issue-notifier" / "Dockerfile").read_text()
+    assert "ISSUE_NOTIFIER_STATUS" in text
