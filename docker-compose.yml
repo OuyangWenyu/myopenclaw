@@ -595,6 +595,10 @@ services:
       # Host-side Kuma push URL points at 127.0.0.1; start.sh derives the
       # container-reachable uptime-kuma:3001 variant. Empty = no push.
       - KUMA_PUSH_URL=${KUMA_PUSH_URL_DOCKER:-}
+      # Upstream enables DNS-rebinding protection; allow the Docker DNS name
+      # used by Hermes/tianyi/Uptime and host loopback probes.
+      - MCP_ALLOWED_HOSTS=${MCP_ALLOWED_HOSTS:-repo-scanner-mcp:8001,127.0.0.1:8001,localhost:8001}
+      - MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-http://repo-scanner-mcp:8001,http://127.0.0.1:8001,http://localhost:8001}
       # The watcher is the sole writer of issue/PR current state; the host
       # daily collect job must not fetch them during the transition week.
       - REPO_SCANNER_WATCH_OWNS_ISSUES=${REPO_SCANNER_WATCH_OWNS_ISSUES:-1}

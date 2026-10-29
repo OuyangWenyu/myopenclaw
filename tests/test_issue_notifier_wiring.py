@@ -35,6 +35,8 @@ def test_repo_scanner_uses_combined_watcher_image():
     )
     assert any(e.startswith("ISSUE_WATCHER_POLL_SECONDS=") for e in env)
     assert any(e.startswith("KUMA_PUSH_URL=") for e in env)
+    assert any(e.startswith("MCP_ALLOWED_HOSTS=") for e in env)
+    assert any(e.startswith("MCP_ALLOWED_ORIGINS=") for e in env)
     assert any(e.startswith("GIT_STATS_API_KEYS=") for e in env)
     # Least privilege: no main gh token, no main Feishu app secret.
     assert not any(e.startswith("GH_TOKEN=") for e in env)
