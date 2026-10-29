@@ -331,3 +331,53 @@ def test_mcp_token_loaded(tmp_path, monkeypatch):
     monkeypatch.setenv("ISSUE_NOTIFIER_FEISHU_MODE", "webhook")
     monkeypatch.setenv("ISSUE_NOTIFIER_FEISHU_WEBHOOK", "https://example/hook")
     assert notifier_config.load_config(cfg).mcp_token == "mcp-token"
+
+
+class TestAllowedRepos:
+    def _config(self, tmp_path, allowed):
+        cfg = tmp_path / "config.toml"
+        lines = ['[[people]]', 'name = "示例成员"', 'gitcode = "example-gitcode"']
+        if allowed:
+            lines.append("allowed_repos = [" + ", ".join(f'"{r}"' for r in allowed) + "]")
+        cfg.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        return notifier_config.load_config(cfg)
+
+    def test_empty_allowlist_means_all_repos(self, tmp_path):
+        config = self._config(tmp_path, [])
+        state = State(tmp_path / "state.sqlite")
+        state.set_cursor(0)
+        event = _event(platform="gitcode", owner="o", repo="r")
+        assert notifier_main.process_payload(
+            config, state, {"events": [event], "next_cursor": 1, "latest_event_id": 1}
+        ) == (1, 1)
+        state.close()
+
+    def test_allowlist_filters_repos(self, tmp_path):
+        config = self._config(tmp_path, ["gitcode/dlut-water/server-monitoring"])
+        state = State(tmp_path / "state.sqlite")
+        state.set_cursor(0)
+        other = _event(platform="github", owner="o", repo="r")
+        allowed = _event()
+        assert notifier_main.process_payload(
+            config,
+            state,
+            {"events": [other, allowed], "next_cursor": 2, "latest_event_id": 2},
+        ) == (2, 1)
+        assert len(state.pending()) == 1
+        state.close()
+
+
+def test_purge_dead_removes_only_old_cards(tmp_path):
+    state = State(tmp_path / "state.sqlite")
+    state.enqueue(1, "old", "{}")
+    state.mark_failed(1, "boom")
+    state.dead_letter(1, "boom")
+    state.conn.execute("UPDATE dead SET dead_at='2020-01-01 00:00:00' WHERE event_id=1")
+    state.conn.commit()
+    state.enqueue(2, "new", "{}")
+    state.mark_failed(2, "boom")
+    state.dead_letter(2, "boom")
+
+    assert state.purge_dead(7) == 1
+    assert state.dead_count() == 1
+    state.close()

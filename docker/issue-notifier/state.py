@@ -152,6 +152,15 @@ class State:
                 self.conn.execute("DELETE FROM dead WHERE event_id=?", (event_id,))
         return len(rows)
 
+    def purge_dead(self, older_than_days: int = 7) -> int:
+        """Drop dead cards older than N days (card_json contains private titles)."""
+        cursor = self.conn.execute(
+            "DELETE FROM dead WHERE dead_at < datetime('now', ?)",
+            (f"-{int(older_than_days)} days",),
+        )
+        self.conn.commit()
+        return int(cursor.rowcount)
+
     def close(self) -> None:
         self.conn.close()
 

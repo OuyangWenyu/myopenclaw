@@ -43,6 +43,8 @@ class Config:
     app_secret: str | None
     people: tuple[Person, ...]
     notify_existing: bool
+    # empty = all watched repos; entries are "platform/owner/repo"
+    allowed_repos: frozenset[str] = frozenset()
 
     @property
     def app_mode(self) -> bool:
@@ -60,8 +62,12 @@ def _env(name: str, default: str = "") -> str:
 def load_config(path: str | Path) -> Config:
     config_path = Path(path)
     people: list[Person] = []
+    allowed_repos: frozenset[str] = frozenset()
     if config_path.is_file():
         data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+        allowed_repos = frozenset(
+            str(item).strip() for item in (data.get("allowed_repos") or []) if str(item).strip()
+        )
         for entry in data.get("people", []) or []:
             name = (entry.get("name") or entry.get("gitcode") or entry.get("github") or "").strip()
             if not name:
@@ -114,4 +120,5 @@ def load_config(path: str | Path) -> Config:
         people=tuple(people),
         notify_existing=_env("ISSUE_NOTIFIER_NOTIFY_EXISTING", "0").lower()
         in {"1", "true", "yes"},
+        allowed_repos=allowed_repos,
     )

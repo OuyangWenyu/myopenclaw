@@ -143,6 +143,9 @@ def process_payload(
     queued = 0
     for event in payload.get("events") or []:
         seen += 1
+        repo_key = f"{event.get('platform')}/{event.get('owner')}/{event.get('repo')}"
+        if config.allowed_repos and repo_key not in config.allowed_repos:
+            continue
         event_key = event.get("event_key") or ""
         if event_key and state.is_known(event_key):
             continue
@@ -246,6 +249,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--requeue-dead", action="store_true")
+    parser.add_argument("--purge-dead", action="store_true")
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -270,6 +274,12 @@ def main(argv: list[str] | None = None) -> int:
     if args.requeue_dead:
         count = state.requeue_dead()
         logger.info("requeued %d dead-lettered card(s)", count)
+        state.close()
+        return 0
+
+    if args.purge_dead:
+        count = state.purge_dead()
+        logger.info("purged %d dead card(s) older than 7 days", count)
         state.close()
         return 0
 

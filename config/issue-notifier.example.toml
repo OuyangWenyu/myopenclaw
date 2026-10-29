@@ -9,6 +9,10 @@
 #   * assignment events use the event subject (one person)
 #   * opened/closed/reopened/merged use the event-time assignee snapshot
 #
+# Optional: only notify for these repos (empty = all watched repos).
+# Format: "platform/owner/repo".
+# allowed_repos = ["gitcode/dlut-water/server-monitoring", "github/OuyangWenyu/myopenclaw"]
+
 # The notify destination and Feishu credentials live in .env, not here.
 
 [[people]]
