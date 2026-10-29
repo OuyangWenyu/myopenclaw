@@ -57,3 +57,12 @@ class TestAddHeader:
         src = "# top\nmcp_servers:\n  repo-scanner:\n    url: x\n# tail\n"
         out = "\n".join(mod.add_header(src.splitlines()))
         assert "# top" in out and "# tail" in out
+
+
+class TestCli:
+    def test_preserves_file_mode(self, tmp_path):
+        config = tmp_path / "config.yaml"
+        config.write_text(BASE, encoding="utf-8")
+        config.chmod(0o640)
+        assert mod.main(["--config", str(config)]) == 0
+        assert config.stat().st_mode & 0o777 == 0o640

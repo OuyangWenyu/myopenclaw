@@ -19,7 +19,9 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import os
 import re
+import stat
 import sys
 from pathlib import Path
 
@@ -102,6 +104,9 @@ def main(argv: list[str] | None = None) -> int:
 
     tmp = Path(str(args.config) + ".tmp")
     tmp.write_text("\n".join(updated) + "\n", encoding="utf-8")
+    # os.replace swaps the inode; copy the original mode so a hardened 0640
+    # config does not silently become the temp file's umask mode.
+    os.chmod(tmp, stat.S_IMODE(args.config.stat().st_mode))
     tmp.replace(args.config)
     print(f"✅ added repo-scanner Bearer header to {args.config}")
     return 0

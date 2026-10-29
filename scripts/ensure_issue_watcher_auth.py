@@ -21,18 +21,22 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import secrets
+import stat
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_ENV = REPO_ROOT / ".env"
+DEFAULT_TIANYI_ENV = REPO_ROOT / ".env.tianyi-bot"
 
 CONSUMERS = {
     "HERMES_REPO_SCANNER_KEY": "hermes",
     "TIANYI_BOT_REPO_SCANNER_KEY": "tianyi",
     "ISSUE_NOTIFIER_MCP_TOKEN": "notifier",
 }
+CONSUMER_USERS = frozenset(CONSUMERS.values())
 MIN_KEY_LEN = 32
 MARKER = "# issue-watcher MCP keys (per consumer; generated)"
 
@@ -79,6 +83,12 @@ def build_key_map(pairs: dict[str, str]) -> str:
         raise ScriptError("GIT_STATS_API_KEYS is not valid JSON; fix it manually") from exc
     if not isinstance(key_map, dict):
         raise ScriptError("GIT_STATS_API_KEYS must be a JSON object")
+    # Drop stale consumer entries before adding the current keys, otherwise a
+    # rotated key stays valid forever ("one key per consumer", but the old key
+    # is still in the map). Preserve operator entries for other consumers.
+    key_map = {
+        key: user for key, user in key_map.items() if user not in CONSUMER_USERS
+    }
     for var, user in CONSUMERS.items():
         key_map[pairs[var]] = user
     return json.dumps(key_map, separators=(",", ":"), ensure_ascii=True)
@@ -112,13 +122,54 @@ def update_lines(lines: list[str], pairs: dict[str, str]) -> list[str]:
     return out
 
 
+def sync_tianyi(lines: list[str], key: str) -> list[str]:
+    """Return .env.tianyi-bot lines with the tianyi key set to ``key``.
+
+    The tianyi stack reads its own env file, but the server's key map is built
+    from the root .env. They must be the same value or tianyi gets a 401 after
+    a rotation, so the helper keeps the mirror in sync when the file exists.
+    """
+    out: list[str] = []
+    seen = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped and not stripped.startswith("#") and "=" in stripped:
+            name = stripped.split("=", 1)[0].strip()
+            if name == "TIANYI_BOT_REPO_SCANNER_KEY":
+                out.append(f"TIANYI_BOT_REPO_SCANNER_KEY={key}")
+                seen = True
+                continue
+        out.append(line)
+    if not seen:
+        if out and out[-1].strip():
+            out.append("")
+        out.append("# issue-watcher MCP key (synced from root .env)")
+        out.append(f"TIANYI_BOT_REPO_SCANNER_KEY={key}")
+    return out
+
+
+def write_env(path: Path, lines: list[str]) -> None:
+    """Write atomically while preserving the existing file mode (or 0600)."""
+    mode = stat.S_IMODE(path.stat().st_mode) if path.exists() else 0o600
+    tmp = Path(str(path) + ".tmp")
+    tmp.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    os.chmod(tmp, mode)
+    tmp.replace(path)
+
+
 def mask(value: str) -> str:
-    return f"{value[:4]}…(len {len(value)})"
+    return f"…(len {len(value)})"
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="ensure per-user repo-scanner MCP keys")
     parser.add_argument("--env-file", type=Path, default=DEFAULT_ENV)
+    parser.add_argument(
+        "--tianyi-env",
+        type=Path,
+        default=DEFAULT_TIANYI_ENV,
+        help="mirror the tianyi key into this file when it exists",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -127,6 +178,12 @@ def main(argv: list[str] | None = None) -> int:
         pairs = ensure_keys(parse_env(lines))
         updated = update_lines(lines, pairs)
         build_key_map(pairs)  # validate the map before writing
+        tianyi_updated = None
+        if args.tianyi_env.is_file():
+            tianyi_lines = read_env(args.tianyi_env)
+            tianyi_updated = sync_tianyi(
+                tianyi_lines, pairs["TIANYI_BOT_REPO_SCANNER_KEY"]
+            )
     except ScriptError as exc:
         print(f"❌ {exc}", file=sys.stderr)
         return 2
@@ -139,14 +196,18 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         print("(dry-run: no changes written)")
         return 0
-    if updated == lines:
-        print("✅ already up to date")
-        return 0
 
-    tmp = Path(str(args.env_file) + ".tmp")
-    tmp.write_text("\n".join(updated) + "\n", encoding="utf-8")
-    tmp.replace(args.env_file)
-    print(f"✅ updated {args.env_file}")
+    changed = False
+    if updated != lines:
+        write_env(args.env_file, updated)
+        print(f"✅ updated {args.env_file}")
+        changed = True
+    if tianyi_updated is not None and tianyi_updated != tianyi_lines:
+        write_env(args.tianyi_env, tianyi_updated)
+        print(f"✅ synced tianyi key to {args.tianyi_env}")
+        changed = True
+    if not changed:
+        print("✅ already up to date")
     return 0
 
 
