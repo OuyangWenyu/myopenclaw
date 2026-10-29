@@ -21,6 +21,19 @@ if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   exit 1
 fi
 
+# Kuma push 从容器内发出，127.0.0.1/localhost 在容器里指向容器自己；
+# 自动换成 compose 网络里的 uptime-kuma。直接 docker compose up 时需在
+# .env 里提供 KUMA_PUSH_URL_DOCKER（见 .env.example）。
+if [[ -z "${KUMA_PUSH_URL_DOCKER:-}" ]]; then
+  _kuma_push="$(grep '^KUMA_PUSH_URL=' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+  if [[ -n "${_kuma_push}" ]]; then
+    _kuma_push="${_kuma_push//127.0.0.1/uptime-kuma}"
+    _kuma_push="${_kuma_push//localhost/uptime-kuma}"
+    export KUMA_PUSH_URL_DOCKER="${_kuma_push}"
+  fi
+  unset _kuma_push
+fi
+
 # ── OpenClaw 配置文件路径（凭据注入块先使用后赋值，须提前定义）──
 OPENCLAW_CONFIG="${HOME}/.openclaw/openclaw.json"
 
@@ -643,20 +656,31 @@ fi
 # 天一仍拿旧 key，表现为工具调用 401（entrypoint 探 /health 是放行的，看不出来）。
 # 重建必须放在主栈 up 之后：服务端先加载新 key map，天一再用新 key 连接。
 _tianyi_key_changed=false
-if grep -q "synced tianyi key" <<< "${_auth_out}" \
-  && docker inspect openclaw-tianyi --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
-  _tianyi_key_changed=true
+if docker inspect openclaw-tianyi --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
+  if grep -q "synced tianyi key" <<< "${_auth_out}"; then
+    _tianyi_key_changed=true
+  else
+    # 自愈：上一次重建失败后，文件可能已同步但容器仍持旧 key。
+    _tianyi_expected="$(grep -E '^TIANYI_BOT_REPO_SCANNER_KEY=' "${REPO_ROOT}/.env.tianyi-bot" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    _tianyi_actual="$(docker inspect openclaw-tianyi --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^TIANYI_BOT_REPO_SCANNER_KEY=' | tail -1 | cut -d= -f2- || true)"
+    if [[ -n "${_tianyi_expected}" && "${_tianyi_expected}" != "${_tianyi_actual}" ]]; then
+      _tianyi_key_changed=true
+    fi
+  fi
 fi
-if [[ -f "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" ]]; then
-  if ! _hermes_auth_out="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" 2>&1)"; then
-    echo "${_hermes_auth_out}"
-    echo "❌ Hermes repo-scanner Bearer header 配置失败；拒绝启动"
-    exit 1
-  fi
+_hermes_helper="${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py"
+if [[ ! -f "${_hermes_helper}" ]]; then
+  echo "❌ 缺少 ${_hermes_helper}；Hermes 会因缺 Bearer header 调用 401，拒绝启动"
+  exit 1
+fi
+if ! _hermes_auth_out="$(python3 "${_hermes_helper}" 2>&1)"; then
   echo "${_hermes_auth_out}"
-  if grep -q "added repo-scanner Bearer header" <<< "${_hermes_auth_out}"; then
-    _hermes_auth_changed=true
-  fi
+  echo "❌ Hermes repo-scanner Bearer header 配置失败；拒绝启动"
+  exit 1
+fi
+echo "${_hermes_auth_out}"
+if grep -q "added repo-scanner Bearer header" <<< "${_hermes_auth_out}"; then
+  _hermes_auth_changed=true
 fi
 
 echo "🚀 启动服务..."

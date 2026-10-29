@@ -34,6 +34,7 @@ def test_repo_scanner_uses_combined_watcher_image():
         e.startswith("REPO_SCANNER_WATCH_OWNS_ISSUES=") for e in env
     )
     assert any(e.startswith("ISSUE_WATCHER_POLL_SECONDS=") for e in env)
+    assert any(e.startswith("KUMA_PUSH_URL=") for e in env)
     assert any(e.startswith("GIT_STATS_API_KEYS=") for e in env)
     # Least privilege: no main gh token, no main Feishu app secret.
     assert not any(e.startswith("GH_TOKEN=") for e in env)
@@ -58,6 +59,8 @@ def test_env_example_has_only_placeholders():
     assert "ISSUE_NOTIFIER_FEISHU_CHAT_ID=oc_xxxx" in ENV_EXAMPLE
     assert "ISSUE_NOTIFIER_FEISHU_WEBHOOK=https://open.feishu.cn/open-apis/bot/v2/hook/" in ENV_EXAMPLE
     assert "REPO_SCANNER_WATCH_OWNS_ISSUES=1" in ENV_EXAMPLE
+    assert "KUMA_PUSH_URL_DOCKER" in ENV_EXAMPLE
+    assert "KUMA_PUSH_URL_DOCKER" in START_SH
     assert not _FEISHU_ID.search(ENV_EXAMPLE)
     assert not _FEISHU_ID.search(COMPOSE_TEXT)
 
@@ -129,3 +132,4 @@ def test_start_sh_fails_closed_when_api_keys_missing():
     # A rotated tianyi key must recreate its container (env is frozen).
     assert "synced tianyi key" in START_SH
     assert "start-tianyi-bot.sh" in START_SH
+    assert "缺少 ${_hermes_helper}" in START_SH

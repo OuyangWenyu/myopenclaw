@@ -592,6 +592,9 @@ services:
       - GITHUB_TOKEN=${ISSUE_WATCHER_GITHUB_TOKEN:-}
       - GITCODE_ACCESS_TOKEN=${GITCODE_TOKEN:-}
       - ISSUE_WATCHER_POLL_SECONDS=${ISSUE_WATCHER_POLL_SECONDS:-600}
+      # Host-side Kuma push URL points at 127.0.0.1; start.sh derives the
+      # container-reachable uptime-kuma:3001 variant. Empty = no push.
+      - KUMA_PUSH_URL=${KUMA_PUSH_URL_DOCKER:-}
       # The watcher is the sole writer of issue/PR current state; the host
       # daily collect job must not fetch them during the transition week.
       - REPO_SCANNER_WATCH_OWNS_ISSUES=${REPO_SCANNER_WATCH_OWNS_ISSUES:-1}
