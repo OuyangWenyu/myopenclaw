@@ -27,6 +27,7 @@ def test_repo_scanner_uses_combined_watcher_image():
     assert svc["build"]["dockerfile"] == "docker/issue-watcher/Dockerfile"
     assert any("/data:rw" in v for v in svc["volumes"])
     assert "127.0.0.1:8001:8001" in svc["ports"]
+    assert svc["user"] == "${HOST_UID:-0}:${HOST_GID:-0}"
     assert "no-new-privileges:true" in svc["security_opt"]
     env = svc["environment"]
     assert "REPO_SCANNER_WATCH_OWNS_ISSUES=1" in env or any(
@@ -48,6 +49,7 @@ def test_issue_notifier_service_wiring():
     assert any(e.startswith("ISSUE_NOTIFIER_MCP_TOKEN=") for e in env)
     assert any(e.startswith("CODER_FEISHU_APP_ID=") for e in env)
     assert not any(e.startswith("FEISHU_APP_SECRET=") for e in env)
+    assert svc["user"] == "${HOST_UID:-0}:${HOST_GID:-0}"
     assert "no-new-privileges:true" in svc["security_opt"]
     assert svc["deploy"]["resources"]["limits"]["memory"] == "128M"
 
@@ -64,6 +66,8 @@ def test_start_sh_seeds_config_and_warns():
     assert "mkdir -p \"${HOME}/.myagentdata/issue-notifier\"" in START_SH
     assert "issue-notifier.example.toml" in START_SH
     assert "ISSUE_NOTIFIER_FEISHU_CHAT_ID" in START_SH
+    assert "export HOST_UID" in START_SH
+    assert "export HOST_GID" in START_SH
 
 
 def test_backup_includes_notifier_state():

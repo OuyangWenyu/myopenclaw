@@ -8,6 +8,11 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# issue-watcher/notifier 以宿主 UID/GID 运行，避免 root 写 bind mount。
+# 直接 docker compose up（不经本脚本）时 compose 回退到 0:0（root）。
+export HOST_UID="${HOST_UID:-$(id -u)}"
+export HOST_GID="${HOST_GID:-$(id -g)}"
+
 # ── 检查 .env ────────────────────────────────────────────────
 if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   echo "⚠️  .env 不存在，从模板创建..."

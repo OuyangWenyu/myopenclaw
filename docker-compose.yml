@@ -567,6 +567,9 @@ services:
     image: myopenclaw/repo-scanner-issue-watcher:latest
     container_name: repo-scanner-mcp
     restart: unless-stopped
+    # start.sh exports the host UID/GID so the bind-mounted DB is writable
+    # without root; direct compose up falls back to root (macOS-safe).
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
     ports:
       # Loopback only: Hermes/天一/notifier reach this via the Docker network
       # name. The host publish is for local probes; do not expose private
@@ -609,6 +612,7 @@ services:
     image: myopenclaw/issue-notifier:latest
     container_name: issue-notifier
     restart: unless-stopped
+    user: "${HOST_UID:-0}:${HOST_GID:-0}"
     volumes:
       - ${HOME}/.myagentdata/issue-notifier:/data
     environment:
