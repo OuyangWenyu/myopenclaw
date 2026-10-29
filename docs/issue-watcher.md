@@ -146,10 +146,15 @@ docker compose exec issue-notifier cat /data/status.json
 > Hermes header；`./scripts/start.sh` 启动前自动运行两者。`/health` 不鉴权
 > （Docker/Uptime Kuma 探针），其余路径无 key 一律 401。
 >
-> **轮换**：删除/修改根 `.env` 里的 key 后重跑 `./scripts/start.sh`（会重建
-> repo-scanner/notifier/Hermes 容器使新值生效）。天一那份在 `.env.tianyi-bot`
-> 的 `TIANYI_BOT_REPO_SCANNER_KEY`，必须与根 `.env` 同值——两份不一致时天一
-> 会 401，且不会自动同步。
+> **轮换**：删除/修改根 `.env` 里的 key 后重跑 `./scripts/start.sh`。helper 会
+> 删除 key map 里同角色的旧 key（旧 key 立即失效），并把新值同步到
+> `.env.tianyi-bot`；start.sh 会重建 repo-scanner/notifier/Hermes 容器，检测到
+> 天一 key 变化且 `openclaw-tianyi` 在运行时也会重建天一端（容器 env 在创建时
+> 冻结，只改文件不重建会继续用旧 key，表现为工具调用 401）。
+>
+> 残余风险：MCP 与 notifier 都在 `myopenclaw-net` 上走明文 HTTP，token 与事件
+> 数据可被同网容器嗅探。当前接受（团队只读数据 + 内网）；要消除需给 notifier
+> 单独网络或让 MCP 走 TLS 终止。
 
 ## 故障排查
 
