@@ -14,8 +14,8 @@
 | 网关错误循环 | `scripts/check-gateway-errors.sh --json` | 检测到重复错误 |
 | 容器健康状态 | `docker compose ps` JSON 中的 `(unhealthy)` 状态 | 任何 unhealthy |
 | **tirith 安全扫描器不可用** | 读 `~/.hermes/bin/tirith*` 前 4 字节魔数 | 非 `\x7fELF`（如 macOS 二进制）即告警 |
-| **issue-watcher 停滞/取数失败** | `~/.myagentdata/repo-scanner/watcher-status.json` | 状态文件缺失、`last_poll_epoch` > max(30min, 3×轮询间隔)、`error_repos > 0`、`repos == 0` |
-| **issue-notifier 停滞/发送失败/死信** | `~/.myagentdata/issue-notifier/status.json` | 状态缺失、`last_success_epoch` > 5min、`send_failed > 0`、`dead > 0` |
+| **issue-watcher 停滞/取数失败/全量失败** | `~/.myagentdata/repo-scanner/watcher-status.json` | 状态文件缺失、`last_poll_epoch` > max(30min, 3×轮询间隔)、`error_repos > 0`、`repos == 0`、`oldest_success_at` > max(1h, 6×轮询间隔)、`daily_sync` 昨日未完成/今日 10:00 后仍未完成 |
+| **issue-notifier 停滞/发送失败/积压/死信/示例配置** | `~/.myagentdata/issue-notifier/status.json` | 状态缺失、`last_success_epoch` > max(5min, 3×轮询间隔)、`send_failed > 0`、`pending > 0` 且 `oldest_pending_age` > max(15min, 10×轮询间隔)、`dead > 0`、`placeholder_config == true` |
 
 ## 调度
 

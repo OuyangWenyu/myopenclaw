@@ -110,9 +110,12 @@ docker compose exec issue-notifier cat /data/status.json
 ```
 
 `status.json` 字段：`last_poll_epoch` / `last_success_epoch` / `events_seen` /
-`events_queued` / `events_sent` / `send_failed` / `cursor` / `pending` / `dead` /
-`watcher` / `last_error`。
-容器 healthcheck 要求 `last_success_epoch` 在 5 分钟内、`send_failed`/`dead` 为 0。
+`events_queued` / `events_filtered_repo` / `events_unmatched` / `events_sent` /
+`send_failed` / `cursor` / `pending` / `oldest_pending_age` / `dead` /
+`placeholder_config` / `last_send_error` / `watcher` / `last_error`。
+容器 healthcheck 要求 `last_success_epoch` 在 `max(300, 3×ISSUE_NOTIFIER_POLL_SECONDS)`
+内、`send_failed` 为 0；`dead` 不再让容器永久 unhealthy（由 AgentOps 单独告警），
+死信超过 7 天由 daemon 自动清理。
 `watcher.error_repos` 只记录/告警，不判 unhealthy（私有仓库 401/404 是预期噪音）。
 `--dry-run` 在首次运行（无 cursor）时只建基线、不打印事件；要看事件先跑一次
 `--once` 建立 cursor 后再 `--dry-run`。
