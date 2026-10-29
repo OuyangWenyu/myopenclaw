@@ -641,14 +641,11 @@ if ! grep -qE '^GIT_STATS_API_KEYS=.' "${REPO_ROOT}/.env" 2>/dev/null; then
 fi
 # 天一用自己的 --env-file；容器 env 在创建时冻结。key 轮换后只改文件不重建，
 # 天一仍拿旧 key，表现为工具调用 401（entrypoint 探 /health 是放行的，看不出来）。
+# 重建必须放在主栈 up 之后：服务端先加载新 key map，天一再用新 key 连接。
+_tianyi_key_changed=false
 if grep -q "synced tianyi key" <<< "${_auth_out}" \
   && docker inspect openclaw-tianyi --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
-  echo "🔄 天一 key 已轮换，重建 openclaw-tianyi 使新 key 生效..."
-  if "${REPO_ROOT}/scripts/start-tianyi-bot.sh" >/dev/null 2>&1; then
-    echo "   ✅ 天一端已重建"
-  else
-    echo "   ⚠️  天一端重建失败；请手动运行 ./scripts/start-tianyi-bot.sh（否则天一 repo-scanner 调用会 401）"
-  fi
+  _tianyi_key_changed=true
 fi
 if [[ -f "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" ]]; then
   if ! _hermes_auth_out="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py" 2>&1)"; then
@@ -675,6 +672,15 @@ _openclaw_started_before="$(docker inspect openclaw-gateway --format '{{.State.S
 
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
+
+if [[ "${_tianyi_key_changed}" == "true" ]]; then
+  echo "🔄 天一 key 已轮换，重建 openclaw-tianyi 使新 key 生效..."
+  if "${REPO_ROOT}/scripts/start-tianyi-bot.sh" >/dev/null 2>&1; then
+    echo "   ✅ 天一端已重建"
+  else
+    echo "   ⚠️  天一端重建失败；请手动运行 ./scripts/start-tianyi-bot.sh（否则天一 repo-scanner 调用会 401）"
+  fi
+fi
 
 if [[ "${_hermes_auth_changed}" == "true" ]]; then
   echo "🔄 Hermes repo-scanner auth 已变更，重启 hermes 服务使其生效..."
