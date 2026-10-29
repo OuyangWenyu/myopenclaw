@@ -115,6 +115,7 @@ declare -a MONITORS=(
     "Docker: aisecretary|docker||aisecretary|"
     "Docker: tdai-memory|docker||tdai-memory|"
     "Docker: repo-scanner-mcp|docker||repo-scanner-mcp|"
+    "Docker: issue-notifier|docker||issue-notifier|"
     "Docker: zotero-mcp|docker||zotero-mcp|"
     "Docker: yuque-mcp|docker||yuque-mcp|"
     "Docker: dailyinfo_freshrss|docker||dailyinfo_freshrss|"

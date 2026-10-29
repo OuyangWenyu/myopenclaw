@@ -559,24 +559,75 @@ services:
   repo-scanner-mcp:
     build:
       context: ../git-contribution-stats
-      dockerfile: docker/mcp-server/Dockerfile
-    image: myopenclaw/repo-scanner-mcp:latest
+      dockerfile: docker/issue-watcher/Dockerfile
+    image: myopenclaw/repo-scanner-issue-watcher:latest
     container_name: repo-scanner-mcp
     restart: unless-stopped
     ports:
-      - "8001:8001"
+      # Loopback only: Hermes/天一/notifier reach this via the Docker network
+      # name. The host publish is for local probes; do not expose private
+      # issue titles/links to the LAN.
+      - "127.0.0.1:8001:8001"
     volumes:
-      - ${HOME}/.myagentdata/repo-scanner:/data:ro
-    command: ["--transport", "sse", "--host", "0.0.0.0", "--port", "8001"]
+      # rw is required for the watcher + WAL (-shm) sidecars. The MCP tool
+      # handlers still open the immutable snapshot.
+      - ${HOME}/.myagentdata/repo-scanner:/data:rw
+      # Repo watch list stays editable without rebuilding the image.
+      - ../git-contribution-stats/configs:/app/configs:ro
     environment:
       - REPO_SCANNER_DB_PATH=/data/repos.sqlite
+      # Dedicated classic PAT with repo + Issues read. Do not also forward
+      # GH_TOKEN: least privilege for a read-only watcher.
+      - GITHUB_TOKEN=${ISSUE_WATCHER_GITHUB_TOKEN:-}
+      - GITCODE_ACCESS_TOKEN=${GITCODE_TOKEN:-}
+      - ISSUE_WATCHER_POLL_SECONDS=${ISSUE_WATCHER_POLL_SECONDS:-600}
+      # The watcher is the sole writer of issue/PR current state; the host
+      # daily collect job must not fetch them during the transition week.
+      - REPO_SCANNER_WATCH_OWNS_ISSUES=${REPO_SCANNER_WATCH_OWNS_ISSUES:-1}
+    security_opt:
+      - no-new-privileges:true
     networks:
       - myopenclaw-net
     deploy:
       resources:
         limits:
-          memory: 256M
+          memory: 384M
           cpus: "0.5"
+
+  # ── issue-notifier — repo-scanner events → Feishu 群卡片 ──────
+  issue-notifier:
+    build:
+      context: ./docker/issue-notifier
+    image: myopenclaw/issue-notifier:latest
+    container_name: issue-notifier
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.myagentdata/issue-notifier:/data
+    environment:
+      - ISSUE_NOTIFIER_MCP_URL=http://repo-scanner-mcp:8001/mcp
+      - ISSUE_NOTIFIER_CONFIG=/data/config.toml
+      - ISSUE_NOTIFIER_STATE=/data/state.sqlite
+      - ISSUE_NOTIFIER_STATUS=/data/status.json
+      - ISSUE_NOTIFIER_FEISHU_MODE=${ISSUE_NOTIFIER_FEISHU_MODE:-app}
+      - ISSUE_NOTIFIER_FEISHU_CHAT_ID=${ISSUE_NOTIFIER_FEISHU_CHAT_ID:-}
+      - ISSUE_NOTIFIER_FEISHU_WEBHOOK=${ISSUE_NOTIFIER_FEISHU_WEBHOOK:-}
+      # Only the hermes-coder app: do not forward the main 爱玛士 app secret
+      # (the notifier only needs im:message:send to one group, in app mode).
+      - CODER_FEISHU_APP_ID=${CODER_FEISHU_APP_ID:-}
+      - CODER_FEISHU_APP_SECRET=${CODER_FEISHU_APP_SECRET:-}
+      - ISSUE_NOTIFIER_POLL_SECONDS=${ISSUE_NOTIFIER_POLL_SECONDS:-60}
+      - ISSUE_NOTIFIER_NOTIFY_EXISTING=${ISSUE_NOTIFIER_NOTIFY_EXISTING:-0}
+    depends_on:
+      - repo-scanner-mcp
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - myopenclaw-net
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: "0.25"
 
   # ── 语雀 MCP（本机自持只读 token 的快照/变更服务）─────────────
   # 上游 gitcode.com/dlut-water/yuque_mcp_server（无 tag，pin bfc55d7，守卫

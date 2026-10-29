@@ -67,6 +67,7 @@ HOT_DBS_RO=(
   "dailyinfo/freshrss/data/users/*/db.sqlite"   # 回滚模式 —— 每用户一个
   "yuque-mcp/change_data/change_summary.db"     # 回滚模式 —— 语雀变更快照索引
                                                 #  （快照正文随 rsync 照常上云）
+  "issue-notifier/state.sqlite"                 # 回滚模式 —— 飞书投递游标/去重/重试
 )
 HOT_DBS=("${HOT_DBS_RW[@]}" "${HOT_DBS_RO[@]}")
 
@@ -76,6 +77,8 @@ RSYNC_EXCLUDES=()
 for _db in "${HOT_DBS[@]}"; do
   RSYNC_EXCLUDES+=(--exclude="${_db}*")
 done
+# issue-watcher 的只读快照：由主库派生的读副本（可重建），不是第二份源数据。
+RSYNC_EXCLUDES+=(--exclude="repo-scanner/repos.readonly.sqlite*")
 rsync -a --delete "${RSYNC_EXCLUDES[@]}" "${DATA_ROOT}/" "${DEST}/"
 echo "   ✅ 快照完成: ${DEST}"
 

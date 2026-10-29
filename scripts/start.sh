@@ -133,6 +133,23 @@ mkdir -p "${HOME}/.myagentdata/paper-queue"
 # 语雀 MCP 本机服务端：快照/报告库与备份输出。必须在 compose up 前建好 ——
 # 否则 Docker 以 root 建目录（本容器 user: root 时功能上无碍，但宿主归属/权限会乱）。
 mkdir -p "${HOME}/.myagentdata/yuque-mcp/change_data" "${HOME}/.myagentdata/yuque-mcp/backup"
+# issue-notifier：repo-scanner 事件 → 飞书群。真实人员映射不入库，
+# 首次从示例播种；示例含占位符，需手工替换。
+mkdir -p "${HOME}/.myagentdata/issue-notifier"
+if [[ ! -f "${HOME}/.myagentdata/issue-notifier/config.toml" ]]; then
+  cp "${REPO_ROOT}/config/issue-notifier.example.toml" "${HOME}/.myagentdata/issue-notifier/config.toml"
+  echo "   📝 已创建 issue-notifier 配置（需填人员映射）: ~/.myagentdata/issue-notifier/config.toml"
+fi
+if grep -q 'example-gitcode' "${HOME}/.myagentdata/issue-notifier/config.toml" 2>/dev/null; then
+  echo "   ⚠️  issue-notifier: 人员映射仍是示例占位符，请编辑 ~/.myagentdata/issue-notifier/config.toml"
+fi
+_in_mode="$(grep -E '^ISSUE_NOTIFIER_FEISHU_MODE=' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+if [[ "${_in_mode:-app}" == "app" ]] && ! grep -q '^ISSUE_NOTIFIER_FEISHU_CHAT_ID=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "   ⚠️  issue-notifier: ISSUE_NOTIFIER_FEISHU_CHAT_ID 未设置（app 模式必填）"
+fi
+if ! grep -q '^ISSUE_WATCHER_GITHUB_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "   ⚠️  issue-watcher: ISSUE_WATCHER_GITHUB_TOKEN 未设置 —— GitHub 匿名仅公开仓库（60 请求/小时），私有 org 会持续 error"
+fi
 # inbox.md is produced by collect_agentops.py (host launchd). Without the
 # directory, Docker's ro mount of ~/.myagentdata has no agentops/ subdir
 # and Daily Command Center reports a false "AgentOps 未部署".
