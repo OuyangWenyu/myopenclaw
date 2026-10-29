@@ -66,21 +66,26 @@ def redact_error(exc: BaseException) -> str:
     return text[:500]
 
 
-async def _fetch_events(url: str, since_id: int, limit: int = 100) -> dict[str, Any]:
+async def _fetch_events(
+    url: str, since_id: int, limit: int = 100, token: str | None = None
+) -> dict[str, Any]:
+    import httpx
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
+    headers = {"Authorization": f"Bearer {token}"} if token else {}
     # Bound every poll: a restarted MCP server must not leave the notifier
     # stuck in an open session (the container would go unhealthy silently).
     async with asyncio.timeout(30):
-        async with (
-            streamable_http_client(url) as (read, write, _),
-            ClientSession(read, write) as session,
-        ):
-            await session.initialize()
-            result = await session.call_tool(
-                "get_issue_events", {"since_id": since_id, "limit": limit}
-            )
+        async with httpx.AsyncClient(headers=headers, timeout=30.0) as http_client:
+            async with (
+                streamable_http_client(url, http_client=http_client) as (read, write, _),
+                ClientSession(read, write) as session,
+            ):
+                await session.initialize()
+                result = await session.call_tool(
+                    "get_issue_events", {"since_id": since_id, "limit": limit}
+                )
     payload = getattr(result, "structuredContent", None)
     if payload is None:
         text = "\n".join(getattr(block, "text", "") for block in result.content)
@@ -90,8 +95,10 @@ async def _fetch_events(url: str, since_id: int, limit: int = 100) -> dict[str, 
     return payload
 
 
-def fetch_events(url: str, since_id: int, limit: int = 100) -> dict[str, Any]:
-    return asyncio.run(_fetch_events(url, since_id, limit))
+def fetch_events(
+    url: str, since_id: int, limit: int = 100, token: str | None = None
+) -> dict[str, Any]:
+    return asyncio.run(_fetch_events(url, since_id, limit, token))
 
 
 def _write_status(path: Path, **values: Any) -> None:
@@ -205,7 +212,7 @@ def run_once(
 ) -> dict[str, Any]:
     now = int(time.time())
     cursor = state.get_cursor() or 0
-    payload = fetch_events(config.mcp_url, cursor)
+    payload = fetch_events(config.mcp_url, cursor, token=config.mcp_token)
     watcher = payload.get("watcher") or {}
     if watcher.get("error_repos"):
         logger.warning(

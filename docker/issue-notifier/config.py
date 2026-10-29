@@ -34,6 +34,7 @@ class Person:
 @dataclass(frozen=True)
 class Config:
     mcp_url: str
+    mcp_token: str | None
     poll_seconds: int
     feishu_mode: str
     chat_id: str | None
@@ -103,6 +104,7 @@ def load_config(path: str | Path) -> Config:
 
     return Config(
         mcp_url=_env("ISSUE_NOTIFIER_MCP_URL", "http://repo-scanner-mcp:8001/mcp"),
+        mcp_token=_env("ISSUE_NOTIFIER_MCP_TOKEN") or None,
         poll_seconds=max(15, poll_seconds),
         feishu_mode=mode,
         chat_id=chat_id,

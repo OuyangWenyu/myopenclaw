@@ -243,6 +243,7 @@ class TestFeishuSender:
     def _config(self, tmp_path, mode="webhook"):
         return notifier_config.Config(
             mcp_url="http://example/mcp",
+            mcp_token=None,
             poll_seconds=60,
             feishu_mode=mode,
             chat_id="oc_" + "a" * 32 if mode == "app" else None,
@@ -321,3 +322,12 @@ class TestRedactionAndDeadLetter:
         assert state.pending_count() == 1
         assert state.dead_count() == 0
         state.close()
+
+
+def test_mcp_token_loaded(tmp_path, monkeypatch):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text('[[people]]\nname = "x"\ngitcode = "x"\n', encoding="utf-8")
+    monkeypatch.setenv("ISSUE_NOTIFIER_MCP_TOKEN", "mcp-token")
+    monkeypatch.setenv("ISSUE_NOTIFIER_FEISHU_MODE", "webhook")
+    monkeypatch.setenv("ISSUE_NOTIFIER_FEISHU_WEBHOOK", "https://example/hook")
+    assert notifier_config.load_config(cfg).mcp_token == "mcp-token"
