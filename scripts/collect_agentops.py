@@ -771,9 +771,12 @@ def check_issue_watcher(
     """Alert when the issue watcher stops polling or cannot read repos."""
     path = Path(status_path) if status_path else WATCHER_STATUS_PATH
     now = now or datetime.now()
-    interval = poll_seconds or WATCHER_POLL_SECONDS
 
     data = _read_status(path)
+    try:
+        interval = int(poll_seconds or (data or {}).get("poll_seconds") or WATCHER_POLL_SECONDS)
+    except (TypeError, ValueError):
+        interval = WATCHER_POLL_SECONDS
     if data is None:
         return [_status_item(
             "issue-watcher",
@@ -875,13 +878,18 @@ def check_issue_notifier(
             "docker compose ps issue-notifier; docker compose logs --tail 50 issue-notifier",
         )]
 
+    try:
+        interval = int(data.get("poll_seconds") or NOTIFIER_POLL_SECONDS)
+    except (TypeError, ValueError):
+        interval = NOTIFIER_POLL_SECONDS
+    stale_seconds = max(300, 3 * interval)
     age = _epoch_age(data.get("last_success_epoch"), now)
-    if age is None or age > NOTIFIER_STALE_SECONDS:
+    if age is None or age > stale_seconds:
         return [_status_item(
             "issue-notifier",
             "issue-notifier 轮询停滞",
             "new" if age is None else "watch",
-            f"last_success_epoch={data.get('last_success_epoch')}，age={age}s",
+            f"last_success_epoch={data.get('last_success_epoch')}，age={age}s，阈值={stale_seconds}s",
             "轮询停滞时事件会积压，飞书群收不到新通知",
             "检查 repo-scanner MCP 与 ISSUE_NOTIFIER_MCP_TOKEN；查看 notifier 日志",
         )]
@@ -908,7 +916,7 @@ def check_issue_notifier(
 
     pending = int(data.get("pending") or 0)
     pending_age = data.get("oldest_pending_age")
-    backlog_threshold = max(900, 10 * NOTIFIER_POLL_SECONDS)
+    backlog_threshold = max(900, 10 * interval)
     if pending > 0 and isinstance(pending_age, (int, float)) and pending_age > backlog_threshold:
         return [_status_item(
             "issue-notifier",

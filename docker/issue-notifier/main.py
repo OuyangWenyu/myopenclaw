@@ -271,6 +271,7 @@ def run_once(
         "events_filtered_repo": counters["filtered_repo"],
         "events_unmatched": counters["unmatched"],
         "placeholder_config": config.placeholder_people,
+        "poll_seconds": config.poll_seconds,
         "events_sent": sent,
         "send_failed": failed,
         "cursor": snap["cursor"],

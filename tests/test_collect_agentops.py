@@ -1079,6 +1079,18 @@ class TestIssueNotifierSignals:
         }))
         assert check_issue_notifier(path, now=self.NOW) == []
 
+    def test_status_poll_seconds_widens_the_stale_threshold(self, tmp_path):
+        from scripts.collect_agentops import check_issue_notifier
+
+        path = tmp_path / "notifier.json"
+        path.write_text(json.dumps({
+            "last_success_epoch": self.NOW.timestamp() - 400,
+            "poll_seconds": 600,
+            "send_failed": 0,
+            "dead": 0,
+        }))
+        assert check_issue_notifier(path, now=self.NOW) == []
+
     def test_send_failure_is_a_signal(self, tmp_path):
         from scripts.collect_agentops import check_issue_notifier
 
