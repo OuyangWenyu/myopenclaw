@@ -41,7 +41,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| openclaw-tianyi | 18792 | OpenClaw gateway（天一·研发助手），飞书 bot（`deepseek-flash`），terminal + MCP profile：读走共享 repo-scanner-mcp，写走 `gh`/`gc` CLI 创建 GitHub/GitCode issue，另接本机 yuque-mcp 与**团队 server-monitoring MCP**（可选，URL 非空门控；12 只读工具；内网 CA 随仓库提交、token 走 `.env.tianyi-bot`）。entrypoint 幂等声明每日 08:30 服务器日报 automation（OpenClaw cron，推飞书，`TIANYI_BOT_OWNER_OPEN_ID` 门控）
+| openclaw-tianyi | 18792 | OpenClaw gateway（天一·研发助手），飞书 bot（`deepseek-flash`），terminal + MCP profile：读走共享 repo-scanner-mcp，写走 `gh`/`gc` CLI 创建 GitHub/GitCode issue，另接本机 yuque-mcp 与**团队 server-monitoring MCP**（可选，URL 非空门控；12 只读工具；校园域名入口走公网证书、内网直连用随仓库提交的 CA，token 走 `.env.tianyi-bot`）。entrypoint 幂等声明每日 08:30 服务器日报 automation（OpenClaw cron，推飞书，`TIANYI_BOT_OWNER_OPEN_ID` 门控）
 
 ## 数据目录映射
 

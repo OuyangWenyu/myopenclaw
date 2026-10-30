@@ -6,8 +6,8 @@
 """server_monitoring_summary.py — 服务器监控「总结信息」获取器
 
 一次收集 5 次固定调用 + 每服务器/每项目各 1 次（当前注册表：2 服务器 + 11 项目 = 18 次），
-模板直出人读摘要；--json 输出结构化结果，供下游自取。**本工具定位**：验收证据 / 任一台
-连着 UniVPN 的电脑上的随手查 / 未来部署参考——**消费归属是天一（OpenClaw）**，本项目不接
+模板直出人读摘要；--json 输出结构化结果，供下游自取。**本工具定位**：验收证据 / 入口
+可达时的随手查 / 未来部署参考——**消费归属是天一（OpenClaw）**，本项目不接
 Hermes；天一上服务器后的每日推送 = 天一自己的 OpenClaw cron automation。
 **不经过 LLM**：数字与状态全部来自工具返回
 （服务端设计原则：事实由程序确定，模型只负责组织语言——本脚本连组织都省了）。
@@ -18,10 +18,10 @@ Hermes；天一上服务器后的每日推送 = 天一自己的 OpenClaw cron au
   → get_project_overview×每项目
 
 单工具失败不中止：记入"取数缺口"，摘要照出；全部失败则明确报"无法获取"，
-绝不拿空数据冒充"一切正常"（UniVPN 断线时你看到的必须是失败，不是假摘要）。
+绝不拿空数据冒充"一切正常"（入口不可达时你看到的必须是失败，不是假摘要）。
 
 用法:
-  uv run scripts/server_monitoring_summary.py                # 人读摘要（默认读仓库 .env.tianyi-bot + 仓库内 CA）
+  uv run scripts/server_monitoring_summary.py                # 人读摘要（默认读仓库 .env.tianyi-bot；系统信任库 + 仓库内 CA）
   uv run scripts/server_monitoring_summary.py --json         # 结构化输出（供 cron/下游消费）
   uv run scripts/server_monitoring_summary.py --env-file <路径>
 
@@ -94,7 +94,8 @@ async def collect(url: str, token: str, ca_path: Path, use_tls: bool) -> tuple[d
 
     client = httpx2.AsyncClient(
         headers={"Authorization": f"Bearer {token}"},
-        verify=str(ca_path) if use_tls else True,
+        # 系统信任库 + 仓库内 CA 叠加：域名入口是公网证书，内网直连是自签证书
+        verify=_checker.build_ssl_context(ca_path) if use_tls else True,
         timeout=httpx2.Timeout(30.0, read=120.0),
     )
     async with client:
@@ -385,7 +386,7 @@ def render_human(summary: dict) -> str:
 
     if completeness.get("ok", 0) == 0 and failed:
         lines.append("")
-        lines.append("❌ 无法获取监控数据（全部取数失败）。可能原因：UniVPN 未连接 / 网络不通 / 服务端不可达。")
+        lines.append("❌ 无法获取监控数据（全部取数失败）。可能原因：入口域名不可达 / 网络不通 / 服务端不可达（内网直连回退还需 UniVPN）。")
         lines.append("── 取数缺口 ──")
         for item in failed:
             lines.append(f"  ❌ {item['key']}: {item['error']}")
@@ -505,7 +506,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--url", help="覆盖 MCP URL（默认读 env 文件）")
     parser.add_argument("--token", help="覆盖 token（⚠️ 会进 shell 历史，优先用 --token-file）")
     parser.add_argument("--token-file", help="从文件读取 token")
-    parser.add_argument("--ca", help="内网 CA 证书（默认仓库 docker/tianyi-bot/ca/）")
+    parser.add_argument("--ca", help="额外 CA 证书（默认仓库 docker/tianyi-bot/ca/；公网证书端点可不填）")
     parser.add_argument("--json", action="store_true", help="结构化 JSON 输出（供 cron/下游消费）")
     return parser
 
