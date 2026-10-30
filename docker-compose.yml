@@ -14,6 +14,7 @@ services:
       - "${HERMES_PORT:-8642}:8642"
     volumes:
       - ${HOME}/.hermes:/opt/data
+      - ${HOME}/.hermes-onedrive:/opt/onedrive:rw
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
@@ -54,7 +55,9 @@ services:
       - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
-      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      # OneDrive 只读 — 仅默认 profile（爱玛士）。独立配置文件（gdrive + onedrive）
+      # 挂在本容器独有的 /opt/onedrive；其他 hermes profile 仍用共享 rclone.conf。
+      - RCLONE_CONFIG=/opt/onedrive/rclone.conf
       - ZOT_DATA_DIR=/opt/zotero-data
       - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
       - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
