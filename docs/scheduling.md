@@ -25,7 +25,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
 | 08:10 | Docker | Hermes cron | **yuque-daily-digest**（语雀知识库变更日报，需配置 `YUQUE_DAILY_PUSH_REPOS` + `YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY`） | `start.sh` 自动注册 |
-| 08:30 | Docker | **OpenClaw cron**（openclaw-tianyi） | **服务器日报**（server-monitoring 摘要推飞书；URL + `TIANYI_BOT_OWNER_OPEN_ID` 门控，`TIANYI_BOT_MONITORING_DIGEST_CRON` 可改/`off` 关闭。⚠️ 本机运行时需 UniVPN 在线，部署到内网服务器后无此约束） | entrypoint 幂等声明（`declaration-key=tianyi-monitoring-daily`） |
+| 08:30 | Docker | **OpenClaw cron**（openclaw-tianyi） | **服务器日报**（server-monitoring 摘要推飞书；URL + `TIANYI_BOT_OWNER_OPEN_ID` 门控，`TIANYI_BOT_MONITORING_DIGEST_CRON` 可改/`off` 关闭。⚠️ 域名入口在校园网可达时无需 UniVPN；回退内网直连才需要，部署到内网服务器后无此约束） | entrypoint 幂等声明（`declaration-key=tianyi-monitoring-daily`） |
 | 每天 02:00 | Docker | crond (backup-cron) | 快照备份到云盘（清理过期快照仅在此执行） | entrypoint 自动 |
 
 ## 时序依赖
@@ -37,7 +37,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 07:55 ──────── daily-dev-report ← 读 repo-scanner MCP (SQLite)
 08:10 ──────── yuque-daily-digest ← 读本机 yuque-mcp 容器（07:00 已生成变更报告）
 08:30 ──────── 服务器日报（天一栈 OpenClaw cron，独立于 Hermes crons）
-                 ← 读团队 server-monitoring MCP（需内网可达）
+                 ← 读团队 server-monitoring MCP（校园域名入口或内网直连可达）
 ```
 
 四个早间推送在 07:30–08:10 窗口内完成（含语雀日报 08:10），数据采集在推送前完成，保证数据新鲜。08:30 的服务器日报由 **tianyi 栈自身的 OpenClaw cron** 触发，不依赖宿主机 launchd 与 Hermes——天一部署到内网服务器后随栈自走。
