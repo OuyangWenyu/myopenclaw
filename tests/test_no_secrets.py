@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+import subprocess
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -97,4 +98,42 @@ def test_no_internal_usernames_in_public_docs():
     assert not offenders, (
         "公开面文档出现内网部署用户名：\n  " + "\n  ".join(sorted(offenders))
         + "\n→ 匿名化为「维护者私有目录」等表述，或确需指名时加入 _INTERNAL_USERNAMES"
+    )
+
+
+# ── 飞书 chat/user id（oc_/ou_ + 32 hex）不得进入公开面 ────────────────
+# 事故：issue-notifier 的 wiring 测试曾把预报系统群的 live chat_id 写成常量
+# 来“断言它不在别的文件里”。id 本身不是 bearer credential，但公开仓库里
+# 不应出现任何真实群/用户标识。扫描 tracked + untracked（.env 被 gitignore）。
+_FEISHU_ID = re.compile(r"\b(?:oc|ou)_[0-9a-f]{32}\b")
+# 明显合成的 32-hex 夹具（test-bot-rendered-config.sh 的 dummy owner id）。
+_SYNTHETIC_FEISHU_IDS = {
+    "ou_0123456789abcdef0123456789abcdef",
+    "oc_0123456789abcdef0123456789abcdef",
+}
+
+
+def test_no_live_feishu_ids_in_committable_files():
+    raw = subprocess.check_output(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+        cwd=REPO_ROOT,
+    )
+    offenders: list[str] = []
+    for item in raw.split(b"\0"):
+        if not item:
+            continue
+        path = REPO_ROOT / item.decode("utf-8", errors="replace")
+        try:
+            text = path.read_text(encoding="utf-8", errors="ignore")
+        except OSError:
+            continue
+        found = {
+            match.group(0) for match in _FEISHU_ID.finditer(text)
+        } - _SYNTHETIC_FEISHU_IDS
+        if found:
+            offenders.append(str(path.relative_to(REPO_ROOT)))
+    assert not offenders, (
+        "公开仓库出现真实飞书 id（oc_/ou_ + 32 hex）：\n  "
+        + "\n  ".join(sorted(offenders))
+        + "\n→ 改为 oc_xxx 占位符；真实值只放 .env"
     )

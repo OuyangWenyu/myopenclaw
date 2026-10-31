@@ -96,6 +96,9 @@
       "repo-scanner": {
         "url": "__REPO_SCANNER_MCP_URL__",
         "transport": "streamable-http",
+        "headers": {
+          "authorization": "Bearer ${TIANYI_BOT_REPO_SCANNER_KEY}"
+        },
         "connectionTimeoutMs": 10000,
         "requestTimeoutMs": 120000,
         "supportsParallelToolCalls": true

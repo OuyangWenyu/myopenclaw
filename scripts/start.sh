@@ -8,12 +8,30 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
+# issue-watcher/notifier 以宿主 UID/GID 运行，避免 root 写 bind mount。
+# 直接 docker compose up（不经本脚本）时 compose 回退到 0:0（root）。
+export HOST_UID="${HOST_UID:-$(id -u)}"
+export HOST_GID="${HOST_GID:-$(id -g)}"
+
 # ── 检查 .env ────────────────────────────────────────────────
 if [[ ! -f "${REPO_ROOT}/.env" ]]; then
   echo "⚠️  .env 不存在，从模板创建..."
   cp "${REPO_ROOT}/.env.example" "${REPO_ROOT}/.env"
   echo "   请编辑 .env 填写配置后重新运行"
   exit 1
+fi
+
+# Kuma push 从容器内发出，127.0.0.1/localhost 在容器里指向容器自己；
+# 自动换成 compose 网络里的 uptime-kuma。直接 docker compose up 时需在
+# .env 里提供 KUMA_PUSH_URL_DOCKER（见 .env.example）。
+if [[ -z "${KUMA_PUSH_URL_DOCKER:-}" ]]; then
+  _kuma_push="$(grep '^KUMA_PUSH_URL=' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+  if [[ -n "${_kuma_push}" ]]; then
+    _kuma_push="${_kuma_push//127.0.0.1/uptime-kuma}"
+    _kuma_push="${_kuma_push//localhost/uptime-kuma}"
+    export KUMA_PUSH_URL_DOCKER="${_kuma_push}"
+  fi
+  unset _kuma_push
 fi
 
 # ── OpenClaw 配置文件路径（凭据注入块先使用后赋值，须提前定义）──
@@ -133,6 +151,23 @@ mkdir -p "${HOME}/.myagentdata/paper-queue"
 # 语雀 MCP 本机服务端：快照/报告库与备份输出。必须在 compose up 前建好 ——
 # 否则 Docker 以 root 建目录（本容器 user: root 时功能上无碍，但宿主归属/权限会乱）。
 mkdir -p "${HOME}/.myagentdata/yuque-mcp/change_data" "${HOME}/.myagentdata/yuque-mcp/backup"
+# issue-notifier：repo-scanner 事件 → 飞书群。真实人员映射不入库，
+# 首次从示例播种；示例含占位符，需手工替换。
+mkdir -p "${HOME}/.myagentdata/issue-notifier"
+if [[ ! -f "${HOME}/.myagentdata/issue-notifier/config.toml" ]]; then
+  cp "${REPO_ROOT}/config/issue-notifier.example.toml" "${HOME}/.myagentdata/issue-notifier/config.toml"
+  echo "   📝 已创建 issue-notifier 配置（需填人员映射）: ~/.myagentdata/issue-notifier/config.toml"
+fi
+if grep -q 'example-gitcode' "${HOME}/.myagentdata/issue-notifier/config.toml" 2>/dev/null; then
+  echo "   ⚠️  issue-notifier: 人员映射仍是示例占位符，请编辑 ~/.myagentdata/issue-notifier/config.toml"
+fi
+_in_mode="$(grep -E '^ISSUE_NOTIFIER_FEISHU_MODE=' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+if [[ "${_in_mode:-app}" == "app" ]] && ! grep -q '^ISSUE_NOTIFIER_FEISHU_CHAT_ID=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "   ⚠️  issue-notifier: ISSUE_NOTIFIER_FEISHU_CHAT_ID 未设置（app 模式必填）"
+fi
+if ! grep -q '^ISSUE_WATCHER_GITHUB_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "   ⚠️  issue-watcher: ISSUE_WATCHER_GITHUB_TOKEN 未设置 —— GitHub 匿名仅公开仓库（60 请求/小时），私有 org 会持续 error"
+fi
 # inbox.md is produced by collect_agentops.py (host launchd). Without the
 # directory, Docker's ro mount of ~/.myagentdata has no agentops/ subdir
 # and Daily Command Center reports a false "AgentOps 未部署".
@@ -594,6 +629,60 @@ else
     echo "   📚 zotero-mcp: mylibrary 本地未找到，build 时将使用 GitHub clone"
 fi
 
+# ── repo-scanner MCP 每用户 Bearer ───────────────────────────────
+# 服务端 GIT_STATS_API_KEYS 与三个消费者 key 同一来源；Hermes 配置里的
+# headers 也在启动前幂等补上（Hermes 只在启动时读配置）。
+_hermes_auth_changed=false
+_auth_helper="${REPO_ROOT}/scripts/ensure_issue_watcher_auth.py"
+if [[ ! -f "${_auth_helper}" ]]; then
+  echo "❌ 缺少 ${_auth_helper}；repo-scanner MCP 会在无认证状态运行，拒绝启动"
+  echo "   从仓库完整检出后重试"
+  exit 1
+fi
+# 认证是硬门槛：helper 失败或没写出 key map 就不启动。旧写法用 `|| true` +
+# 未锚定的 grep，模板里的注释行 `# GIT_STATS_API_KEYS=...` 会让检查假绿，
+# 结果 MCP 在整个 myopenclaw-net 上无认证裸奔（任何容器可读私有 issue）。
+if ! _auth_out="$(python3 "${_auth_helper}" 2>&1)"; then
+  echo "${_auth_out}"
+  echo "❌ issue-watcher MCP 认证配置失败；拒绝启动（避免无认证暴露私有 issue）"
+  exit 1
+fi
+echo "${_auth_out}"
+if ! grep -qE '^GIT_STATS_API_KEYS=.' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "❌ .env 缺少 GIT_STATS_API_KEYS；拒绝启动（避免无认证暴露私有 issue）"
+  exit 1
+fi
+# 天一用自己的 --env-file；容器 env 在创建时冻结。key 轮换后只改文件不重建，
+# 天一仍拿旧 key，表现为工具调用 401（entrypoint 探 /health 是放行的，看不出来）。
+# 重建必须放在主栈 up 之后：服务端先加载新 key map，天一再用新 key 连接。
+_tianyi_key_changed=false
+if docker inspect openclaw-tianyi --format '{{.State.Status}}' 2>/dev/null | grep -q running; then
+  if grep -q "synced tianyi key" <<< "${_auth_out}"; then
+    _tianyi_key_changed=true
+  else
+    # 自愈：上一次重建失败后，文件可能已同步但容器仍持旧 key。
+    _tianyi_expected="$(grep -E '^TIANYI_BOT_REPO_SCANNER_KEY=' "${REPO_ROOT}/.env.tianyi-bot" 2>/dev/null | tail -1 | cut -d= -f2- || true)"
+    _tianyi_actual="$(docker inspect openclaw-tianyi --format '{{range .Config.Env}}{{println .}}{{end}}' 2>/dev/null | grep '^TIANYI_BOT_REPO_SCANNER_KEY=' | tail -1 | cut -d= -f2- || true)"
+    if [[ -n "${_tianyi_expected}" && "${_tianyi_expected}" != "${_tianyi_actual}" ]]; then
+      _tianyi_key_changed=true
+    fi
+  fi
+fi
+_hermes_helper="${REPO_ROOT}/scripts/ensure_hermes_repo_scanner_auth.py"
+if [[ ! -f "${_hermes_helper}" ]]; then
+  echo "❌ 缺少 ${_hermes_helper}；Hermes 会因缺 Bearer header 调用 401，拒绝启动"
+  exit 1
+fi
+if ! _hermes_auth_out="$(python3 "${_hermes_helper}" 2>&1)"; then
+  echo "${_hermes_auth_out}"
+  echo "❌ Hermes repo-scanner Bearer header 配置失败；拒绝启动"
+  exit 1
+fi
+echo "${_hermes_auth_out}"
+if grep -q "added repo-scanner Bearer header" <<< "${_hermes_auth_out}"; then
+  _hermes_auth_changed=true
+fi
+
 echo "🚀 启动服务..."
 if [[ -n "${BACKUP_ROOT:-}" ]]; then
   echo "   备份目录: ${BACKUP_ROOT}"
@@ -607,6 +696,24 @@ _openclaw_started_before="$(docker inspect openclaw-gateway --format '{{.State.S
 
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
+
+if [[ "${_tianyi_key_changed}" == "true" ]]; then
+  echo "🔄 天一 key 已轮换，重建 openclaw-tianyi 使新 key 生效..."
+  if "${REPO_ROOT}/scripts/start-tianyi-bot.sh" >/dev/null 2>&1; then
+    echo "   ✅ 天一端已重建"
+  else
+    echo "   ⚠️  天一端重建失败；请手动运行 ./scripts/start-tianyi-bot.sh（否则天一 repo-scanner 调用会 401）"
+  fi
+fi
+
+if [[ "${_hermes_auth_changed}" == "true" ]]; then
+  echo "🔄 Hermes repo-scanner auth 已变更，重启 hermes 服务使其生效..."
+  if docker compose restart hermes hermes-coder hermes-finance hermes-daoyuan >/dev/null 2>&1; then
+    echo "   ✅ 已重启"
+  else
+    echo "   ⚠️  重启失败，请手动: docker compose restart hermes hermes-coder hermes-finance hermes-daoyuan"
+  fi
+fi
 
 # mcp.servers / plugins.load 的配置变更不会热加载，必须重启网关才生效
 # （实测日志：config change requires gateway restart (plugins.load)）。
