@@ -2,7 +2,8 @@
 
 天一 bot（研发助手）通过**团队 server-monitoring MCP** 回答服务器、容器与 GFS 数据处理相关的问题：
 「weather 这台机器现在怎么样」「rainfall-oa-data 的 GFS 处理到哪一步了」「pm-minio-01 上哪些容器在重启」
-「zhixun-core 最近一次构建怎么样」。
+「zhixun-core 最近一次构建怎么样」。爱码士（Hermes coder）自 2026-10-31 起也可按需查询同一服务
+（见下文「消费分工」）。
 
 服务端是团队项目（[gitcode.com/dlut-water/server-monitoring](https://gitcode.com/dlut-water/server-monitoring)），
 部署在 `10.48.0.81`，**只读**。本仓只做**客户端接入**：一个可选 MCP 注册、内网 CA、守卫与本文档。
@@ -110,7 +111,28 @@ GFS（含 stage 失败 / cycle 年龄 / UNKNOWN 原因）、失败证据、各�
 人读摘要；`--json` 输出结构化结果（供下游自取——本仓不做推送、不经过 LLM：数字与状态全部
 来自工具返回，服务端原则"事实由程序确定"）。
 
-**消费归属：天一（OpenClaw）**——服务器情况以天一为唯一消费者（本项目**不接 Hermes**）。
+**消费分工（2026-10-31 起）**：
+
+- **天一（OpenClaw）**：每日服务器日报 + 飞书群问答；
+- **爱码士（Hermes coder profile）**：按需查询（`hermes -p coder mcp test server-monitoring`），不承担每日推送；
+- **Hermes 默认 profile / 道元 / finance 不接入**——server-monitoring 只给天一和爱码士。
+
+爱码士的 MCP 条目由 `scripts/ensure_hermes_server_monitoring.py` 幂等写入 coder profile（profile 不继承默认
+`mcp_servers`），配置里只写 `${SERVER_MONITORING_MCP_URL}` / `${SERVER_MONITORING_MCP_TOKEN}` 占位符；
+真实值只放 `.env`（gitignored），由 compose 注入 `hermes-coder`。URL 为空 = 自动移除条目。
+改 `.env` 后跑 `./scripts/start.sh`：它在 `up -d` 前重写受管条目，并在容器未被重建时重启
+`hermes-coder`（MCP 配置不热加载）。
+
+```bash
+# 验证（容器内）
+docker compose exec -T hermes-coder /opt/hermes/.venv/bin/hermes -p coder mcp list
+docker compose exec -T hermes-coder /opt/hermes/.venv/bin/hermes -p coder mcp test server-monitoring
+```
+
+> 服务健康「跃迁通知」（健康→不健康 / 不健康→健康各一次、持续不健康不重复）已作为
+> 服务端能力提案给 server-monitoring（[issue #7](https://gitcode.com/dlut-water/server-monitoring/issues/7)）：
+> 服务端产 `health_events` + `get_health_events` 游标，客户端只做游标消费与飞书投递。
+> 在服务端接口落地前，爱码士只做按需查询，不在客户端重复实现状态机。
 
 **每日推送已声明式内置**（2026-10-14）：entrypoint 在网关上电后**幂等声明**一条
 automation（`declaration-key = tianyi-monitoring-daily`，同 key 重加 = 原地更新、

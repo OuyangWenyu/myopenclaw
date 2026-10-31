@@ -147,6 +147,11 @@ services:
       # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
       # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
       - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
+      # server-monitoring MCP（爱码士按需查询）：coder profile 不继承默认
+      # profile 的 mcp_servers，由 scripts/ensure_hermes_server_monitoring.py
+      # 写入受管条目；这里只注入运行时展开用的 URL/token。URL 为空 = 停用。
+      - SERVER_MONITORING_MCP_URL=${SERVER_MONITORING_MCP_URL:-}
+      - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       # coder 的飞书 = 它自己的独立应用（爱码士 bot，凭据 = .env 的 CODER_FEISHU_*）。

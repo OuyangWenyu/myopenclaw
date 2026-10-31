@@ -9,7 +9,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 | 服务 | 镜像 | 端口 | 说明 |
 |------|------|------|------|
 | hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile（爱玛士，`deepseek-flash` 多模态） |
-| hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道（`deepseek-flash`） |
+| hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道（`deepseek-flash`）；可选接入团队 server-monitoring MCP（`.env` 的 URL/token 非空才注册，12 只读工具） |
 | hermes-daoyuan | 同 hermes 镜像 | 8645 | 道元·文献学者，daoyuan profile，飞书群开放访问 |
 | hermes-finance | 同 hermes 镜像 | 8644 | 财经助手，finance profile |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板（只读） |
