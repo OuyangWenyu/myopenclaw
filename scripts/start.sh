@@ -300,6 +300,20 @@ else
   echo "   ⚠️  ${HERMES_DEFAULT_CONFIG} 不存在，跳过 zotero-mcp 注入"
 fi
 
+# ── 爱码士的 server-monitoring MCP（coder profile 独立，不继承默认配置）──
+# URL/token 都来自 .env；URL 为空 = 移除受管条目（与天一「URL 非空 = 开关」一致）。
+# 配置写的是 ${VAR} 占位符，真实域名/token 只在容器环境里展开。
+CODER_MCP_STATUS=""
+if [[ -f "${CODER_CONFIG}" ]]; then
+  if CODER_MCP_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_server_monitoring.py" \
+      "${CODER_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
+    echo "   🛰️  爱码士 server-monitoring MCP: ${CODER_MCP_STATUS}"
+  else
+    echo "   ⚠️  爱码士 server-monitoring MCP 注册失败: ${CODER_MCP_STATUS}"
+    CODER_MCP_STATUS="failed"
+  fi
+fi
+
 # ── 确保 mylibrary skills 在 external_dirs 中 ────────────────────
 # aisecretary 模式：宿主机源码 → 只读挂载 → external_dirs 发现。
 if [[ -f "${HERMES_DEFAULT_CONFIG}" ]]; then
@@ -693,6 +707,7 @@ fi
 # 迁移期间重启会把它打断、下次从头再来，表现是网关**看起来卡死**（既不绑端口、
 # 也不报错，docker logs 只有几行），静置几分钟才自行恢复。
 _openclaw_started_before="$(docker inspect openclaw-gateway --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+_coder_started_before="$(docker inspect hermes-coder --format '{{.State.StartedAt}}' 2>/dev/null || true)"
 
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
@@ -730,6 +745,21 @@ if [[ "${OPENCLAW_RESTART_NEEDED:-false}" == "true" ]]; then
       echo "   ✅ 网关已重启"
     else
       echo "   ⚠️  网关重启失败，请手动执行: docker compose restart openclaw-gateway"
+    fi
+  fi
+fi
+
+# 爱码士的 MCP 配置变更不会热加载；容器若没在本次 up 中重建，需要重启一次。
+if [[ "${CODER_MCP_STATUS}" == written* || "${CODER_MCP_STATUS}" == removed* ]]; then
+  _coder_started_after="$(docker inspect hermes-coder --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+  if [[ "${_coder_started_before}" != "${_coder_started_after}" ]]; then
+    echo "   ℹ️  hermes-coder 已在本次 up 中创建/重建，MCP 配置随启动生效"
+  else
+    echo "🔄 爱码士 MCP 配置有变更，重启 hermes-coder 使其重新加载..."
+    if docker compose restart hermes-coder >/dev/null 2>&1; then
+      echo "   ✅ hermes-coder 已重启"
+    else
+      echo "   ⚠️  hermes-coder 重启失败，请手动执行: docker compose restart hermes-coder"
     fi
   fi
 fi
