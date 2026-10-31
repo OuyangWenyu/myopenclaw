@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { loadWaterMcpToken } from "./water-mcp-token.mjs";
 
 const [templatePath, outputPath] = process.argv.slice(2);
 
@@ -20,18 +21,15 @@ for (const name of required) {
   }
 }
 
-// 远程 water MCP 是唯一数据源（本地容器没有认证、且背后 zhixun-core 版本较旧）。
-// URL / TOKEN 必填：TOKEN 由 OpenClaw 运行时展开到 headers.authorization，
+// 默认连接远程 MCP；认证覆盖配置可显式选择已升级的本地 SSE 实例。
+// URL 与凭据必填（env token 或只读文件）：TOKEN 由 OpenClaw 运行时展开到 headers.authorization，
 // 渲染产物里只有字面量 `${ZHIXUN_BOT_WATER_MCP_TOKEN}`，不会落真实凭据。
 const waterMcpUrl = (process.env.ZHIXUN_BOT_WATER_MCP_URL ?? "").trim();
-const waterMcpToken = (process.env.ZHIXUN_BOT_WATER_MCP_TOKEN ?? "").trim();
 
 if (!waterMcpUrl) {
   throw new Error("missing required environment variable: ZHIXUN_BOT_WATER_MCP_URL");
 }
-if (!waterMcpToken) {
-  throw new Error("missing required environment variable: ZHIXUN_BOT_WATER_MCP_TOKEN");
-}
+loadWaterMcpToken();
 
 const replacements = new Map([
   ["__FEISHU_APP_ID__", process.env.ZHIXUN_BOT_FEISHU_APP_ID],
