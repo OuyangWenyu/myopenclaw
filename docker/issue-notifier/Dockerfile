@@ -6,7 +6,7 @@ WORKDIR /app
 # MCP client only; the notifier is stdlib otherwise.
 RUN pip install --no-cache-dir mcp==1.28.1
 
-COPY config.py mapping.py feishu.py state.py main.py /app/
+COPY config.py mapping.py feishu.py notifier_delivery.py state.py main.py /app/
 
 ENV PYTHONUNBUFFERED=1
 ENV ISSUE_NOTIFIER_CONFIG=/data/config.toml

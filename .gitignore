@@ -39,3 +39,6 @@ docker/zotero-mcp/.mylibrary-src/
 
 # ── mkdocs build output ──────────────────────────────────────────
 site/
+
+# Optional offline notifier build dependencies (release material, not source).
+docker/wheels/

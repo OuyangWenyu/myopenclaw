@@ -196,3 +196,7 @@ myopenclaw/
 uv sync --group docs
 uv run mkdocs serve
 ```
+
+### 服务健康事件通知（可选）
+
+新增 `server-health-notifier` 消费 server-monitoring 的健康变化事件，以固定模板生成飞书卡片，使用独立游标和重试 outbox。默认不启动，需显式开启 Compose profile；配置、只读验收及发送边界见[服务健康通知](docs/server-health-notifier.md)。已在 81 配置飞书应用并通过测试卡片 API 接收验收，正式事件投递已启用；见[部署验收](docs/deployment-20261102-health-notifier.md)。

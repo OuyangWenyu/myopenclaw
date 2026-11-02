@@ -652,6 +652,46 @@ services:
           memory: 128M
           cpus: "0.25"
 
+  # Explicit opt-in: development must not activate real group delivery.
+  server-health-notifier:
+    profiles: ["server-health-notifier"]
+    build:
+      context: ./docker
+      dockerfile: server-health-notifier/Dockerfile
+    image: myopenclaw/server-health-notifier:0.1.0
+    container_name: server-health-notifier
+    restart: unless-stopped
+    user: "${HOST_UID:-10001}:${HOST_GID:-10001}"
+    init: true
+    read_only: true
+    stop_grace_period: 45s
+    cap_drop: [ALL]
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 64
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m
+    volumes:
+      - ${HOME}/.myagentdata/server-health-notifier:/data
+    environment:
+      - HEALTH_NOTIFIER_MCP_URL=${HEALTH_NOTIFIER_MCP_URL:-https://jupyterhub.waterism.com:8765/mcp}
+      - HEALTH_NOTIFIER_MCP_TOKEN=${HEALTH_NOTIFIER_MCP_TOKEN:-}
+      - HEALTH_NOTIFIER_POLL_SECONDS=${HEALTH_NOTIFIER_POLL_SECONDS:-60}
+      - HEALTH_NOTIFIER_MAX_PAGES=${HEALTH_NOTIFIER_MAX_PAGES:-5}
+      - HEALTH_NOTIFIER_FEISHU_MODE=${HEALTH_NOTIFIER_FEISHU_MODE:-app}
+      - HEALTH_NOTIFIER_FEISHU_CHAT_ID=${HEALTH_NOTIFIER_FEISHU_CHAT_ID:-}
+      - HEALTH_NOTIFIER_FEISHU_APP_ID=${HEALTH_NOTIFIER_FEISHU_APP_ID:-}
+      - HEALTH_NOTIFIER_FEISHU_APP_SECRET=${HEALTH_NOTIFIER_FEISHU_APP_SECRET:-}
+      - HEALTH_NOTIFIER_FEISHU_WEBHOOK=${HEALTH_NOTIFIER_FEISHU_WEBHOOK:-}
+    networks:
+      - myopenclaw-net
+    deploy:
+      resources:
+        limits:
+          pids: 64
+          memory: 128M
+          cpus: "0.25"
+
   # ── 语雀 MCP（本机自持只读 token 的快照/变更服务）─────────────
   # 上游 gitcode.com/dlut-water/yuque_mcp_server（无 tag，pin bfc55d7，守卫
   # tests/test_yuque_mcp_local.py 钉兄弟仓 HEAD）。校内 10.48.0.81 那套继续给
