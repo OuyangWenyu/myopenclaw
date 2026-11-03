@@ -720,3 +720,19 @@ class TestZhixunGlmFallback:
             "知汛 GLM 兜底 key 是主 .env GLM_API_KEY 的第二份拷贝 —— 轮换时必须两处同改，"
             "否则兜底只在主模型故障时静默 401"
         )
+
+
+class TestHostCollectorRetired:
+    """The host launchd collector must stay retired.
+
+    It wrote the same SQLite DB as the in-container watcher through virtiofs.
+    Two writers on two kernels corrupted the DB at 07:45 on 2026-10-31 and
+    again on 2026-11-01 (``database disk image is malformed``). The container
+    daily sync is now the only writer; reinstalling the launchd job would
+    bring the corruption back.
+    """
+
+    def test_install_all_schedulers_does_not_reinstall_the_collector(self):
+        text = (REPO_ROOT / "scripts" / "launchd" / "install-all-schedulers.sh").read_text()
+        assert "ai.git-contribution-stats.collect" not in text
+        assert "git-contribution-stats/scripts/launchd/install-collect.sh" not in text

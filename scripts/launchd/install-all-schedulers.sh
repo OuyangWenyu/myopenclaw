@@ -53,11 +53,10 @@ install_task \
   "${SCRIPT_DIR}/install-collect-agentops.sh" \
   "true"  # 无外部依赖
 
-# ── 3. git-contribution-stats 每日采集 ────────────────────────
-install_task \
-  "git-contribution-stats.collect" \
-  "${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh" \
-  "[ -f \"${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh\" ]"
+# ── 3. git-contribution-stats 每日采集 —— 已退役（2026-11-03）──────────
+#    每日全量采集改由容器 repo-scanner-mcp 的 07:45 daily sync 负责。
+#    宿主 launchd 与容器双写同一 SQLite（跨 virtiofs）会损坏数据库
+#    （database disk image is malformed），不要再安装此任务。
 
 # ── 4. dailyinfo 情报聚合 ───────────────────────────────────
 install_task \

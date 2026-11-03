@@ -20,7 +20,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 07:00 | 宿主机 | launchd | 推送：arXiv 论文 | `install-dailyinfo.sh` |
 | 07:00 | Docker | yuque-mcp 调度器 | **语雀变更报告**生成（yuque-daily-digest 的数据源） | 容器内置（`YUQUE_CHANGE_REPORT_TIME`） |
 | 07:30 | Docker | Hermes cron | **工作日晨间简报**（事务 + 邮件，周一至周六） | `start.sh` 自动注册 |
-| 07:45 | 宿主机 | launchd | **git-contribution-stats 每日采集** | `install-all-schedulers.sh` |
+| 07:45 | Docker | repo-scanner-mcp 调度器 | **git-contribution-stats 每日全量采集**（容器内 daily sync，唯一写者） | 容器内置（服务强制 `REPO_SCANNER_WATCH_OWNS_ISSUES=1`） |
 | 07:45 | 宿主机 | launchd | **AgentOps 健康信号采集** | `install-all-schedulers.sh` |
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
@@ -32,7 +32,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 
 ```
 07:30           工作日晨间简报（周一至周六）— 事务 + 邮件汇总
-07:45 ──────── git-contribution-stats + AgentOps 采集 ← 并行
+07:45 ──────── repo-scanner-mcp daily sync（容器内）+ AgentOps 采集（宿主）← 并行
 07:50 ──────── Daily Command Center ← 读 inbox.md + TDAI 记忆
 07:55 ──────── daily-dev-report ← 读 repo-scanner MCP (SQLite)
 08:10 ──────── yuque-daily-digest ← 读本机 yuque-mcp 容器（07:00 已生成变更报告）
@@ -57,8 +57,11 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 ./scripts/launchd/install-dailyinfo.sh                           # dailyinfo 8 个 launchd 任务
 ./scripts/launchd/install-healthchecks-ping.sh                    # Healthchecks.io 心跳
 ./scripts/launchd/install-collect-agentops.sh                     # AgentOps 健康采集
-bash ${HOME}/code/git-contribution-stats/scripts/launchd/install-collect.sh  # Git 数据采集
 ```
+
+> Git 数据采集的宿主 launchd 任务已于 **2026-11-03 退役**：它与容器 `repo-scanner-mcp`
+> 的 07:45 daily sync 双写同一 SQLite（跨 virtiofs），会损坏数据库
+> （`database disk image is malformed`）。每日全量采集现在只由容器负责。
 
 Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作；yuque-mcp 容器的快照/报告调度为镜像内置（服务端启动即生效，无注册步骤）。其中 yuque-daily-digest 需在 `.env` **同时**配置 `YUQUE_DAILY_PUSH_REPOS`、`YUQUE_MCP_URL`、`MCP_YUQUE_MCP_API_KEY` 三者后才会注册（缺任一项静默跳过，只留一行提示）。
 
@@ -70,7 +73,7 @@ Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/st
 # 1. 检查所有 launchd 任务
 launchctl list | grep -E 'ai\.(dailyinfo|myopenclaw|git-contribution-stats)'
 
-# 预期输出（11 个 launchd 定时任务；launchctl 输出是三列 PID/退出码/Label，
+# 预期输出（10 个 launchd 定时任务；launchctl 输出是三列 PID/退出码/Label，
 # 第 2 列是上次退出码，0 或 1 均为正常）：
 # -	0	ai.dailyinfo.push-arxiv
 # -	0	ai.dailyinfo.push-early
@@ -80,13 +83,12 @@ launchctl list | grep -E 'ai\.(dailyinfo|myopenclaw|git-contribution-stats)'
 # -	0	ai.dailyinfo.run-code
 # -	0	ai.dailyinfo.run-papers
 # -	0	ai.dailyinfo.run-resource
-# -	0	ai.git-contribution-stats.collect
 # -	0	ai.myopenclaw.collect-agentops
 # -	0	ai.myopenclaw.healthchecks-ping
 
-# ⚠️ grep 模式要带上 git-contribution-stats —— 它的 label 不在 dailyinfo/myopenclaw 下，
-# 漏掉会少一项。直接 grep 'ai\.' 则还会带出 ai.hermes.gateway
+# ⚠️ 直接 grep 'ai\.' 会带出 ai.hermes.gateway
 #（宿主机上的 Hermes 网关常驻服务，不由本仓安装，不是定时任务）。
+# ai.git-contribution-stats.collect 已于 2026-11-03 退役，不应再出现。
 
 # 2. 检查 backup-cron
 docker compose exec backup-cron crontab -l
