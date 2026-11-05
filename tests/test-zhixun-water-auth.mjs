@@ -141,6 +141,7 @@ test("Compose overlay explicitly enables one authenticated local instance", () =
     "config", "--format", "json"], {
     cwd: root, env: { ...process.env,
       ZHIXUN_WATER_AUTH_IMAGE: "water-auth:test",
+      ZHIXUN_WATER_BIND_IP: "192.0.2.1",
       ZHIXUN_WATER_KEYS_FILE: path.join(root, "test-keys.json"),
       ZHIXUN_WATER_TOKEN_FILE: path.join(root, "test-token"),
     }, encoding: "utf8",
@@ -152,7 +153,7 @@ test("Compose overlay explicitly enables one authenticated local instance", () =
   assert.ok(!water.profiles?.length);
   assert.ok(!water.build);
   assert.equal(water.ports.length, 1);
-  assert.equal(water.ports[0].host_ip, "10.48.0.81");
+  assert.equal(water.ports[0].host_ip, "192.0.2.1");
   assert.equal(String(water.ports[0].published), "18201");
   const bot = services["openclaw-zhixun"];
   assert.equal(bot.environment.ZHIXUN_BOT_WATER_MCP_URL, env.ZHIXUN_BOT_WATER_MCP_URL);

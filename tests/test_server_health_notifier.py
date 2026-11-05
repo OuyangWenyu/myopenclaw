@@ -60,7 +60,7 @@ def page(events=None, latest=1, **watcher):
 def config(**changes):
     return Config(
         **{
-            "mcp_url": "https://jupyterhub.waterism.com:8765/mcp",
+            "mcp_url": "https://mcp.example.com:8765/mcp",
             "mcp_token": "test-key",
             **changes,
         }

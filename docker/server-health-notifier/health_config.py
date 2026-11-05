@@ -10,7 +10,7 @@ from urllib.parse import urlsplit
 
 @dataclass(frozen=True)
 class Config:
-    mcp_url: str = "https://jupyterhub.waterism.com:8765/mcp"
+    mcp_url: str = ""
     mcp_token: str = ""
     poll_seconds: int = 60
     max_pages: int = 5

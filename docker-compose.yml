@@ -684,7 +684,7 @@ services:
     volumes:
       - ${HOME}/.myagentdata/server-health-notifier:/data
     environment:
-      - HEALTH_NOTIFIER_MCP_URL=${HEALTH_NOTIFIER_MCP_URL:-https://jupyterhub.waterism.com:8765/mcp}
+      - HEALTH_NOTIFIER_MCP_URL=${HEALTH_NOTIFIER_MCP_URL:-}
       - HEALTH_NOTIFIER_MCP_TOKEN=${HEALTH_NOTIFIER_MCP_TOKEN:-}
       - HEALTH_NOTIFIER_POLL_SECONDS=${HEALTH_NOTIFIER_POLL_SECONDS:-60}
       - HEALTH_NOTIFIER_MAX_PAGES=${HEALTH_NOTIFIER_MAX_PAGES:-5}

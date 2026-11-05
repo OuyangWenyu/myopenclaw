@@ -4,7 +4,7 @@
 
 ## 部署身份
 
-- 主机：10.48.0.81；容器：`server-health-notifier`。
+- 主机：`<MONITOR_HOST>`；容器：`server-health-notifier`。
 - 模式：`observe-only`；`delivery_enabled=false`。容器持续检查 MCP，不启用飞书投递。
 - 镜像：`sha256:ffcc885e7b1f31e6099d21f7c618d703c9569f3b286e5f212882ac515c505967`。
 - 构建源码归档 SHA256：`800ebfd89c8c685c44fc1bf84e6968ea4c31a6e03386cf7e3f716ecfa5547a20`，包括 8 个源码/构建/示例文件，不含凭据。
@@ -18,7 +18,7 @@
 | 检查 | 结果 |
 |---|---|
 | 实际 SDK | 镜像内 mcp==1.28.1 |
-| MCP URL | `https://jupyterhub.waterism.com:8765/mcp`，系统 TLS 验证开启 |
+| MCP URL | `https://<MCP_DOMAIN>:8765/mcp`，系统 TLS 验证开启 |
 | 认证 | 使用专用 server-health-notifier Bearer key，沿用已注册凭据 |
 | 真实只读联调 | 镜像内 `--dry-run` 成功 |
 | 持续运行 | 连续两轮成功心跳；Docker healthy |

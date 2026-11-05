@@ -537,7 +537,7 @@ class TestToolSurfaceAlignment:
     def test_env_example_offers_both_entrypoints_without_real_ip(self):
         assert "<MCP_DOMAIN>" in ENV_EXAMPLE
         assert "<MCP_HOST>" in ENV_EXAMPLE
-        assert "10.48.0.81" not in ENV_EXAMPLE, "公开模板不得含真实内网地址"
+        assert not re.search(r"\b10\.\d+\.\d+\.\d+\b", ENV_EXAMPLE), "公开模板不得含真实内网地址"
 
     def test_public_surfaces_do_not_hardcode_live_entry(self):
         """2026-10-30 隐私收口：真实校园域名只留在 gitignored `.env.tianyi-bot`；
