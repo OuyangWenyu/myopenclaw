@@ -23,6 +23,14 @@ if [ ! -f "${PLUGIN_MARKER}" ]; then
   touch "${PLUGIN_MARKER}"
 fi
 
+# Capture the file-backed secret into the gateway's runtime environment so native
+# OpenClaw can resolve the existing header reference without writing the key to JSON.
+if [ -n "${ZHIXUN_BOT_WATER_MCP_TOKEN_FILE:-}" ]; then
+  ZHIXUN_BOT_WATER_MCP_TOKEN="$(node /opt/zhixun-bot/water-mcp-token.mjs)"
+  export ZHIXUN_BOT_WATER_MCP_TOKEN
+  unset ZHIXUN_BOT_WATER_MCP_TOKEN_FILE
+fi
+
 node /opt/zhixun-bot/render-config.mjs \
   /opt/zhixun-bot/openclaw.json.template \
   "${CONFIG_FILE}"

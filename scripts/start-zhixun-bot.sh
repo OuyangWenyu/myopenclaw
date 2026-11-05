@@ -24,7 +24,6 @@ required_vars=(
   ZHIXUN_BOT_FEISHU_APP_SECRET
   ZHIXUN_BOT_MODEL_API_KEY
   ZHIXUN_BOT_WATER_MCP_URL
-  ZHIXUN_BOT_WATER_MCP_TOKEN
 )
 
 for name in "${required_vars[@]}"; do
@@ -34,6 +33,18 @@ for name in "${required_vars[@]}"; do
     exit 1
   fi
 done
+
+water_token="$(grep -E '^ZHIXUN_BOT_WATER_MCP_TOKEN=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+water_token_file="$(grep -E '^ZHIXUN_BOT_WATER_MCP_TOKEN_FILE=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
+if [[ -n "${water_token_file}" ]]; then
+  if [[ -n "${water_token}" ]]; then
+    echo "❌ Water MCP token 和 token 文件不能同时配置"
+    exit 1
+  fi
+elif [[ -z "${water_token}" || "${water_token}" == "replace_me" || "${water_token}" == *"xxxx"* ]]; then
+  echo "❌ 请设置 ZHIXUN_BOT_WATER_MCP_TOKEN 或挂载并设置 ZHIXUN_BOT_WATER_MCP_TOKEN_FILE"
+  exit 1
+fi
 
 # ── GLM 兜底（可选）：一行可见性；空/replace_me = 未配置（不阻塞启动）──────
 glm_key="$(grep -E '^ZHIXUN_BOT_GLM_API_KEY=' "${ENV_FILE}" | tail -1 | cut -d= -f2- || true)"
