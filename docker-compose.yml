@@ -703,7 +703,7 @@ services:
           cpus: "0.25"
 
   # ── 语雀 MCP（本机自持只读 token 的快照/变更服务）─────────────
-  # 上游 gitcode.com/dlut-water/yuque_mcp_server（无 tag，pin bfc55d7，守卫
+  # 上游 gitcode.com/dlut-water/yuque_mcp_server（无 tag，pin 543f6fe，守卫
   # tests/test_yuque_mcp_local.py 钉兄弟仓 HEAD）。校内服务器那套继续给
   # 团队成员走 UniVPN；本机这套只服务本机消费者（hermes 默认 profile + 天一）。
   # 镜像默认 uid 10001 写不进 macOS 宿主目录；只持只读语雀 token，无本地安全
