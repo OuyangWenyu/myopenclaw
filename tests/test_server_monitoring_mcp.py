@@ -245,17 +245,27 @@ class TestDigestAutomation:
 
     _MARKER = "# ── Declare daily monitoring digest automation"
 
-    def test_entrypoint_provisions_automation(self):
+    def test_entrypoint_provisions_dm_automation(self):
         assert self._MARKER in ENTRYPOINT
         block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
         assert "cron add" in block
-        assert "--declaration-key tianyi-monitoring-daily" in block
+        assert "add_digest_job server-monitoring-daily tianyi-monitoring-daily" in block
+        assert '"${TIANYI_BOT_OWNER_OPEN_ID}"' in block
         assert "--channel feishu" in block
         assert "--announce" in block
-        assert '--to "${TIANYI_BOT_OWNER_OPEN_ID}"' in block
         assert "--tz Asia/Shanghai" in block
         assert "TIANYI_BOT_MONITORING_DIGEST_CRON" in block
         assert "30 8 * * *" in block, "默认排期 08:30（北京）"
+
+    def test_entrypoint_provisions_optional_group_automation(self):
+        """2026-11-05：配置群 chat_id 时额外声明一条同排期、同提示词的群聊 job。"""
+        block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
+        assert "add_digest_job server-monitoring-daily-group tianyi-monitoring-daily-group" in block
+        assert "TIANYI_BOT_MONITORING_DIGEST_CHAT_ID" in block
+        assert '"${digest_group_chat}"' in block
+        assert '--cron "${digest_cron}"' in block, "群聊与私聊共用同一排期"
+        assert '--message "${digest_message}"' in block, "群聊与私聊共用同一提示词"
+        assert "remove_digest_job tianyi-monitoring-daily-group" in block, "群 id 清空后必须回收旧群 job"
 
     def test_provisioning_gated_backgrounded_before_exec(self):
         marker_at = ENTRYPOINT.index(self._MARKER)
@@ -274,16 +284,19 @@ class TestDigestAutomation:
         assert '[ "${digest_cron}" = "off" ]' in block, "关闭判断必须是 = off（不是 !=）"
         assert '!= "off"' not in block
 
-    def test_off_path_reclaims_existing_automation(self):
+    def test_off_path_reclaims_both_automations(self):
         """OFF 态（URL 空 / DIGEST_CRON=off）必须**主动回收**既有 automation。
 
         框架不会自动回收 service 声明的 job（只有 system-owned 类型启动时收敛，
         2026-10-14 复核镜像内证据 cron-jobs.md:234-236）——不做回收的话，关掉开关
         后旧 job 仍每日投递（届时降级成无监控工具的日报），"清空即消失"就是假话。
         回收经 cron-job-id.mjs 按 declaration-key 找 id（cron rm 只吃 id）。
+        群聊 job 是第二条，同样必须回收，否则关闭群推送后仍会继续发。
         """
         block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
-        assert "cron-job-id.mjs tianyi-monitoring-daily" in block, "回收需经提取器按 declaration-key 找 id"
+        assert 'cron-job-id.mjs "$1"' in block, "回收需经提取器按 declaration-key 找 id"
+        assert "remove_digest_job tianyi-monitoring-daily " in block
+        assert "remove_digest_job tianyi-monitoring-daily-group" in block
         assert "cron rm" in block
         assert "未启用" in block, "URL 空也要走回收分支（「监控未启用」口径）"
 
@@ -292,22 +305,23 @@ class TestDigestAutomation:
         必须用 if cmd; then ✅ else ❌ fi 才能开出失败提示。"""
         block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
         assert "if out=$(node /app/openclaw.mjs cron add" in block
-        assert "❌ 每日监控摘要 automation 创建失败" in block
+        assert "❌ $4 automation 创建失败" in block
+        assert 'add_digest_job server-monitoring-daily tianyi-monitoring-daily' in block
 
     def test_missing_owner_warns_not_blocks(self):
         block = ENTRYPOINT[ENTRYPOINT.index(self._MARKER):]
-        owner_guard_at = block.index("TIANYI_BOT_OWNER_OPEN_ID")
-        window = block[:owner_guard_at + 200]
-        assert "⚠️" in window, "缺 OWNER id 只警告，不拦启动"
+        assert "⚠️ 每日监控摘要未声明：缺 TIANYI_BOT_OWNER_OPEN_ID" in block, "缺 OWNER id 只警告，不拦启动"
         assert "exit 1" not in block.split("cron add")[0], "provisioning 段不得有拦启动的 exit 1"
 
     def test_compose_passes_digest_envs(self):
         assert "TIANYI_BOT_OWNER_OPEN_ID: ${TIANYI_BOT_OWNER_OPEN_ID:-}" in COMPOSE
         assert "TIANYI_BOT_MONITORING_DIGEST_CRON: ${TIANYI_BOT_MONITORING_DIGEST_CRON:-}" in COMPOSE
+        assert "TIANYI_BOT_MONITORING_DIGEST_CHAT_ID: ${TIANYI_BOT_MONITORING_DIGEST_CHAT_ID:-}" in COMPOSE
 
     def test_env_example_documents_digest(self):
         assert "TIANYI_BOT_OWNER_OPEN_ID" in ENV_EXAMPLE
         assert "TIANYI_BOT_MONITORING_DIGEST_CRON" in ENV_EXAMPLE
+        assert "TIANYI_BOT_MONITORING_DIGEST_CHAT_ID" in ENV_EXAMPLE
 
 
 class TestExecApprovalsApprover:
@@ -406,7 +420,7 @@ class TestEnvExample:
         """
         assert any("https://<MCP_HOST>:8765/mcp" in line for line in self.lines)
         assert "docs/server-monitoring-mcp.md" in ENV_EXAMPLE
-        assert "10.48.0.81" not in ENV_EXAMPLE
+        assert not re.search(r"\b10\.\d+\.\d+\.\d+\b", ENV_EXAMPLE)
 
 
 class TestAgentPolicy:
@@ -499,15 +513,16 @@ class TestToolSurfaceAlignment:
         assert "DOCKER_UNAVAILABLE" in AGENTS_MD
 
     def test_docs_cover_registry_and_tools(self):
-        for token in ("12", "list_projects", "get_project_overview", "get_project_build",
-                      "rainfall-oa-data", "zhixun-core", "realtime-forecast"):
+        for token in ("13", "list_projects", "get_project_overview", "get_project_build",
+                      "get_health_events", "rainfall-oa-data", "zhixun-core", "realtime-forecast"):
             assert token in MONITORING_DOC, f"docs/server-monitoring-mcp.md 缺少 {token}"
         assert "qupengfei" not in MONITORING_DOC, "公开面文档不得出现内网部署用户名"
         assert "私有团队仓" not in MONITORING_DOC, "本仓是公开仓——假前提文案已废弃"
 
-    def test_readme_and_claude_md_say_twelve(self):
-        assert "12 个只读工具" in README_MD
-        assert "12 个只读工具" in CLAUDE_MD
+    def test_readme_and_claude_md_tool_surface(self):
+        assert "13 个只读工具" in README_MD, "服务端已上线 13 个工具（含 get_health_events）"
+        assert "12 个只读工具" in CLAUDE_MD, "检查器仍只要求 12 个；第 13 个是额外工具"
+        assert "get_health_events" in CLAUDE_MD, "服务端已上线健康事件工具，维护文档要跟上"
         assert "9 工具" not in CLAUDE_MD, "旧「9 工具」表述必须清除（含命令注释里的简写）"
 
     def test_docs_describe_the_campus_domain_entry(self):
@@ -516,13 +531,13 @@ class TestToolSurfaceAlignment:
         只写「URL 改了」会让排障的人继续按自签 CA 的方向查。"""
         assert "<MCP_DOMAIN>" in MONITORING_DOC
         assert "公网证书" in MONITORING_DOC
-        assert "10.48.0.81" in MONITORING_DOC, "内网直连回退入口仍要保留说明"
+        assert "<MCP_HOST>" in MONITORING_DOC, "内网直连回退入口仍要保留说明（占位符）"
         assert "MCP_ALLOWED_HOSTS" in MONITORING_DOC
 
     def test_env_example_offers_both_entrypoints_without_real_ip(self):
         assert "<MCP_DOMAIN>" in ENV_EXAMPLE
         assert "<MCP_HOST>" in ENV_EXAMPLE
-        assert "10.48.0.81" not in ENV_EXAMPLE, "公开模板不得含真实内网地址"
+        assert not re.search(r"\b10\.\d+\.\d+\.\d+\b", ENV_EXAMPLE), "公开模板不得含真实内网地址"
 
     def test_public_surfaces_do_not_hardcode_live_entry(self):
         """2026-10-30 隐私收口：真实校园域名只留在 gitignored `.env.tianyi-bot`；

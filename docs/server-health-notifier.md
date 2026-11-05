@@ -27,7 +27,7 @@ server-monitoring 内部 watcher → get_health_events
 
 | 配置项 | 含义 |
 |---|---|
-| HEALTH_NOTIFIER_MCP_URL | 默认 `https://jupyterhub.waterism.com:8765/mcp`；可信私网也可用 `http://10.48.0.81:8765/mcp` |
+| HEALTH_NOTIFIER_MCP_URL | 必填；校园域名入口 `https://<MCP_DOMAIN>:8765/mcp`，可信私网也可用 `http://<MCP_HOST>:8765/mcp` |
 | HEALTH_NOTIFIER_MCP_TOKEN | 已在监控服务注册的 Bearer key；不要把 `Bearer ` 前缀写入值 |
 | HEALTH_NOTIFIER_POLL_SECONDS | 默认 60，范围 15–3600 |
 | HEALTH_NOTIFIER_MAX_PAGES | 每轮最多页数，默认 5，范围 1–20 |

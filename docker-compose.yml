@@ -25,6 +25,7 @@ services:
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
       - ./skills/yuque-daily-digest:/opt/hermes-skills/yuque-daily-digest:ro
+      - ./skills/server-monitoring-digest:/opt/hermes-skills/server-monitoring-digest:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
@@ -68,6 +69,10 @@ services:
       # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
       # ~/.hermes/.env 里的同名变量不参与 MCP 客户端展开。
       - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
+      # 团队 server-monitoring MCP（爱玛士按需查询 + 每日日报）：
+      # URL 为空 = 停用；真实地址/token 只在 .env（gitignored）。
+      - SERVER_MONITORING_MCP_URL=${SERVER_MONITORING_MCP_URL:-}
+      - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
@@ -108,6 +113,7 @@ services:
       - ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
       - ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
       - ./skills/yuque-daily-digest:/opt/hermes-skills/yuque-daily-digest:ro
+      - ./skills/server-monitoring-digest:/opt/hermes-skills/server-monitoring-digest:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
       - email-config-none:/opt/data/.config/himalaya
@@ -147,6 +153,10 @@ services:
       # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
       # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
       - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
+      # 团队 server-monitoring MCP（爱码士按需查询 + 预报系统群日报）：
+      # URL 为空 = 停用；真实地址/token 只在 .env（gitignored）。
+      - SERVER_MONITORING_MCP_URL=${SERVER_MONITORING_MCP_URL:-}
+      - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       # coder 的飞书 = 它自己的独立应用（爱码士 bot，凭据 = .env 的 CODER_FEISHU_*）。
@@ -674,7 +684,7 @@ services:
     volumes:
       - ${HOME}/.myagentdata/server-health-notifier:/data
     environment:
-      - HEALTH_NOTIFIER_MCP_URL=${HEALTH_NOTIFIER_MCP_URL:-https://jupyterhub.waterism.com:8765/mcp}
+      - HEALTH_NOTIFIER_MCP_URL=${HEALTH_NOTIFIER_MCP_URL:-}
       - HEALTH_NOTIFIER_MCP_TOKEN=${HEALTH_NOTIFIER_MCP_TOKEN:-}
       - HEALTH_NOTIFIER_POLL_SECONDS=${HEALTH_NOTIFIER_POLL_SECONDS:-60}
       - HEALTH_NOTIFIER_MAX_PAGES=${HEALTH_NOTIFIER_MAX_PAGES:-5}
@@ -694,7 +704,7 @@ services:
 
   # ── 语雀 MCP（本机自持只读 token 的快照/变更服务）─────────────
   # 上游 gitcode.com/dlut-water/yuque_mcp_server（无 tag，pin bfc55d7，守卫
-  # tests/test_yuque_mcp_local.py 钉兄弟仓 HEAD）。校内 10.48.0.81 那套继续给
+  # tests/test_yuque_mcp_local.py 钉兄弟仓 HEAD）。校内服务器那套继续给
   # 团队成员走 UniVPN；本机这套只服务本机消费者（hermes 默认 profile + 天一）。
   # 镜像默认 uid 10001 写不进 macOS 宿主目录；只持只读语雀 token，无本地安全
   # 边界，root 运行（tianyi compose 先例；Linux 侧会生 root-owned 文件，见文档）。

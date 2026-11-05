@@ -84,7 +84,7 @@ fi
 # 契约：未设/空串/纯空白 → 默认端点（与参数化前一致）；设了 → 覆盖。
 #
 # 公共假环境（渲染器必需项 + 兜底模型 dummy key）——主循环与断言共用一份，避免漂移
-TIANYI_ENVS_COMMON="TIANYI_BOT_FEISHU_APP_ID=dummy_id TIANYI_BOT_FEISHU_APP_SECRET=dummy_secret TIANYI_BOT_MODEL_API_KEY=dummy_key TIANYI_BOT_MODEL_ID=deepseek-flash TIANYI_BOT_MODEL_BASE_URL=https://api.deepseek.com TIANYI_BOT_FEISHU_STREAMING=STREAMING_VAL TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://10.48.0.81:8765/mcp TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN=dummy_token TIANYI_BOT_OWNER_OPEN_ID=ou_0123456789abcdef0123456789abcdef TIANYI_BOT_GLM_API_KEY=dummy_glm_key"
+TIANYI_ENVS_COMMON="TIANYI_BOT_FEISHU_APP_ID=dummy_id TIANYI_BOT_FEISHU_APP_SECRET=dummy_secret TIANYI_BOT_MODEL_API_KEY=dummy_key TIANYI_BOT_MODEL_ID=deepseek-flash TIANYI_BOT_MODEL_BASE_URL=https://api.deepseek.com TIANYI_BOT_FEISHU_STREAMING=STREAMING_VAL TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://192.0.2.1:8765/mcp TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN=dummy_token TIANYI_BOT_OWNER_OPEN_ID=ou_0123456789abcdef0123456789abcdef TIANYI_BOT_GLM_API_KEY=dummy_glm_key"
 
 render_tianyi_to() {  # $1=label $2=额外 env（可空）→ 渲染到 "${WORK}/$1/openclaw.json"
     local label="$1" extra="${2:-}"

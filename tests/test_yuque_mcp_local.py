@@ -10,6 +10,7 @@ Run: uv run --with pytest --with pyyaml pytest tests/test_yuque_mcp_local.py -v
 
 from __future__ import annotations
 
+import re
 import subprocess
 from pathlib import Path
 
@@ -141,7 +142,7 @@ class TestEnvExampleShape:
     def test_points_at_local_service(self):
         example = self._example()
         assert "YUQUE_MCP_URL=http://yuque-mcp:18001/sse" in example
-        assert "10.48.0.81" not in example, "模板不得残留校内地址"
+        assert not re.search(r"\b10\.\d+\.\d+\.\d+\b", example), "模板不得残留校内 10.x 地址"
 
     def test_documents_token_and_repos(self):
         example = self._example()
@@ -157,7 +158,7 @@ class TestEnvExampleShape:
         # 公开模板不得残留任何真实内网地址。2026-10-13 前 server-monitoring 行曾用
         # 真实 IP 并把这句放宽到「只查 YUQUE 行」；改为 <MCP_HOST> 占位符后恢复全量
         # 断言（真实地址以 docs/server-monitoring-mcp.md 为准）。
-        assert "10.48.0.81" not in example, "模板不得残留校内地址"
+        assert not re.search(r"\b10\.\d+\.\d+\.\d+\b", example), "模板不得残留校内 10.x 地址"
 
 
 class TestLiveEnvSwitched:

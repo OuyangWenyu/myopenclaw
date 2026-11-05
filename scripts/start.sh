@@ -300,6 +300,53 @@ else
   echo "   ⚠️  ${HERMES_DEFAULT_CONFIG} 不存在，跳过 zotero-mcp 注入"
 fi
 
+# ── server-monitoring MCP（爱玛士 + 爱码士，各自独立）────────────
+# 两个 profile 都不继承彼此的 mcp_servers，必须分别写入。URL/token 来自
+# .env；URL 为空 = 移除受管条目（与天一「URL 非空 = 开关」一致）。
+# 配置写的是 ${VAR} 占位符，真实域名/token 只在容器环境里展开。
+DEFAULT_MCP_STATUS=""
+CODER_MCP_STATUS=""
+if [[ -f "${HERMES_DEFAULT_CONFIG}" ]]; then
+  if DEFAULT_MCP_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_server_monitoring.py" \
+      "${HERMES_DEFAULT_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
+    echo "   🛰️  爱玛士 server-monitoring MCP: ${DEFAULT_MCP_STATUS}"
+  else
+    echo "   ⚠️  爱玛士 server-monitoring MCP 注册失败: ${DEFAULT_MCP_STATUS}"
+    DEFAULT_MCP_STATUS="failed"
+  fi
+fi
+if [[ -f "${CODER_CONFIG}" ]]; then
+  if CODER_MCP_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_server_monitoring.py" \
+      "${CODER_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
+    echo "   🛰️  爱码士 server-monitoring MCP: ${CODER_MCP_STATUS}"
+  else
+    echo "   ⚠️  爱码士 server-monitoring MCP 注册失败: ${CODER_MCP_STATUS}"
+    CODER_MCP_STATUS="failed"
+  fi
+fi
+
+# server-monitoring-digest skill：两个 profile 共用同一个 repo 只读挂载。
+# 目标路径是容器内路径；宿主机上这条 symlink 是"悬空"的，但在容器里有效
+# （与 daily-dev-report 的既有模式一致）。只补缺/改指向，不覆盖真实目录。
+ensure_monitoring_skill_link() {
+  local link="$1"
+  local target="/opt/hermes-skills/server-monitoring-digest"
+  mkdir -p "$(dirname "${link}")"
+  if [[ -L "${link}" ]]; then
+    if [[ "$(readlink "${link}")" != "${target}" ]]; then
+      ln -sfn "${target}" "${link}"
+      echo "   🔗 server-monitoring-digest skill 链接已更新: ${link}"
+    fi
+  elif [[ -e "${link}" ]]; then
+    echo "   ⚠️  ${link} 已存在且不是 symlink，跳过（避免覆盖 agent 维护的 skill）"
+  else
+    ln -s "${target}" "${link}"
+    echo "   🔗 server-monitoring-digest skill 已链接: ${link}"
+  fi
+}
+ensure_monitoring_skill_link "${HOME}/.hermes/skills/server-monitoring-digest"
+ensure_monitoring_skill_link "${HOME}/.hermes/profiles/coder/skills/server-monitoring-digest"
+
 # ── 确保 mylibrary skills 在 external_dirs 中 ────────────────────
 # aisecretary 模式：宿主机源码 → 只读挂载 → external_dirs 发现。
 if [[ -f "${HERMES_DEFAULT_CONFIG}" ]]; then
@@ -693,6 +740,8 @@ fi
 # 迁移期间重启会把它打断、下次从头再来，表现是网关**看起来卡死**（既不绑端口、
 # 也不报错，docker logs 只有几行），静置几分钟才自行恢复。
 _openclaw_started_before="$(docker inspect openclaw-gateway --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+_hermes_started_before="$(docker inspect hermes --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+_coder_started_before="$(docker inspect hermes-coder --format '{{.State.StartedAt}}' 2>/dev/null || true)"
 
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
@@ -713,6 +762,29 @@ if [[ "${_hermes_auth_changed}" == "true" ]]; then
   else
     echo "   ⚠️  重启失败，请手动: docker compose restart hermes hermes-coder hermes-finance hermes-daoyuan"
   fi
+fi
+
+# server-monitoring MCP 配置变更不会热加载；容器若没在本次 up 中重建，需要重启一次。
+# _hermes_auth_changed 已经重启过全部 hermes 容器时跳过，避免重复重启。
+restart_hermes_for_mcp() {
+  local container="$1" status="$2" before="$3" label="$4"
+  [[ "${status}" == written* || "${status}" == removed* ]] || return 0
+  local after
+  after="$(docker inspect "${container}" --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+  if [[ "${before}" != "${after}" ]]; then
+    echo "   ℹ️  ${container} 已在本次 up 中创建/重建，MCP 配置随启动生效"
+    return 0
+  fi
+  echo "🔄 ${label} MCP 配置有变更，重启 ${container} 使其重新加载..."
+  if docker compose restart "${container}" >/dev/null 2>&1; then
+    echo "   ✅ ${container} 已重启"
+  else
+    echo "   ⚠️  ${container} 重启失败，请手动执行: docker compose restart ${container}"
+  fi
+}
+if [[ "${_hermes_auth_changed}" != "true" ]]; then
+  restart_hermes_for_mcp hermes "${DEFAULT_MCP_STATUS}" "${_hermes_started_before}" "爱玛士"
+  restart_hermes_for_mcp hermes-coder "${CODER_MCP_STATUS}" "${_coder_started_before}" "爱码士"
 fi
 
 # mcp.servers / plugins.load 的配置变更不会热加载，必须重启网关才生效
@@ -852,6 +924,55 @@ MORNING_BRIEFING_PROMPT_EOF
           echo "   ⚠️  daily-dev-report cron job 注册失败"
       else
         echo "   📋 daily-dev-report cron job 已存在，跳过"
+      fi
+
+      # ── server-monitoring-digest（服务器监控日报）──────────────────
+      # 默认 profile 爱玛士 → 飞书私聊；coder profile 爱码士 → 预报系统群。
+      # 两条 job 各自跑独立 agent 回合；08:30 北京 = 30 0 * * * UTC。
+      MONITORING_URL_SET="$(grep -c '^SERVER_MONITORING_MCP_URL=.' "${REPO_ROOT}/.env" 2>/dev/null || true)"
+      MONITORING_TOKEN_SET="$(grep -c '^SERVER_MONITORING_MCP_TOKEN=.' "${REPO_ROOT}/.env" 2>/dev/null || true)"
+      MONITORING_DIGEST_PROMPT="执行 server-monitoring-digest 技能：用 server-monitoring MCP 汇总当前服务器整体情况（服务器状态与告警 / Prometheus 目标 / GFS 流水线 / 各项目运行时与最近构建），按证据纪律如实报告：UNKNOWN≠健康、缺失≠0；先给结论与需要关注的异常，再给细节，全文控制在 500 字内。只读 MCP，不要写文件或运行脚本；最终回复只包含日报正文，不要字数说明或工具调用说明。"
+      if [[ "${MONITORING_URL_SET:-0}" -gt 0 && "${MONITORING_TOKEN_SET:-0}" -gt 0 ]]; then
+        if [[ "${DEFAULT_MCP_STATUS}" != failed* && "${DEFAULT_MCP_STATUS}" != conflict* && "${DEFAULT_MCP_STATUS}" != removed* ]]; then
+          EXISTING=$(docker compose exec -T hermes "${HERMES_BIN}" cron list 2>/dev/null | grep -c "server-monitoring-digest" || true)
+          if [ "${EXISTING:-0}" -lt 1 ]; then
+            docker compose exec -T hermes "${HERMES_BIN}" cron create \
+              "30 0 * * *" \
+              "${MONITORING_DIGEST_PROMPT}" \
+              --deliver "${DELIVER}" \
+              --name "server-monitoring-digest" 2>/dev/null && \
+              echo "   📋 server-monitoring-digest cron job 已注册 (每日 8:30 北京，爱玛士私聊)" || \
+              echo "   ⚠️  server-monitoring-digest cron job 注册失败"
+          else
+            echo "   📋 server-monitoring-digest cron job 已存在，跳过"
+          fi
+        else
+          echo "   ⚠️  爱玛士 server-monitoring MCP 未就绪（${DEFAULT_MCP_STATUS}），跳过服务器日报注册"
+        fi
+
+        MONITORING_GROUP_CHAT_ID="$(grep '^MONITORING_DIGEST_GROUP_CHAT_ID=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true)"
+        if [[ -n "${MONITORING_GROUP_CHAT_ID}" ]]; then
+          if [[ "${CODER_MCP_STATUS}" != failed* && "${CODER_MCP_STATUS}" != conflict* && "${CODER_MCP_STATUS}" != removed* ]]; then
+            EXISTING_CODER=$(docker compose exec -T hermes-coder "${HERMES_BIN}" -p coder cron list 2>/dev/null | grep -c "server-monitoring-digest" || true)
+            if [ "${EXISTING_CODER:-0}" -lt 1 ]; then
+              docker compose exec -T hermes-coder "${HERMES_BIN}" -p coder cron create \
+                "30 0 * * *" \
+                "${MONITORING_DIGEST_PROMPT}" \
+                --deliver "feishu:${MONITORING_GROUP_CHAT_ID}" \
+                --name "server-monitoring-digest" 2>/dev/null && \
+                echo "   📋 server-monitoring-digest coder cron job 已注册 (每日 8:30 北京，爱码士→预报系统群)" || \
+                echo "   ⚠️  server-monitoring-digest coder cron job 注册失败"
+            else
+              echo "   📋 server-monitoring-digest coder cron job 已存在，跳过"
+            fi
+          else
+            echo "   ⚠️  爱码士 server-monitoring MCP 未就绪（${CODER_MCP_STATUS}），跳过群日报注册"
+          fi
+        else
+          echo "   ⚠️  MONITORING_DIGEST_GROUP_CHAT_ID 未设置，跳过爱码士→预报系统群的服务器日报注册"
+        fi
+      else
+        echo "   ⚠️  SERVER_MONITORING_MCP_URL/TOKEN 未配置，跳过 server-monitoring-digest cron job 注册"
       fi
 
       # ── yuque-daily-digest（语雀每日变更日报，可选）────────────────

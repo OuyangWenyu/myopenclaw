@@ -1,6 +1,6 @@
 # Linux 服务器部署配置指南
 
-> 服务器：`10.48.0.81` | 部署用户：`<deploy-user>` | 项目路径：`/home/<deploy-user>/source_code/myopenclaw`
+> 服务器：`<SERVER_HOST>` | 部署用户：`<deploy-user>` | 项目路径：`/home/<deploy-user>/source_code/myopenclaw`
 
 > ⚠️ **本页是那台服务器上早期部署的记录，不是仓库现状。** 仓库当前的 `docker-compose.yml` 是
 > 16 个服务 + profile-gated `openclaw-cli`（另有 zhixun / tianyi 两个独立 bot 栈），下面几节的
@@ -113,7 +113,7 @@ OPENAI_API_KEY=sk-xxx
 
 # MCP server 自定义环境变量（非黑名单，可直接透传到容器）
 # 在 docker-compose.yml environment: 段添加对应字段后，Python 脚本用 os.environ 读取
-# HYDRO_API_BASE_URL=http://10.48.0.81:8000
+# HYDRO_API_BASE_URL=http://<SERVER_HOST>:8000
 
 # GitCode CLI（OpenClaw 容器内 gc 使用）
 GITCODE_TOKEN=gitcode_xxxxx
@@ -191,12 +191,12 @@ MCP server 通过 `os.environ` 读取配置（如 `HYDRO_API_BASE_URL`）。透�
 
 1. 在 `.env` 中添加变量：
    ```bash
-   HYDRO_API_BASE_URL=http://10.48.0.81:8000
+   HYDRO_API_BASE_URL=http://<SERVER_HOST>:8000
    ```
 
 2. 在 `docker-compose.yml` 的 `hermes.environment:` 中添加：
    ```yaml
-   - HYDRO_API_BASE_URL=${HYDRO_API_BASE_URL:-http://10.48.0.81:8000}
+   - HYDRO_API_BASE_URL=${HYDRO_API_BASE_URL:-http://<SERVER_HOST>:8000}
    ```
 
 3. 重启 hermes 容器使环境变量生效：

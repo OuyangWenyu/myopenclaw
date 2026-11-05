@@ -51,8 +51,8 @@ The server secret is a nonempty JSON key-to-user map. The OpenClaw secret contai
 only its dedicated key, owned by the container's runtime UID with mode 0600. Both
 are read-only mounts. Never put real keys in this repository.
 
-The overlay binds only 10.48.0.81:18201. External clients use
-http://10.48.0.81:18201/sse; OpenClaw keeps
+The overlay binds only (`ZHIXUN_WATER_BIND_IP`):18201. External clients use
+http://<your-private-ip>:18201/sse; OpenClaw keeps
 http://zhixun-water-mcp:18201/sse. Both SSE GET and message POST require a key.
 
 Before rollout, back up the old container image ID and runtime configuration.

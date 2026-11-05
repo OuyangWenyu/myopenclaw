@@ -66,7 +66,7 @@ DISK_ALERT = {
     "severity": "warning",
     "state": "firing",
     "value": "94.7",
-    "summary": "Disk almost full on pm-minio-01 (10.48.0.86:9100)",
+    "summary": "Disk almost full on pm-minio-01 (192.0.2.10:9100)",
 }
 
 LEGACY_ALERT = {

@@ -124,6 +124,22 @@ class TestCli:
         assert mod.main(["--env-file", str(env)]) == 0
         assert env.stat().st_mode & 0o777 == 0o600
 
+    def test_temp_env_does_not_rewrite_repo_tianyi_mirror(self, tmp_path, monkeypatch):
+        """回归：临时 --env-file 不得默认改写仓库真实的 .env.tianyi-bot。
+
+        2026-11-05 实测：测试生成的随机 key 被同步到线上 mirror，天一重启后
+        repo-scanner 调用 401。默认只允许仓库根 .env 触发 mirror 同步。
+        """
+        env = tmp_path / ".env"
+        env.write_text("OTHER=1\n", encoding="utf-8")
+        mirror = tmp_path / ".env.tianyi-bot"
+        original = "TIANYI_BOT_REPO_SCANNER_KEY=keep-me\n"
+        mirror.write_text(original, encoding="utf-8")
+        monkeypatch.setattr(mod, "DEFAULT_TIANYI_ENV", mirror)
+
+        assert mod.main(["--env-file", str(env)]) == 0
+        assert mirror.read_text(encoding="utf-8") == original
+
     def test_syncs_tianyi_key_to_its_env_file(self, tmp_path):
         env = tmp_path / ".env"
         env.write_text("OTHER=1\n", encoding="utf-8")

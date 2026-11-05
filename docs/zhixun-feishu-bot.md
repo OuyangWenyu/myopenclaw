@@ -134,7 +134,7 @@ ZHIXUN_BOT_FEISHU_APP_ID=cli_xxx
 ZHIXUN_BOT_FEISHU_APP_SECRET=xxx
 ZHIXUN_BOT_MODEL_API_KEY=xxx
 # 远程 water MCP（团队服务器新版 zhixun-agent）
-# 当前团队远程端点：http://10.48.0.81:18202/mcp（streamable-http）
+# 当前团队远程端点：http://<ZHIXUN_MCP_HOST>:18202/mcp（streamable-http）
 ZHIXUN_BOT_WATER_MCP_URL=https://water.example.com/mcp
 ZHIXUN_BOT_WATER_MCP_TOKEN=xxx
 ZHIXUN_BOT_WATER_MCP_TRANSPORT=streamable-http

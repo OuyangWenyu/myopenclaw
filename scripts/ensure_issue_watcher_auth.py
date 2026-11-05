@@ -169,11 +169,26 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--tianyi-env",
         type=Path,
-        default=DEFAULT_TIANYI_ENV,
-        help="mirror the tianyi key into this file when it exists",
+        default=None,
+        help=(
+            "mirror the tianyi key into this file when it exists; defaults to the "
+            "repo .env.tianyi-bot only when --env-file is the repo-root .env "
+            "(temp/test env files must never rewrite the real tianyi mirror)"
+        ),
     )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
+
+    # 默认只同步仓库根 .env 对应的 tianyi mirror。显式 --env-file 指向临时文件
+    # 时若仍默认写真实 .env.tianyi-bot，测试会用随机 key 覆盖线上镜像（2026-11-05
+    # 实际踩过：全量 pytest 把天一 repo-scanner key 改坏，重启后 401）。
+    tianyi_env = args.tianyi_env
+    if tianyi_env is None:
+        try:
+            if Path(args.env_file).expanduser().resolve() == DEFAULT_ENV.resolve():
+                tianyi_env = DEFAULT_TIANYI_ENV
+        except OSError:
+            pass
 
     try:
         lines = read_env(args.env_file)
@@ -181,8 +196,9 @@ def main(argv: list[str] | None = None) -> int:
         updated = update_lines(lines, pairs)
         build_key_map(pairs)  # validate the map before writing
         tianyi_updated = None
-        if args.tianyi_env.is_file():
-            tianyi_lines = read_env(args.tianyi_env)
+        tianyi_lines: list[str] = []
+        if tianyi_env is not None and tianyi_env.is_file():
+            tianyi_lines = read_env(tianyi_env)
             tianyi_updated = sync_tianyi(
                 tianyi_lines, pairs["TIANYI_BOT_REPO_SCANNER_KEY"]
             )
@@ -205,8 +221,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"✅ updated {args.env_file}")
         changed = True
     if tianyi_updated is not None and tianyi_updated != tianyi_lines:
-        write_env(args.tianyi_env, tianyi_updated)
-        print(f"✅ synced tianyi key to {args.tianyi_env}")
+        write_env(tianyi_env, tianyi_updated)
+        print(f"✅ synced tianyi key to {tianyi_env}")
         changed = True
     if not changed:
         print("✅ already up to date")

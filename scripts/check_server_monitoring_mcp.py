@@ -309,7 +309,7 @@ def check_tls_trust(base: str, ca_path: Path | None, checks: list[dict]) -> None
     两种合法端点（2026-10-30 起）：
     - 校园域名入口 `<MCP_DOMAIN>:8765`：BunkerWeb 终结 TLS，公网
       TrustAsia 证书 —— 系统信任库直接认可，不再需要内网 CA；
-    - 内网直连 `10.48.0.81:8765`：内网自签 CA —— 系统信任库不认可，需加载仓库 CA。
+    - 内网直连 `<MCP_HOST>:8765`：内网自签 CA —— 系统信任库不认可，需加载仓库 CA。
 
     旧检查器的「不带内网 CA 必须失败」反证只在自签端点成立，域名入口会误报；
     这里改为「系统信任库不行就再试仓库 CA」的双模式判定。

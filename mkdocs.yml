@@ -78,6 +78,7 @@ nav:
       - 研发日报: daily-dev-report.md
       - issue/PR 通知 (issue-watcher): issue-watcher.md
       - 服务健康通知: server-health-notifier.md
+      - 服务健康通知部署记录 (2026-11-02): deployment-20261102-health-notifier.md
       - 千问办公 AI听记: qwennote-mcp-hermes.md
   - 运维:
       - 调度系统: scheduling.md

@@ -2,7 +2,7 @@
 
 > 最后更新：2026-10-09（本机服务端化，issue #79）
 
-本机通过**本机 docker 服务** `yuque-mcp`（`yuque_mcp_server` 的 `RUN_MODE=cloud`/SSE 部署）接入语雀知识库：读取、搜索、备份知识库并查询服务端生成的变更报告。服务端自持语雀只读 token、与消费方同在 `myopenclaw-net`，**不依赖 UniVPN**；校内服务器 `10.48.0.81` 那套继续给团队成员走 UniVPN，两边互不影响。
+本机通过**本机 docker 服务** `yuque-mcp`（`yuque_mcp_server` 的 `RUN_MODE=cloud`/SSE 部署）接入语雀知识库：读取、搜索、备份知识库并查询服务端生成的变更报告。服务端自持语雀只读 token、与消费方同在 `myopenclaw-net`，**不依赖 UniVPN**；校内服务器 `<CAMPUS_HOST>` 那套继续给团队成员走 UniVPN，两边互不影响。
 
 **当前消费者**：
 - **Hermes 侧**：注册在**默认 profile（爱玛士）**生效；yuque-daily-digest cron 同样运行在 `hermes`（默认 profile）容器。⚠️ 2026-10-09 更正：四个 profile 是隔离实例，coder/daoyuan/finance 各有独立 `profiles/<name>/config.yaml`，不含此注册；验证须 `hermes -p <profile> mcp list`（机制详见 [千问办公 AI听记](qwennote-mcp-hermes.md) 的 Profile 隔离一节）。**其余 profile 不需要语雀接入 —— 已确认的边界，保持现状。** skill 的加载与执行源见 [Hermes Skill 机制](hermes-skills.md)（live = `~/.hermes/skills` 原生副本，仓库 `skills/` 不参与加载）。
