@@ -1,0 +1,4 @@
+# Optional scope filters; no people mapping or credentials in this file.
+entity_patterns = ["server:*", "service:*", "gfs:*"]
+include_auxiliary = true
+# Example: entity_patterns = ["server:weather", "service:forecast-system:*", "gfs:*"]

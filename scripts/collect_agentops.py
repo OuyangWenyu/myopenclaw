@@ -940,6 +940,51 @@ def check_issue_notifier(
     return []
 
 
+def check_server_health_notifier(status_path=None, *, now=None, enabled=None):
+    """The optional consumer is monitored once enabled or once it has a heartbeat."""
+    path = Path(status_path) if status_path else Path(os.environ.get(
+        "AGENTOPS_HEALTH_NOTIFIER_STATUS", os.path.expanduser("~/.myagentdata/server-health-notifier/status.json")))
+    if enabled is None:
+        enabled = path.exists() or os.environ.get("AGENTOPS_HEALTH_NOTIFIER_ENABLED", "0").lower() in {"1", "true"}
+    if not enabled:
+        return []
+    data = _read_status(path)
+    if data is None:
+        return [_status_item("server-health-notifier", "健康通知状态缺失", "watch",
+            "没有可读取的健康通知心跳", "无法确认健康事件正在被消费",
+            "检查 server-health-notifier 的 profile、配置和容器日志")]
+    now = now or datetime.now()
+    try:
+        interval = max(15, int(data.get("poll_seconds", 60)))
+        age = now.timestamp() - float(data.get("last_success_epoch", 0))
+        pending = int(data.get("pending", 0))
+        pending_age = float(data.get("oldest_pending_age") or 0)
+        dead = int(data.get("dead", 0))
+        failed = int(data.get("send_failed", 0))
+    except (TypeError, ValueError):
+        return [_status_item("server-health-notifier", "健康通知状态格式异常", "new",
+            "状态字段类型无效", "无法确认轮询与投递健康", "检查健康通知状态文件和日志")]
+    items = []
+    if age < 0 or age > max(300, 3 * interval) or data.get("source_healthy") is not True:
+        items.append(_status_item("server-health-notifier", "健康事件采集或消费异常", "new",
+            f"heartbeat_age={int(age)}s，source_healthy={data.get('source_healthy') is True}",
+            "没有健康事件不能证明服务正常；可能存在监控盲区或游标缺口",
+            "核对监控 watcher 新鲜度、MCP 认证与游标；确认后显式重建基线"))
+    if failed:
+        items.append(_status_item("server-health-notifier", "健康通知发送失败", "new",
+            f"send_failed={failed}，pending={pending}", "卡片保留在 outbox 等待重试",
+            "检查健康通知使用的飞书应用、目标群与网络"))
+    if pending and pending_age > max(900, 10 * interval):
+        items.append(_status_item("server-health-notifier", "健康通知积压", "watch",
+            f"pending={pending}，oldest_pending_age={int(pending_age)}s", "健康通知可能延迟",
+            "检查飞书投递和消费者日志"))
+    if dead:
+        items.append(_status_item("server-health-notifier", "健康通知进入死信", "new",
+            f"dead={dead}", "超出重试窗口的卡片不再自动发送",
+            "修复投递后停止 daemon，再执行健康消费者 --requeue-dead"))
+    return items
+
+
 def collect_all_signals():
     """Run all signal detectors and return combined list of ledger items.
 
@@ -969,6 +1014,7 @@ def collect_all_signals():
     # issue/PR watcher + Feishu notifier heartbeats
     items.extend(check_issue_watcher())
     items.extend(check_issue_notifier())
+    items.extend(check_server_health_notifier())
 
     return items
 
