@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import builtins
 import importlib.util
+import ssl
 import sys
 from pathlib import Path
 
@@ -147,3 +148,96 @@ class TestDescribeException:
         text = checker.describe_exception(group)
         assert "ConnectionRefusedError" in text
         assert "Connection refused" in text
+
+
+class TestTlsTrustModes:
+    """2026-10-30：端点从「内网自签」扩为「校园域名公网证书 / 内网自签」双模式。
+
+    旧检查器把「不带内网 CA 也能连上」判成失败（反证自签），域名入口会被误报；
+    新语义是——系统信任库能验通就是公网证书；否则加载仓库 CA 能验通就是内网自签；
+    两者都不通才失败。
+    """
+
+    def test_public_certificate_passes_with_system_store(self):
+        ok, detail = checker.evaluate_tls_trust(system_trusted=True, extra_trusted=False)
+        assert ok is True
+        assert "公网证书" in detail
+
+    def test_internal_ca_passes_when_system_store_rejects(self):
+        ok, detail = checker.evaluate_tls_trust(system_trusted=False, extra_trusted=True)
+        assert ok is True
+        assert "内网自签" in detail
+
+    def test_both_fail_is_red(self):
+        ok, detail = checker.evaluate_tls_trust(system_trusted=False, extra_trusted=False)
+        assert ok is False
+        assert "均不认可" in detail
+
+    def test_network_failure_is_not_misreported_as_certificate_failure(self):
+        """超时/拒连不是证书问题——报成「证书校验失败」会把人引向错误的排查方向。"""
+        ok, detail = checker.evaluate_tls_trust(
+            system_trusted=False, extra_trusted=False, certificate_failure=False)
+        assert ok is False
+        assert "不是证书问题" in detail
+        assert "证书校验失败" not in detail
+
+    def test_build_ssl_context_is_a_verifying_client_context(self):
+        for ca in (None, checker.DEFAULT_CA):
+            ctx = checker.build_ssl_context(ca)
+            assert isinstance(ctx, ssl.SSLContext)
+            assert ctx.verify_mode == ssl.CERT_REQUIRED
+            assert ctx.check_hostname is True
+
+    def test_build_ssl_context_adds_extra_ca_on_top_of_system_store(self):
+        """域名叫公网证书、IP 叫自签证书——同一个上下文必须同时信任两者。
+
+        `ssl.create_default_context(cafile=...)` 只加载给定文件、**不叠加**系统信任库；
+        检查器因此会把公网证书判死。这里把「叠加」行为钉住。
+        """
+        system = ssl.create_default_context()
+        combined = checker.build_ssl_context(checker.DEFAULT_CA)
+        try:
+            before = system.cert_store_stats()["x509_ca"]
+            after = combined.cert_store_stats()["x509_ca"]
+        except (AttributeError, KeyError):
+            pytest.skip("当前 OpenSSL 不提供 cert_store_stats")
+        assert after >= before, "加载仓库 CA 不得挤掉系统信任库"
+
+
+class TestResolveConfigCaOptional:
+    """CA 现在是可选输入：域名入口走公网证书，直连内网才需要仓库 CA。"""
+
+    @staticmethod
+    def _env_file(tmp_path: Path) -> Path:
+        path = tmp_path / ".env.tianyi-bot"
+        path.write_text(
+            "TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://mcp.example.com:8765/mcp\n"
+            "TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN=" + "x" * 64 + "\n"
+        )
+        return path
+
+    def test_https_without_default_ca_is_allowed(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(checker, "DEFAULT_CA", tmp_path / "not-there.pem")
+        args = checker.build_parser().parse_args(["--env-file", str(self._env_file(tmp_path))])
+        url, token, ca_path = checker.resolve_config(args)
+        assert url.startswith("https://")
+        assert token
+        assert ca_path is None, "公网证书端点不应被强制要求内网 CA"
+
+    def test_explicit_missing_ca_is_still_a_config_error(self, tmp_path):
+        args = checker.build_parser().parse_args([
+            "--env-file", str(self._env_file(tmp_path)),
+            "--ca", str(tmp_path / "explicit-missing.pem"),
+        ])
+        with pytest.raises(checker.ScriptError, match="CA 证书不存在"):
+            checker.resolve_config(args)
+
+
+class TestHostAllowlistHint:
+    def test_421_hint_points_at_server_side_allowlist(self):
+        """421 不是客户端能靠 headers 绕过的（Host 是 forbidden header）——
+        提示必须指向服务端 MCP_ALLOWED_HOSTS，而不是旧的「URL 必须裸 IP」。"""
+        hint = checker.hint_for(Exception("HTTP 421 Invalid Host header"))
+        assert "Host 白名单" in hint
+        assert "MCP_ALLOWED_HOSTS" in hint
+        assert "裸 IP" not in hint

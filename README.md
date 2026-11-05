@@ -34,7 +34,7 @@
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |
 | Google Drive | rclone 直连云端上传论文 PDF | — |
 | 🌐 语雀知识库 | 本机 yuque-mcp 服务（个人栈侧实例；Hermes + 天一接入；**团队服务**，团队侧为服务器独立部署） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
-| 🌐 服务器监控 | 天一接入团队 server-monitoring MCP（HTTPS + Bearer + 内网 CA，12 个只读工具：9 运行 + 3 交付/CI） | [server-monitoring](https://gitcode.com/dlut-water/server-monitoring) |
+| 🌐 服务器监控 | 天一接入团队 server-monitoring MCP（HTTPS + Bearer；校园域名入口走公网证书，内网直连用自签 CA；12 个只读工具：9 运行 + 3 交付/CI） | [server-monitoring](https://gitcode.com/dlut-water/server-monitoring) |
 | 千问办公 AI听记 | 爱玛士远程 MCP（OAuth，仅默认 profile）：听记列表 / AI 摘要 / 待办 / 转写查询与整理 | — |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 + AgentOps 健康采集 | — |
@@ -51,7 +51,7 @@ mylibrary/                 ← Zotero 文献工具（zotero-mcp 源码）
 server-monitoring/         ← 团队监控服务（⚠️ 非构建依赖：天一【运行时消费】其只读 MCP）
     │
     │  前六个通过 Docker volume、build context 或 MCP 接入；
-    │  server-monitoring 在团队内网（10.48.x），只进 URL + CA + token 三样配置
+    │  server-monitoring 在团队内网（10.48.x），只进 URL + token（内网直连另加 CA）
     ▼
 myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     │
@@ -71,9 +71,9 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     └─ uptime-kuma   (服务监控)
 ```
 
-- **两类配合关系**：① **构建/部署依赖**（前六个仓库：源码进 build context、volume mount 或本机 MCP 服务；其中 `zhixun-agent` 是**团队服务**——水文 MCP、知汛背后的能力，服务器侧随知汛栈一起部署）；② **运行时消费**（`server-monitoring`：团队维护的服务端，本仓只做客户端接入——天一通过 HTTPS + Bearer + 内网 CA 调其只读 MCP，12 个工具覆盖服务器/GFS/CI 状态，并每日 08:30 自动推服务器日报）。**服务端不在本仓管理**，详见 [服务器监控 MCP](docs/server-monitoring-mcp.md)
+- **两类配合关系**：① **构建/部署依赖**（前六个仓库：源码进 build context、volume mount 或本机 MCP 服务；其中 `zhixun-agent` 是**团队服务**——水文 MCP、知汛背后的能力，服务器侧随知汛栈一起部署）；② **运行时消费**（`server-monitoring`：团队维护的服务端，本仓只做客户端接入——天一通过 HTTPS + Bearer 调其只读 MCP（校园域名入口走公网证书，内网直连用自签 CA），12 个工具覆盖服务器/GFS/CI 状态，并每日 08:30 自动推服务器日报）。**服务端不在本仓管理**，详见 [服务器监控 MCP](docs/server-monitoring-mcp.md)
 - **所有数据落 `~/.myagentdata/`** — 备份管线自动覆盖
-- **每个仓库独立克隆** — 放在 `~/code/<repo>`，Docker 通过 volume mount 访问（`server-monitoring` 无需克隆，仅需维护者提供的 CA 与 token）
+- **每个仓库独立克隆** — 放在 `~/code/<repo>`，Docker 通过 volume mount 访问（`server-monitoring` 无需克隆，仅需入口 URL 与 token；内网直连再加 CA）
 
 ## 快速开始
 
@@ -188,7 +188,7 @@ myopenclaw/
 - [可移植性](https://ouyangwenyu.github.io/myopenclaw/portability/) — 换电脑需要准备什么
 - [备份系统](https://ouyangwenyu.github.io/myopenclaw/backup/) — 备份内容、恢复流程
 - [语雀知识库接入](https://ouyangwenyu.github.io/myopenclaw/yuque-mcp-hermes/) — Hermes 接入本机语雀 MCP 服务（含每日变更推送 yuque-daily-digest）
-- [服务器监控 MCP](https://ouyangwenyu.github.io/myopenclaw/server-monitoring-mcp/) — 天一接入团队 server-monitoring（只读监控：服务器/容器/GFS；启用、回退与核对 CA）
+- [服务器监控 MCP](https://ouyangwenyu.github.io/myopenclaw/server-monitoring-mcp/) — 天一接入团队 server-monitoring（只读监控：服务器/容器/GFS；两个入口、TLS 信任与回退）
 
 本地预览文档：
 

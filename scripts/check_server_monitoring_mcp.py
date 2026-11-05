@@ -7,7 +7,7 @@
 check_server_monitoring_mcp.py — server-monitoring MCP 只读冒烟检查器
 
 回答「天一 → server-monitoring 这条链路现在通不通」，不经过模型、不改任何状态：
-token 形状 → 内网 CA（正/反两向）→ 证书有效期 → /health/live →
+token 形状 → TLS 信任链（公网证书 / 内网自签 CA 双模式）→ 证书有效期 → /health/live →
 Bearer 鉴权（正/反两向）→ MCP initialize → 12 个工具名（9 运行 + 3 交付）→ 抽查调用。
 
 用法:
@@ -119,8 +119,15 @@ def read_env_file(path: Path) -> dict[str, str]:
     return pairs
 
 
-def resolve_config(args: argparse.Namespace) -> tuple[str, str, Path]:
-    """返回 (mcp_url, token, ca_path)。缺关键项抛 ScriptError。"""
+def resolve_config(args: argparse.Namespace) -> tuple[str, str, Path | None]:
+    """返回 (mcp_url, token, ca_path)。缺关键项抛 ScriptError。
+
+    ca_path 是可选的：
+    - 默认使用随仓库提交的内网 CA（存在时），叠加在系统信任库之上；
+    - 域名入口是公网证书，不需要内网 CA —— 默认 CA 文件不存在时返回 None，
+      走系统信任库（2026-10-30 起支持 <MCP_DOMAIN> 入口）；
+    - 显式 `--ca` 指定的文件不存在 = 配置错误（不静默降级）。
+    """
     env_file = Path(args.env_file).expanduser() if args.env_file else DEFAULT_ENV_FILE
     env = read_env_file(env_file) if env_file.is_file() else {}
 
@@ -139,7 +146,12 @@ def resolve_config(args: argparse.Namespace) -> tuple[str, str, Path]:
         or os.environ.get("MCP_SERVER_MONITORING_TOKEN", "")
     ).strip()
 
-    ca_path = Path(args.ca).expanduser() if args.ca else DEFAULT_CA
+    if args.ca:
+        ca_path: Path | None = Path(args.ca).expanduser()
+        if not ca_path.is_file():
+            raise ScriptError(f"CA 证书不存在: {ca_path}（--ca 指定；仓库内应随 docker/tianyi-bot/ca/ 提供）")
+    else:
+        ca_path = DEFAULT_CA if DEFAULT_CA.is_file() else None
 
     if not url:
         raise ScriptError(
@@ -151,9 +163,54 @@ def resolve_config(args: argparse.Namespace) -> tuple[str, str, Path]:
             f"未配置 token（--token / --token-file / {env_file} 的 "
             "TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN / 进程环境变量）"
         )
-    if url.startswith("https://") and not ca_path.is_file():
-        raise ScriptError(f"CA 证书不存在: {ca_path}（--ca 指定；仓库内应随 docker/tianyi-bot/ca/ 提供）")
     return url, token, ca_path
+
+
+def build_ssl_context(ca_path: Path | None) -> ssl.SSLContext:
+    """系统信任库 + 可选额外 CA。
+
+    ⚠️ `ssl.create_default_context(cafile=...)` 只加载给定文件、**不叠加**系统
+    信任库（与 Node 的 NODE_EXTRA_CA_CERTS 语义相反）。服务器现在有两个合法入口：
+    校园域名（公网证书，系统信任库可验）和内网 IP（自签 CA，需额外加载仓库 CA），
+    同一个上下文必须同时信任两者 —— 所以分两步加载。
+    """
+    context = ssl.create_default_context()
+    if ca_path is not None and ca_path.is_file():
+        context.load_verify_locations(cafile=str(ca_path))
+    return context
+
+
+def evaluate_tls_trust(system_trusted: bool, extra_trusted: bool,
+                       *, certificate_failure: bool = True) -> tuple[bool, str]:
+    """把「端点证书属于哪类信任链」翻译成检查结论（纯函数，供单测）。
+
+    2026-10-30 前的检查器把「不带内网 CA 也能连上」判成失败（自签反证）；
+    域名入口是公网证书，那个反证会误报。新语义：
+    - 系统信任库能验通 → 公网证书，通过；
+    - 系统不认、加载仓库 CA 后能验通 → 内网自签证书，通过；
+    - 两者都不通：若至少一次是证书校验错误 → 证书问题；否则是网络/服务不可达
+      （超时被报成「证书校验失败」会把人引向错误方向）。
+    """
+    if system_trusted:
+        return True, "公网证书：系统信任库直接认可（无需内网 CA）"
+    if extra_trusted:
+        return True, "内网自签证书：系统信任库不认可，加载仓库 CA 后通过"
+    if not certificate_failure:
+        return False, "TLS 连接未建立：网络/服务不可达（不是证书问题）"
+    return False, "证书校验失败：系统信任库与仓库 CA 均不认可"
+
+
+def _is_certificate_error(exc: BaseException) -> bool:
+    """异常树里是否有证书校验错误（URLError 会把它藏在 .reason 里）。"""
+    for leaf in _leaf_exceptions(exc):
+        if isinstance(leaf, ssl.SSLCertVerificationError):
+            return True
+        reason = getattr(leaf, "reason", None)
+        if isinstance(reason, ssl.SSLCertVerificationError):
+            return True
+        if "certificate verify" in str(leaf).lower():
+            return True
+    return False
 
 
 # =============================================================
@@ -207,7 +264,7 @@ def hint_for(exc: Exception) -> str:
         low = text.lower()
         hint = ""
         if "certificate_verify" in low or "sslcertverification" in low:
-            hint = " → TLS 校验失败：CA 不对（--ca / 容器内 NODE_EXTRA_CA_CERTS）"
+            hint = " → TLS 校验失败：证书链不被系统信任库 / 仓库 CA 认可（域名入口用公网证书；内网直连需 --ca）"
         elif "401" in text or "unauthorized" in low:
             hint = " → 鉴权失败：token 不对，或 Authorization header 没送达"
         elif "refused" in low or "connecterror" in low or "all connection attempts" in low:
@@ -215,7 +272,7 @@ def hint_for(exc: Exception) -> str:
         elif "timed out" in low or "timeout" in low:
             hint = " → 超时：网络路径不通或服务卡住"
         elif "421" in text:
-            hint = " → Host 白名单拒绝：URL 必须是裸 IP:port（不能走别名/代理）"
+            hint = " → Host 白名单拒绝：服务端 MCP_ALLOWED_HOSTS 未包含该 Host（域名入口需由维护者显式加入；客户端无法用 headers 绕过）"
         elif "redirect" in low or "moved" in low:
             hint = " → 重定向：URL 可能少了 /mcp 路径"
         if hint and hint not in hints:
@@ -246,37 +303,51 @@ def check_health_live(base: str, context: ssl.SSLContext, checks: list[dict]) ->
         record(checks, "health_live", False, f"GET /health/live 失败: {type(exc).__name__}{hint_for(exc)}")
 
 
-def check_tls_requires_internal_ca(base: str, checks: list[dict]) -> None:
-    """反证：**不**带内网 CA 时连接必须被拒绝。
+def check_tls_trust(base: str, ca_path: Path | None, checks: list[dict]) -> None:
+    """判定端点证书属于哪类信任链，并验证当前上下文能验通。
 
-    如果默认信任库就能连上，说明这个端点根本不是内网自签证书（连错环境？CA 撤了？）
-    —— 那 NODE_EXTRA_CA_CERTS / --ca 这套配置就没有意义，值得当面说清。
+    两种合法端点（2026-10-30 起）：
+    - 校园域名入口 `<MCP_DOMAIN>:8765`：BunkerWeb 终结 TLS，公网
+      TrustAsia 证书 —— 系统信任库直接认可，不再需要内网 CA；
+    - 内网直连 `10.48.0.81:8765`：内网自签 CA —— 系统信任库不认可，需加载仓库 CA。
+
+    旧检查器的「不带内网 CA 必须失败」反证只在自签端点成立，域名入口会误报；
+    这里改为「系统信任库不行就再试仓库 CA」的双模式判定。
     """
+    system_ok = False
+    extra_ok = False
+    system_detail = ""
+    extra_detail = ""
+    cert_failure = False
+
     try:
-        with urllib.request.urlopen(f"{base}/health/live",
-                                    context=ssl.create_default_context(),
-                                    timeout=HTTP_TIMEOUT) as resp:
-            status = resp.status
-        record(checks, "tls_ca_required", False,
-               f"不带内网 CA 也连上了（HTTP {status}）—— 端点证书看来被默认信任库认可，请人工确认目标环境")
-    except ssl.SSLCertVerificationError as exc:
-        record(checks, "tls_ca_required", True, f"不带内网 CA 被正确拒绝（{exc.verify_message or 'certificate verify failed'}）")
-    except urllib.error.URLError as exc:
-        reason = exc.reason
-        if isinstance(reason, ssl.SSLCertVerificationError):
-            record(checks, "tls_ca_required", True, f"不带内网 CA 被正确拒绝（{reason.verify_message or 'certificate verify failed'}）")
-        else:
-            record(checks, "tls_ca_required", False, f"非证书类失败，无法判定: {type(reason).__name__}{hint_for(exc)}")
-    except Exception as exc:  # noqa: BLE001
-        record(checks, "tls_ca_required", False, f"{type(exc).__name__}{hint_for(exc)}")
+        status = http_get(f"{base}/health/live", ssl.create_default_context())
+        system_ok = status == 200
+        system_detail = f"系统信任库 → HTTP {status}"
+    except Exception as exc:  # noqa: BLE001 - 两类失败都要尝试，不在这里判死
+        cert_failure = cert_failure or _is_certificate_error(exc)
+        system_detail = f"系统信任库失败: {type(exc).__name__}{hint_for(exc)}"
+
+    if not system_ok and ca_path is not None:
+        try:
+            status = http_get(f"{base}/health/live", build_ssl_context(ca_path))
+            extra_ok = status == 200
+            extra_detail = f"仓库 CA → HTTP {status}"
+        except Exception as exc:  # noqa: BLE001
+            cert_failure = cert_failure or _is_certificate_error(exc)
+            extra_detail = f"仓库 CA 失败: {type(exc).__name__}{hint_for(exc)}"
+
+    ok, verdict = evaluate_tls_trust(system_ok, extra_ok, certificate_failure=cert_failure)
+    detail_parts = [part for part in (system_detail, extra_detail) if part]
+    record(checks, "tls_trust", ok, f"{verdict}（{'；'.join(detail_parts)}）")
 
 
-def check_cert_expiry(base: str, ca_path: Path, checks: list[dict]) -> None:
+def check_cert_expiry(base: str, ca_path: Path | None, checks: list[dict]) -> None:
     parsed = urlparse(base)
     host = parsed.hostname or ""
     port = parsed.port or 443
     try:
-        ctx = ssl.create_default_context(cafile=str(ca_path))
+        ctx = build_ssl_context(ca_path)
         with socket.create_connection((host, port), timeout=HTTP_TIMEOUT) as sock:
             with ctx.wrap_socket(sock, server_hostname=host) as ssock:
                 cert = ssock.getpeercert()
@@ -330,7 +401,7 @@ def summarize(payload: object, limit: int = 300) -> str:
     return text if len(text) <= limit else text[:limit] + "…"
 
 
-async def check_mcp(url: str, token: str, ca_path: Path, server_name: str,
+async def check_mcp(url: str, token: str, ca_path: Path | None, server_name: str,
                     checks: list[dict], use_tls: bool) -> None:
     import httpx2
     from mcp import ClientSession
@@ -338,7 +409,7 @@ async def check_mcp(url: str, token: str, ca_path: Path, server_name: str,
 
     client = httpx2.AsyncClient(
         headers={"Authorization": f"Bearer {token}"},
-        verify=str(ca_path) if use_tls else True,
+        verify=build_ssl_context(ca_path) if use_tls else True,
         timeout=httpx2.Timeout(30.0, read=120.0),
     )
     try:
@@ -384,7 +455,8 @@ async def check_mcp(url: str, token: str, ca_path: Path, server_name: str,
 
 def emit_human(checks: list[dict], meta: dict) -> None:
     print("=== server-monitoring MCP 冒烟检查 ===")
-    print(f"  端点: {meta['url']}（token 长度 {meta['token_length']}，CA: {meta['ca']}）")
+    ca_label = meta["ca"] or "系统信任库（公网证书）"
+    print(f"  端点: {meta['url']}（token 长度 {meta['token_length']}，CA: {ca_label}）")
     print()
     for check in checks:
         mark = "✅" if check["ok"] else "❌"
@@ -418,7 +490,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--url", help="覆盖 MCP URL（默认读 env 文件）")
     parser.add_argument("--token", help="覆盖 token（默认读 env 文件；⚠️ 会进 shell 历史，优先用 --token-file）")
     parser.add_argument("--token-file", help="从文件读取 token（首尾空白会被去掉）")
-    parser.add_argument("--ca", help=f"内网 CA 证书（默认 {DEFAULT_CA}）")
+    parser.add_argument("--ca", help=f"额外 CA 证书（默认 {DEFAULT_CA}；公网证书端点可不填）")
     parser.add_argument("--server", default="weather", help="抽查状态的服务器名（默认 weather）")
     parser.add_argument("--json", action="store_true", help="JSON 输出（适合 cron/监控）")
     return parser
@@ -433,7 +505,7 @@ def main() -> int:
         return 2
 
     use_tls = url.startswith("https://")
-    context = ssl.create_default_context(cafile=str(ca_path)) if use_tls else None
+    context = build_ssl_context(ca_path) if use_tls else None
     parsed = urlparse(url)
     base = f"{parsed.scheme}://{parsed.netloc}"
 
@@ -441,7 +513,7 @@ def main() -> int:
     check_token_shape(token, checks)
     if use_tls:
         check_health_live(base, context, checks)
-        check_tls_requires_internal_ca(base, checks)
+        check_tls_trust(base, ca_path, checks)
         check_cert_expiry(base, ca_path, checks)
         check_auth(base, context, token, checks)
     else:
@@ -457,7 +529,7 @@ def main() -> int:
         "url": url,
         "server": args.server,
         "token_length": len(token),
-        "ca": str(ca_path),
+        "ca": str(ca_path) if ca_path is not None else None,
     }
     (emit_json if args.json else emit_human)(checks, meta)
     return 1 if any(not c["ok"] for c in checks) else 0

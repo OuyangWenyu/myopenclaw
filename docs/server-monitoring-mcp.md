@@ -5,14 +5,34 @@
 「zhixun-core 最近一次构建怎么样」。
 
 服务端是团队项目（[gitcode.com/dlut-water/server-monitoring](https://gitcode.com/dlut-water/server-monitoring)），
-部署在 `10.48.0.81`，**只读**。本仓只做**客户端接入**：一个可选 MCP 注册、内网 CA、守卫与本文档。
+部署在 `10.48.0.81`，**只读**。本仓只做**客户端接入**：一个可选 MCP 注册、TLS 信任配置、守卫与本文档。
 不改服务端、不做 81 独立部署（见文末 Phase 2 预案）。
+
+**两个客户端入口**（2026-10-30 起）：
+
+| 入口 | URL | TLS | 前置条件 |
+|---|---|---|---|
+| **校园域名（推荐）** | `https://<MCP_DOMAIN>:8765/mcp` | BunkerWeb 终结，公网通配符证书（TrustAsia） | 校园网可达即可；**无需 UniVPN / 内网 CA** |
+| 内网直连 | `https://10.48.0.81:8765/mcp` | 内网自签 CA | 需 UniVPN；容器经 `NODE_EXTRA_CA_CERTS` 加载仓库 CA |
+
+域名入口的 Host 白名单问题见服务端 issue
+[#5](https://gitcode.com/dlut-water/server-monitoring/issues/5)（`MCP_ALLOWED_HOSTS`
+需显式包含 `<MCP_DOMAIN>:8765`；客户端无法靠 headers 绕过——`Host`
+是 Fetch 规范的 forbidden header）。
+
+> 公开仓库不写真实域名/入口 IP：本文用 `<MCP_DOMAIN>` / `<入口 IP>` 占位，
+> 真实值以本地 gitignored `.env.tianyi-bot` 或维护者提供为准。
 
 ## 拓扑
 
 ```
 天一容器（openclaw-tianyi）
-  │  HTTPS + Bearer token + 内网自签 CA（NODE_EXTRA_CA_CERTS）
+  │  HTTPS + Bearer token
+  │  入口一：<MCP_DOMAIN>:8765（公网证书，系统信任库）
+  │  入口二：10.48.0.81:8765（内网自签 CA，NODE_EXTRA_CA_CERTS）
+  ▼
+BunkerWeb（仅域名入口）      TLS 终结 → http://10.48.0.81:8765
+  │
   ▼
 server-monitoring MCP        weather / 10.48.0.81:8765（Streamable HTTP, stateless, 12 个只读工具：9 运行 + 3 交付）
   │
@@ -40,14 +60,16 @@ server-monitoring MCP        weather / 10.48.0.81:8765（Streamable HTTP, statel
 | 项 | 从哪来（服务器 10.48.0.81） | 放哪 |
 |---|---|---|
 | Bearer token | 服务器维护者私有目录 `.config/server-monitoring-mcp/auth_token`（找团队维护者要） | **只**进 gitignored 的 `.env.tianyi-bot`（`TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN`）；不进仓库、不进渲染产物、不进聊天记录 |
-| 内网 CA 证书（公钥材料） | 同目录 `ca.crt`（签发 MCP 服务器证书的私有 CA） | 随仓库提交：`docker/tianyi-bot/ca/server-monitoring-ca.pem` |
+| 内网 CA 证书（公钥材料） | 同目录 `ca.crt`（签发 MCP 服务器证书的私有 CA） | 随仓库提交：`docker/tianyi-bot/ca/server-monitoring-ca.pem`；**仅内网直连需要**，域名入口用系统信任库 |
 
 - token 是**全客户端共用的服务端凭据**，轮换要与维护者协调 —— 本仓无法自助轮换（与本机
   yuque-mcp「每客户端一份 key」的模式不同）。
 - CA 是公钥材料，提交进**公开仓库**也没有泄密风险（公钥只能验证签名、不能制造签名）；
   **私钥绝不进仓库**（`tests/test_server_monitoring_mcp.py` 里有断言）。服务端的 CA 私钥
   已在签发后移除，续期需要 CA rollover 规划（见「已知约束」）。
-- 核对仓库里的 CA 与线上一致：
+- 域名入口的证书是公网 TrustAsia 证书，Node 默认信任库直接认可；容器仍会加载仓库内 CA
+  （`NODE_EXTRA_CA_CERTS` 是**追加**语义，不影响公网证书校验，也保留了直连回退能力）。
+- 核对内网直连的仓库 CA 与线上一致：
 
 ```bash
 openssl s_client -connect 10.48.0.81:8765 \
@@ -60,7 +82,10 @@ openssl s_client -connect 10.48.0.81:8765 \
 
 ```bash
 # 1. .env.tianyi-bot 加两行（或从注释块取消注释）
-TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://10.48.0.81:8765/mcp
+#    推荐用校园域名入口（公网证书，无需 VPN）：
+TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://<MCP_DOMAIN>:8765/mcp
+#    内网直连回退（需 UniVPN，容器自动加载仓库 CA）：
+# TIANYI_BOT_SERVER_MONITORING_MCP_URL=https://10.48.0.81:8765/mcp
 TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN=<找维护者要>
 
 # 2. 启动（预检会拦「URL 非空而 token 空」）
@@ -86,7 +111,8 @@ docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml \
 - **三道 fail-loud**（都是刻意设计，静默降级比报错难查得多）：
   1. `render-config.mjs`：URL 非空而 token 空 → 抛错，容器起不来；
   2. `entrypoint.sh`：URL 非空而容器内 CA 缺失 → 中文报错 + exit 1
-     （node 对缺失的 `NODE_EXTRA_CA_CERTS` 文件也是静默的，所以这层显式检查是唯一防线）；
+     （node 对缺失的 `NODE_EXTRA_CA_CERTS` 文件也是静默的，所以这层显式检查是唯一防线。
+     域名入口本身不需要内网 CA，但 CA 随仓库提供、直连回退还要用，因此不做「按入口豁免」）；
   3. `start-tianyi-bot.sh`：同样预检 —— `compose up` 对 crash-loop 返回 0，这层最早发现。
 - 监控不可用**不影响天一其它能力**：工具报错时如实回复「连不上/未知」，repo-scanner、语雀照常。
 
@@ -124,12 +150,12 @@ ID 不变——改本仓后重启自动更新）。门控与排期：
   （2026-10-14 实测踩过；取法见 `.env.tianyi-bot.example` 注释）；
 - 排期默认 `30 8 * * *`（Asia/Shanghai），`TIANYI_BOT_MONITORING_DIGEST_CRON` 可改，
   设 `off` 显式关闭；
-- ⚠️ 本机（Mac）推送时需 UniVPN 在线（断线时会如实报"取数失败"——这也是监控信号）；
-  部署到内网服务器后无此约束。
+- ⚠️ 入口可达性：域名入口在校园网可达时无需 UniVPN；回退到内网直连才需要 UniVPN。
+  入口不可达时如实报"取数失败"——这也是监控信号；部署到内网服务器后无此约束。
 
 **拉起即有**：本地 `./scripts/start-tianyi-bot.sh` 或将来服务器上直接拉起，automation
-自动就位。本脚本（`server_monitoring_summary.py`）的定位是**验收证据 / 连着 UniVPN
-的电脑上的随手查 / 部署参考实现**——与推送自动化是两条独立路径，互不依赖。
+自动就位。本脚本（`server_monitoring_summary.py`）的定位是**验收证据 / 入口可达时的
+随手查 / 部署参考实现**——与推送自动化是两条独立路径，互不依赖。
 
 `--json` 顶层键（下游消费契约）：`generated_at` / `overall{headline, alerts_firing,
 unknown_projects, servers_total, projects_total}` / `servers[]` / `prometheus` / `gfs` /
@@ -151,10 +177,10 @@ uv run scripts/server_monitoring_summary.py --json     # 结构化（含 complet
 | 症状 | 含义 | 处置 |
 |---|---|---|
 | 401 Unauthorized | token 不对，或 Authorization header 没送达 | 先核 `.env.tianyi-bot`；token 确定正确仍 401 → 见下条「header 通道」 |
-| TLS 校验失败 | CA 不对 / 容器内 `NODE_EXTRA_CA_CERTS` 未生效 | 核对仓库 CA 与 `compose config` 里 `NODE_EXTRA_CA_CERTS` 的值 |
-| ENOTFOUND / 连接超时 | 容器到 `10.48.0.81` 网络不通 | 检查网络与出口 |
-| redirect | URL 少了 `/mcp` | URL 必须 `https://10.48.0.81:8765/mcp` |
-| 421 Misdirected | Host 白名单拒绝 | URL 必须是**裸 IP:port** —— 服务端 `MCP_ALLOWED_HOSTS` 钉死，不能走 DNS 别名/反代 |
+| TLS 校验失败 | 证书链不被系统信任库 / 仓库 CA 认可 | 域名入口查公网证书与系统时间；内网直连核仓库 CA 与 `compose config` 的 `NODE_EXTRA_CA_CERTS` |
+| ENOTFOUND / 连接超时 | 容器到入口网络不通 | 域名入口查校园网/DNS（`<入口 IP>`）；内网直连查 UniVPN 与 `10.48.0.81` |
+| redirect | URL 少了 `/mcp` | URL 必须带 `/mcp` |
+| 421 Misdirected / Invalid Host header | 服务端 `MCP_ALLOWED_HOSTS` 未包含该 Host | 域名入口需维护者把 `<MCP_DOMAIN>:8765` 加入白名单（issue #5）；客户端无法用 headers 绕过（`Host` 是 forbidden header） |
 
 ## 已知约束
 
@@ -167,10 +193,15 @@ uv run scripts/server_monitoring_summary.py --json     # 结构化（含 complet
   服务端统一汇报计划中的 `get_progress_report` / `get_report_item` / `get_evidence`
   （按时间范围汇总、事项统计与持久化追问）**尚未上线**——上线并以真实数据验收后再评估
   是否纳入，本仓不预接入。
-- 证书有效期：MCP 叶子证书到 **2027-10-30**；CA 私钥签发后已移除 ⇒ 续期 = CA rollover +
-  换服务端证书 + 同步本仓 `ca/server-monitoring-ca.pem`（检查器会报剩余天数）。
-- TLS 信任是**进程级**的：`NODE_EXTRA_CA_CERTS` 对整个 gateway 的出站 TLS 生效。仅在启用时
-  生效（URL 门控），且信任对象是团队自己的内网 CA —— 这是接受的取舍。
+- 证书有效期：内网自签叶子证书到 **2027-10-30**（直连入口）；域名入口是 BunkerWeb 的
+  公网通配符证书，由团队维护、自动续期。检查器会报所连入口的叶子证书剩余天数。
+  CA 私钥签发后已移除 ⇒ 内网直连续期 = CA rollover + 换服务端证书 + 同步本仓
+  `ca/server-monitoring-ca.pem`。
+- TLS 信任是**进程级**的：`NODE_EXTRA_CA_CERTS` 对整个 gateway 的出站 TLS 生效，且是
+  **追加**语义（不替换系统信任库）。仅在启用时生效（URL 门控）；域名入口走系统信任库，
+  内网直连才依赖仓库 CA —— 这是接受的取舍。
+- 域名入口依赖服务端 `MCP_ALLOWED_HOSTS` 包含 `<MCP_DOMAIN>:8765`（issue #5）。
+  这是服务端部署项，客户端改配置无法绕过；入口新增/换域名必须同步白名单。
 - 服务端 readiness 与 metadata 路由要求授权；`/health/live` 公开。日志不含凭据与工具响应。
 
 ## Phase 2：81 独立部署预案（本期不做）
@@ -187,6 +218,22 @@ uv run scripts/server_monitoring_summary.py --json     # 结构化（含 complet
 ## 验收记录
 
 Mac 主栈验收完成后在此追加带日期的记录（先例：`docs/zhixun-mcp-acceptance-20260928.md`）。
+
+### 2026-10-30 切换到校园域名入口（对应 server-monitoring issue #5）
+
+| 项 | 结果 |
+|---|---|
+| 客户端配置 | 已改为 `https://<MCP_DOMAIN>:8765/mcp`（公网证书） |
+| 检查器 TLS 双模式 | ✅ 纯函数单测通过：系统信任库（公网证书）/ 仓库 CA（内网自签）双模式；421 提示指向服务端 `MCP_ALLOWED_HOSTS` |
+| 渲染/守卫 | ✅ URL 门控、token 运行时展开、CA 追加语义不变 |
+| 端点可达性（恢复后复测） | ✅ 维护者恢复入口后：`GET /health/live` → HTTP 200；TCP 8765 可连；证书为公网 **TrustAsia** 证书（有效期至 2026-12-29，剩 60 天） |
+| 检查器全量 | ✅ **全部检查项通过（9/9）、exit 0**：token 形状 / health / TLS 公网证书 / 证书有效期 / 401 反证 / 正确 token / **12/12 工具** / `list_servers` 真实数据 / `get_server_status(weather)` 真实数据 |
+| 总结获取器 | ✅ **20/20 调用全部成功**、exit 0（2 服务器 + Prometheus 7/7 + GFS + 13 项目） |
+| 每日 08:30 日报 | ✅ 手动触发 `cron run` → 生成并**投递飞书成功**（`delivered=true`）；明天 08:30 起按计划自动执行 |
+
+恢复前的排查记录（保留作证据）：10:00 前从校园有线客户端与容器内均无法建立 TCP
+（`<MCP_DOMAIN>` → `<入口 IP>`，443/8765 超时；DNS 经阿里/Cloudflare DoH 一致）。
+已在 issue #5 留言请维护者确认白名单与入口状态；维护者恢复后 10:14 复测全绿。
 
 ### 2026-10-14 Mac 主栈（天一 × server-monitoring，对应 issue #3 验收清单）
 

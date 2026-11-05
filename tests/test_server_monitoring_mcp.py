@@ -1,7 +1,7 @@
 """server-monitoring MCP 接入守卫：CA / 模板 / 渲染器 / compose / entrypoint / env 模板 / node 语义七处联动。
 
-拓扑（详见 docs/server-monitoring-mcp.md）：天一容器 → TLS（内网自签 CA）+ Bearer →
-`https://10.48.0.81:8765/mcp`。链路里**每一处漏了都不报错，只会安静地不工作**：
+拓扑（详见 docs/server-monitoring-mcp.md）：天一容器 → HTTPS + Bearer → 校园域名入口
+（公网证书）或内网直连（自签 CA）。链路里**每一处漏了都不报错，只会安静地不工作**：
 
 - CA 文件缺失：node 实测**静默忽略** ``NODE_EXTRA_CA_CERTS``（空值、缺失、坏文件都不告警）
   —— 症状是启用态下所有监控工具 TLS 报错，而启动日志干干净净。所以容器里有 entrypoint 显式守卫。
@@ -21,6 +21,7 @@ import shutil
 import ssl
 import subprocess
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 
@@ -43,6 +44,22 @@ CA_CONTAINER_PATH = "/opt/tianyi-bot/ca/server-monitoring-ca.pem"
 URL_VAR = "TIANYI_BOT_SERVER_MONITORING_MCP_URL"
 TOKEN_VAR = "TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN"
 NODE = shutil.which("node")
+
+
+def _live_monitoring_host() -> str | None:
+    """从 gitignored 的 `.env.tianyi-bot` 读取真实入口主机名（用于隐私守卫）。
+
+    公开仓库里不写真实域名/IP；测试在本地读 live 配置，断言这些值没有
+    被误写进公开文档。CI/新机器没有 `.env.tianyi-bot` 时跳过该守卫。
+    """
+    env_file = REPO_ROOT / ".env.tianyi-bot"
+    if not env_file.is_file():
+        return None
+    for line in env_file.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("TIANYI_BOT_SERVER_MONITORING_MCP_URL="):
+            value = line.split("=", 1)[1].strip()
+            return urlparse(value).hostname or None
+    return None
 
 # 渲染器的必需环境变量（与 tests/test-bot-rendered-config.sh 的 tianyi spec 同源）
 BASE_ENV = {
@@ -140,13 +157,13 @@ class TestRendererStates:
     def test_url_set_keeps_entry_and_never_renders_token(self, tmp_path):
         token = "tok-" + "a" * 40
         proc, out = render(tmp_path, {
-            "TIANYI_BOT_SERVER_MONITORING_MCP_URL": "https://10.48.0.81:8765/mcp",
+            "TIANYI_BOT_SERVER_MONITORING_MCP_URL": "https://mcp.example.com:8765/mcp",
             "TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN": token,
         })
         assert proc.returncode == 0, proc.stderr
         raw = out.read_text()
         entry = json.loads(raw)["mcp"]["servers"]["server-monitoring"]
-        assert entry["url"] == "https://10.48.0.81:8765/mcp"
+        assert entry["url"] == "https://mcp.example.com:8765/mcp"
         # 字节级不变 = 渲染器没有展开 ${VAR}（展开发生在 OpenClaw 运行时）
         assert entry["headers"]["authorization"] == "Bearer ${MCP_SERVER_MONITORING_TOKEN}"
         assert token not in raw, "token 绝不能出现在渲染产物里（配置文件会被备份、进快照）"
@@ -155,7 +172,7 @@ class TestRendererStates:
     def test_url_without_token_fails_loud(self, tmp_path):
         """URL 非空而 token 空 → 非零退出。静默降级成"每次 401"才是最难查的。"""
         proc, out = render(tmp_path, {
-            "TIANYI_BOT_SERVER_MONITORING_MCP_URL": "https://10.48.0.81:8765/mcp",
+            "TIANYI_BOT_SERVER_MONITORING_MCP_URL": "https://mcp.example.com:8765/mcp",
             "TIANYI_BOT_MCP_SERVER_MONITORING_TOKEN": "",
         })
         assert proc.returncode != 0
@@ -492,3 +509,32 @@ class TestToolSurfaceAlignment:
         assert "12 个只读工具" in README_MD
         assert "12 个只读工具" in CLAUDE_MD
         assert "9 工具" not in CLAUDE_MD, "旧「9 工具」表述必须清除（含命令注释里的简写）"
+
+    def test_docs_describe_the_campus_domain_entry(self):
+        """2026-10-30：客户端切到校园域名入口。文档必须同时写清两个入口、
+        公网证书与内网 CA 的区别、以及服务端 Host 白名单依赖（issue #5）——
+        只写「URL 改了」会让排障的人继续按自签 CA 的方向查。"""
+        assert "<MCP_DOMAIN>" in MONITORING_DOC
+        assert "公网证书" in MONITORING_DOC
+        assert "10.48.0.81" in MONITORING_DOC, "内网直连回退入口仍要保留说明"
+        assert "MCP_ALLOWED_HOSTS" in MONITORING_DOC
+
+    def test_env_example_offers_both_entrypoints_without_real_ip(self):
+        assert "<MCP_DOMAIN>" in ENV_EXAMPLE
+        assert "<MCP_HOST>" in ENV_EXAMPLE
+        assert "10.48.0.81" not in ENV_EXAMPLE, "公开模板不得含真实内网地址"
+
+    def test_public_surfaces_do_not_hardcode_live_entry(self):
+        """2026-10-30 隐私收口：真实校园域名只留在 gitignored `.env.tianyi-bot`；
+        公开文档与模板一律用占位符。真实值不在测试源码里重复一遍，而是从
+        live env 读取后再断言它没有出现在公开面（无 live env 时跳过）。"""
+        live_host = _live_monitoring_host()
+        if not live_host:
+            pytest.skip("无 .env.tianyi-bot（CI/新机器）——跳过 live 入口隐私守卫")
+        for label, text in (
+            ("docs/server-monitoring-mcp.md", MONITORING_DOC),
+            ("CLAUDE.md", CLAUDE_MD),
+            ("README.md", README_MD),
+            (".env.tianyi-bot.example", ENV_EXAMPLE),
+        ):
+            assert live_host not in text, f"{label} 不得硬编码真实校园域名（用 <MCP_DOMAIN>）"
