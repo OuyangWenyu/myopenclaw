@@ -34,7 +34,7 @@
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |
 | Google Drive | rclone 直连云端上传论文 PDF | — |
 | 🌐 语雀知识库 | 本机 yuque-mcp 服务（个人栈侧实例；Hermes + 天一接入；**团队服务**，团队侧为服务器独立部署） | [yuque_mcp_server](https://gitcode.com/dlut-water/yuque_mcp_server) |
-| 🌐 服务器监控 | 天一接入团队 server-monitoring MCP（HTTPS + Bearer + 内网 CA，12 个只读工具：9 运行 + 3 交付/CI） | [server-monitoring](https://gitcode.com/dlut-water/server-monitoring) |
+| 🌐 服务器监控 | 爱玛士/爱码士 + 天一按需接入团队 server-monitoring MCP；爱玛士每日私聊、爱码士每日预报系统群（HTTPS + Bearer；12+ 只读工具） | [server-monitoring](https://gitcode.com/dlut-water/server-monitoring) |
 | 千问办公 AI听记 | 爱玛士远程 MCP（OAuth，仅默认 profile）：听记列表 / AI 摘要 / 待办 / 转写查询与整理 | — |
 | 云端备份 | 定时 rsync + sqlite3 热备 → 云盘（Google Drive / OneDrive） | — |
 | 服务监控 | Uptime Kuma 面板 + Healthchecks.io 死士开关 + AgentOps 健康采集 | — |
@@ -71,7 +71,7 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     └─ uptime-kuma   (服务监控)
 ```
 
-- **两类配合关系**：① **构建/部署依赖**（前六个仓库：源码进 build context、volume mount 或本机 MCP 服务；其中 `zhixun-agent` 是**团队服务**——水文 MCP、知汛背后的能力，服务器侧随知汛栈一起部署）；② **运行时消费**（`server-monitoring`：团队维护的服务端，本仓只做客户端接入——天一通过 HTTPS + Bearer + 内网 CA 调其只读 MCP，12 个工具覆盖服务器/GFS/CI 状态，并每日 08:30 自动推服务器日报）。**服务端不在本仓管理**，详见 [服务器监控 MCP](docs/server-monitoring-mcp.md)
+- **两类配合关系**：① **构建/部署依赖**（前六个仓库：源码进 build context、volume mount 或本机 MCP 服务；其中 `zhixun-agent` 是**团队服务**——水文 MCP、知汛背后的能力，服务器侧随知汛栈一起部署）；② **运行时消费**（`server-monitoring`：团队维护的服务端，本仓只做客户端接入——爱玛士/爱码士/天一通过 HTTPS + Bearer 调其只读 MCP，12+ 工具覆盖服务器/GFS/CI 状态；爱玛士每日 08:30 推飞书私聊、爱码士推预报系统群，天一保留按需查询）。**服务端不在本仓管理**，详见 [服务器监控 MCP](docs/server-monitoring-mcp.md)
 - **所有数据落 `~/.myagentdata/`** — 备份管线自动覆盖
 - **每个仓库独立克隆** — 放在 `~/code/<repo>`，Docker 通过 volume mount 访问（`server-monitoring` 无需克隆，仅需维护者提供的 CA 与 token）
 

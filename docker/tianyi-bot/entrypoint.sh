@@ -159,6 +159,10 @@ node /app/openclaw.mjs config validate
 # 镜像内证据），所以 URL 清空 / DIGEST_CRON=off 时这里按 declaration-key 找到并
 # cron rm（cron rm 只吃 id，经 cron-job-id.mjs 提取）。全程后台等网关健康再动作，
 # 绝不阻塞启动；缺 OWNER id 只警告（推给谁是必要输入）。
+#
+# 2026-11-05：私聊之外可选同步到飞书群（TIANYI_BOT_MONITORING_DIGEST_CHAT_ID）。
+# 群聊是**独立 automation / 独立 agent 回合**，与私聊日报内容相近但不保证逐字一致；
+# 两条 job 各有独立的 lastDeliveryStatus，群发送失败不会静默影响私聊。
 wait_gateway_healthy() {
   i=0
   until curl -fsS http://127.0.0.1:18792/healthz >/dev/null 2>&1; do
@@ -169,57 +173,74 @@ wait_gateway_healthy() {
   return 0
 }
 
+digest_cron="${TIANYI_BOT_MONITORING_DIGEST_CRON:-30 8 * * *}"
+digest_group_chat="${TIANYI_BOT_MONITORING_DIGEST_CHAT_ID:-}"
+digest_message="【服务器日报】请用 server-monitoring 工具汇总当前服务器整体情况（服务器状态与告警 / Prometheus 目标 / GFS 流水线 / 各项目运行时与最近构建），按证据纪律如实报告：UNKNOWN≠健康、缺失≠0；先给结论与需要关注的异常，再给细节，全文控制在 400 字内。"
+
 find_digest_job_id() {
   node /app/openclaw.mjs cron list --all --json 2>/dev/null \
-    | node /opt/tianyi-bot/cron-job-id.mjs tianyi-monitoring-daily
+    | node /opt/tianyi-bot/cron-job-id.mjs "$1"
 }
 
-digest_cron="${TIANYI_BOT_MONITORING_DIGEST_CRON:-30 8 * * *}"
+remove_digest_job() {  # $1=declaration key  $2=人类可读标签
+  job_id="$(find_digest_job_id "$1")"
+  if [ -z "${job_id}" ]; then
+    return 0
+  fi
+  if node /app/openclaw.mjs cron rm "${job_id}" >/dev/null 2>&1; then
+    echo "🗑️ $2：既有 automation 已回收（id=${job_id}）"
+  else
+    echo "⚠️ $2：回收失败（id=${job_id}），下次启动重试"
+  fi
+}
+
+add_digest_job() {  # $1=name  $2=declaration key  $3=target  $4=人类可读标签
+  if out=$(node /app/openclaw.mjs cron add \
+    --name "$1" \
+    --declaration-key "$2" \
+    --cron "${digest_cron}" --tz Asia/Shanghai \
+    --message "${digest_message}" \
+    --channel feishu --to "$3" --announce 2>&1); then
+    echo "✅ $4 automation 就位（${digest_cron} Asia/Shanghai）"
+  else
+    echo "❌ $4 automation 创建失败：${out}"
+  fi
+}
+
+digest_enabled=0
 if [ -n "${TIANYI_BOT_SERVER_MONITORING_MCP_URL:-}" ]; then
   if [ "${digest_cron}" = "off" ]; then
-    (
-      wait_gateway_healthy || { echo "⚠️ 每日监控摘要：等待网关健康超时，回收跳过（重启后重试）"; exit 0; }
-      job_id="$(find_digest_job_id)"
-      if [ -n "${job_id}" ]; then
-        if node /app/openclaw.mjs cron rm "${job_id}" >/dev/null 2>&1; then
-          echo "🗑️ 每日监控摘要：已显式关闭（DIGEST_CRON=off），既有 automation 已回收"
-        else
-          echo "⚠️ 每日监控摘要：回收失败（id=${job_id}），下次启动重试"
-        fi
-      else
-        echo "⏰ 每日监控摘要：已显式关闭（DIGEST_CRON=off），无既有 automation"
-      fi
-    ) &
-  elif [ -z "${TIANYI_BOT_OWNER_OPEN_ID:-}" ]; then
-    echo "⚠️ 每日监控摘要未声明：缺 TIANYI_BOT_OWNER_OPEN_ID（推给谁？）—— 其它能力不受影响"
+    digest_enabled=0
   else
-    (
-      wait_gateway_healthy || { echo "⚠️ 每日监控摘要：等待网关健康超时，本次跳过（重启后幂等重试）"; exit 0; }
-      if out=$(node /app/openclaw.mjs cron add \
-        --name server-monitoring-daily \
-        --declaration-key tianyi-monitoring-daily \
-        --cron "${digest_cron}" --tz Asia/Shanghai \
-        --message "【服务器日报】请用 server-monitoring 工具汇总当前服务器整体情况（服务器状态与告警 / Prometheus 目标 / GFS 流水线 / 各项目运行时与最近构建），按证据纪律如实报告：UNKNOWN≠健康、缺失≠0；先给结论与需要关注的异常，再给细节，全文控制在 400 字内。" \
-        --channel feishu --to "${TIANYI_BOT_OWNER_OPEN_ID}" --announce 2>&1); then
-        echo "✅ 每日监控摘要 automation 就位（${digest_cron} Asia/Shanghai）"
-      else
-        echo "❌ 每日监控摘要 automation 创建失败：${out}"
-      fi
-    ) &
+    digest_enabled=1
   fi
-else
-  (
-    wait_gateway_healthy || { echo "⚠️ 每日监控摘要：等待网关健康超时，回收跳过（重启后重试）"; exit 0; }
-    job_id="$(find_digest_job_id)"
-    if [ -n "${job_id}" ]; then
-      if node /app/openclaw.mjs cron rm "${job_id}" >/dev/null 2>&1; then
-        echo "🗑️ 每日监控摘要：监控未启用（URL 为空），既有 automation 已回收"
-      else
-        echo "⚠️ 每日监控摘要：回收失败（id=${job_id}），下次启动重试"
-      fi
-    fi
-  ) &
 fi
+
+(
+  wait_gateway_healthy || { echo "⚠️ 每日监控摘要：等待网关健康超时，本次跳过（重启后幂等重试）"; exit 0; }
+
+  if [ "${digest_enabled}" = "0" ]; then
+    remove_digest_job tianyi-monitoring-daily "每日监控摘要"
+    remove_digest_job tianyi-monitoring-daily-group "每日监控摘要（群聊）"
+    echo "⏰ 每日监控摘要：未启用（URL 为空或 DIGEST_CRON=off），既有 automation 已回收"
+    exit 0
+  fi
+
+  if [ -n "${TIANYI_BOT_OWNER_OPEN_ID:-}" ]; then
+    add_digest_job server-monitoring-daily tianyi-monitoring-daily \
+      "${TIANYI_BOT_OWNER_OPEN_ID}" "每日监控摘要"
+  else
+    remove_digest_job tianyi-monitoring-daily "每日监控摘要"
+    echo "⚠️ 每日监控摘要未声明：缺 TIANYI_BOT_OWNER_OPEN_ID（推给谁？）—— 其它能力不受影响"
+  fi
+
+  if [ -n "${digest_group_chat}" ]; then
+    add_digest_job server-monitoring-daily-group tianyi-monitoring-daily-group \
+      "${digest_group_chat}" "每日监控摘要（群聊）"
+  else
+    remove_digest_job tianyi-monitoring-daily-group "每日监控摘要（群聊）"
+  fi
+) &
 
 echo "🚀 Starting tianyi feishu bot (天一)..."
 exec node /app/openclaw.mjs gateway --allow-unconfigured

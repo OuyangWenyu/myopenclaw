@@ -8,8 +8,8 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 
 | 服务 | 镜像 | 端口 | 说明 |
 |------|------|------|------|
-| hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile（爱玛士，`deepseek-flash` 多模态） |
-| hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道（`deepseek-flash`） |
+| hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile（爱玛士，`deepseek-flash` 多模态）；接入 team server-monitoring MCP，每日 08:30 服务器日报 → 飞书私聊 |
+| hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道（`deepseek-flash`）；接入 team server-monitoring MCP，每日 08:30 服务器日报 → 预报系统群 |
 | hermes-daoyuan | 同 hermes 镜像 | 8645 | 道元·文献学者，daoyuan profile，飞书群开放访问 |
 | hermes-finance | 同 hermes 镜像 | 8644 | 财经助手，finance profile |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板（只读） |
@@ -41,7 +41,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 
 | 服务 | 端口 | 说明 |
 |------|------|------|
-| openclaw-tianyi | 18792 | OpenClaw gateway（天一·研发助手），飞书 bot（`deepseek-flash`），terminal + MCP profile：读走共享 repo-scanner-mcp，写走 `gh`/`gc` CLI 创建 GitHub/GitCode issue，另接本机 yuque-mcp 与**团队 server-monitoring MCP**（可选，URL 非空门控；12 只读工具；内网 CA 随仓库提交、token 走 `.env.tianyi-bot`）。entrypoint 幂等声明每日 08:30 服务器日报 automation（OpenClaw cron，推飞书，`TIANYI_BOT_OWNER_OPEN_ID` 门控）
+| openclaw-tianyi | 18792 | OpenClaw gateway（天一·研发助手），飞书 bot（`deepseek-flash`），terminal + MCP profile：读走共享 repo-scanner-mcp，写走 `gh`/`gc` CLI 创建 GitHub/GitCode issue，另接本机 yuque-mcp 与**团队 server-monitoring MCP**（可选，URL 非空门控；内网 CA 随仓库提交、token 走 `.env.tianyi-bot`）。**server-monitoring 保留按需查询；每日推送默认关闭**（`TIANYI_BOT_MONITORING_DIGEST_CRON=off`，启动时回收既有 automation；日报已迁到 Hermes 爱玛士/爱码士）
 
 ## 数据目录映射
 

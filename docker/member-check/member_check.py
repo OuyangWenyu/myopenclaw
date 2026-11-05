@@ -106,7 +106,7 @@ def url_secrets(url: str) -> tuple[str, ...]:
     （原串 + username/password/query 分段）——干净的 URL 返回空元组。
 
     为什么不能无脑把 cap.url 全塞进清洗集：`display_url()` 剥掉凭据后的展示地址
-    （如 https://10.48.0.81:8765/mcp）是**有价值的诊断信息**，边界清洗会把与原始串
+    （如 https://<MCP_HOST>:8765/mcp）是**有价值的诊断信息**，边界清洗会把与原始串
     相同的干净 URL 也打成 `[***]`（2026-10-14 真机复验发现）。
     """
     try:

@@ -58,7 +58,7 @@ def CA_MISSING(_path: str) -> bool:
 
 def _full_env(**overrides) -> dict[str, str]:
     env = {
-        "SERVER_MONITORING_MCP_URL": "https://10.48.0.81:8765/mcp",
+        "SERVER_MONITORING_MCP_URL": "https://192.0.2.1:8765/mcp",
         "SERVER_MONITORING_MCP_TOKEN": "t" * 40,
         "YUQUE_MCP_URL": "https://chitu.example:18001/sse",
         "YUQUE_MCP_TOKEN": "y" * 40,
@@ -119,7 +119,7 @@ class TestParseCapabilities:
         assert caps["repo-scanner"].ca_path == ""
 
     def test_http_server_monitoring_does_not_get_ca(self):
-        caps = {c.name: c for c in _caps(_full_env(SERVER_MONITORING_MCP_URL="http://10.48.0.81:8765/mcp"))}
+        caps = {c.name: c for c in _caps(_full_env(SERVER_MONITORING_MCP_URL="http://192.0.2.1:8765/mcp"))}
         assert caps["server-monitoring"].ca_path == ""
 
     def test_explicit_per_capability_ca_is_respected(self):
@@ -233,9 +233,9 @@ class TestScrub:
 
 class TestUrlSecrets:
     def test_clean_url_yields_nothing(self):
-        # 干净 URL 不洗——展示地址（如 https://10.48.0.81:8765/mcp）是诊断信息，
+        # 干净 URL 不洗——展示地址（如 https://192.0.2.1:8765/mcp）是诊断信息，
         # 无脑清洗会把真机报告打成 [***]（2026-10-14 复验发现）
-        assert checker.url_secrets("https://10.48.0.81:8765/mcp") == ()
+        assert checker.url_secrets("https://192.0.2.1:8765/mcp") == ()
         assert checker.url_secrets("http://yuque-mcp:18001/sse") == ()
 
     def test_userinfo_yields_parts(self):

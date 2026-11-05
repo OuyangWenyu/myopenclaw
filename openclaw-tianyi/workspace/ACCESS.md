@@ -15,7 +15,7 @@
 三项能力都是 **MCP 服务**，任何支持 MCP 的 agent 都能接：
 
 1. **服务器监控** — 服务器/容器状态、GFS 处理进度、各项目 CI 构建情况
-   - 端点：`https://10.48.0.81:8765/mcp`（streamable-http + Bearer，内网/VPN 可达）
+   - 端点：`https://<MCP_DOMAIN>:8765/mcp`（streamable-http + Bearer，内网/VPN 可达；具体地址向管理员/天一获取）
    - token 向管理员获取；CA 证书随公开仓库提供（`docker/tianyi-bot/ca/server-monitoring-ca.pem`）或问天一索取
 2. **语雀知识库** — 团队语雀文档查询、变更记录
    - 端点：团队服务器部署完成后公布（问天一或管理员）
