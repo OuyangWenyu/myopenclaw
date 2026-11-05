@@ -67,6 +67,7 @@ HOT_DBS_RO=(
   "dailyinfo/freshrss/data/users/*/db.sqlite"   # 回滚模式 —— 每用户一个
   "yuque-mcp/change_data/change_summary.db"     # 回滚模式 —— 语雀变更快照索引
                                                 #  （快照正文随 rsync 照常上云）
+  "server-health-notifier/state.sqlite"          # 回滚模式 —— 健康事件通知游标/outbox
   "issue-notifier/state.sqlite"                 # 回滚模式 —— 飞书投递游标/去重/重试
 )
 HOT_DBS=("${HOT_DBS_RW[@]}" "${HOT_DBS_RO[@]}")
