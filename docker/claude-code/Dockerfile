@@ -42,7 +42,15 @@ RUN ARCH=$(dpkg --print-architecture) && \
     rm -rf /tmp/gh*
 
 # ── Claude Code CLI + cc-connect ─────────────────────────────────
-RUN npm install -g @anthropic-ai/claude-code cc-connect @stupidloud/codegraph gitcode-cli
+# 版本显式 pin：不 pin 时镜像内容随构建时间漂移 —— 2026-09-14 构建的镜像就长期
+# 停在 claude-code 2.1.270（落后 49 个 patch），而任何一次重建又会静默跳到当时
+# 的最新版。升级 = 改这里的版本号 → 重建 → 按 CLAUDE.md 的流程真机验证。
+# 守卫：tests/test-cc-version-pin.sh（Dockerfile pin ↔ 容器实跑版本）。
+RUN npm install -g \
+        @anthropic-ai/claude-code@2.1.311 \
+        cc-connect@1.5.0 \
+        @stupidloud/codegraph@1.5.0-sl.1 \
+        gitcode-cli@1.1.15
 
 # ── Playwright 浏览器（Chromium）供 MCP browser 工具使用 ──────────
 RUN npx playwright install --with-deps chromium
