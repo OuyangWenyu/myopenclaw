@@ -10,7 +10,7 @@
 
 ## 架构边界
 
-- **服务端 = 本仓库 compose 的 `yuque-mcp` 服务**：独立镜像 `myopenclaw/yuque-mcp:latest`，从兄弟仓 `~/code/yuque_mcp_server`（gitcode.com/dlut-water/yuque_mcp_server）构建。上游**无 tag**，按 commit 固定（当前 `bfc55d7`），守卫 `tests/test_yuque_mcp_local.py::TestSiblingPin` 钉住本地 checkout 的 HEAD —— 升级 = 审查上游 diff → 改 pin + 重建，不存在"悄悄拉到 main"的路径。
+- **服务端 = 本仓库 compose 的 `yuque-mcp` 服务**：独立镜像 `myopenclaw/yuque-mcp:latest`，从兄弟仓 `~/code/yuque_mcp_server`（gitcode.com/dlut-water/yuque_mcp_server）构建。上游**无 tag**，按 commit 固定（当前 `543f6fe`），守卫 `tests/test_yuque_mcp_local.py::TestSiblingPin` 钉住本地 checkout 的 HEAD —— 升级 = 审查上游 diff → 改 pin + 重建，不存在"悄悄拉到 main"的路径。
 - 服务端持有 `YUQUE_TOKEN`（语雀只读 token：`repo:read` + `doc:read`；要编辑者姓名再加 `group:read`），**客户端不需要**它，也不复用语雀侧其它凭据。
 - 只挂 `myopenclaw-net`，**不发布宿主端口**；除 Bearer key（服务端 `MCP_API_KEY = .env 的 MCP_YUQUE_MCP_API_KEY`）外不开面。⚠️ key 为空时上游是**无认证直通**（net 上任意容器都能读团队文档）—— 防线有三道：`start.sh` 缺键大声警告、Uptime Kuma 探针**只接受 401**（探得 2xx 即说明 key 未生效，报警）、守卫 `TestLiveEnvSwitched` 卡天一第二份拷贝同值。
 - 数据落宿主：`~/.myagentdata/yuque-mcp/change_data`（快照 + `change_summary.db` + `snapshots/` 正文，应用强制 0700/0600）与 `~/.myagentdata/yuque-mcp/backup`（`backup_repo` 工具输出根）。

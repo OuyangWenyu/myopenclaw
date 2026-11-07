@@ -23,7 +23,7 @@ START_SH = (REPO_ROOT / "scripts" / "start.sh").read_text()
 # 上游 gitcode.com/dlut-water/yuque_mcp_server 没有 tag，只能固定 commit。
 # 升级流程：cd ~/code/yuque_mcp_server && git fetch && 审查 diff → 改这里 + 重建镜像。
 SIBLING_REPO = REPO_ROOT.parent / "yuque_mcp_server"
-PINNED_SHA = "bfc55d7d4a019859eb2cd30a040c52126895192a"
+PINNED_SHA = "543f6fe5698c429f7e375e577e7e074c2c4400a3"
 
 
 def compose_service_block(name: str) -> str:
