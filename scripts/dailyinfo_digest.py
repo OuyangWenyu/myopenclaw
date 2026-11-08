@@ -21,8 +21,10 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import html
 import json
 import os
+import re
 import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
@@ -208,12 +210,37 @@ async def collect_digest(call_tool: ToolCall, day: str) -> list[Section]:
     return sections
 
 
+_BLOCKQUOTE_RE = re.compile(r"^([ \t]*)(?:>[ \t]?)+(.*)$", re.MULTILINE)
+_BR_RE = re.compile(r"<br\s*/?>", re.IGNORECASE)
+_HTML_TAG_RE = re.compile(r"</?[a-zA-Z][a-zA-Z0-9]*\b[^>]*>")
+
+
+def sanitize_body_for_feishu(body: str) -> str:
+    """把 dailyinfo 的 Discord/网页 Markdown 转成飞书卡片能渲染的文本。
+
+    dailyinfo 的 canonical body 里，摘要是 blockquote（``   > ...``），标题里还夹着
+    HTML（``&lt;i&gt;`` / ``<em>``）。飞书 Card 2.0 的 markdown 元素既不渲染引用块、
+    也不渲染 HTML —— 原样投递会变成“只有标题”和“标签源码”。这里只做展示层清洗：
+
+    - 行首 blockquote → ``**摘要：** ...``（保留缩进，挂在对应条目下）
+    - HTML 转义 → 解码；``<br>`` → 换行；标签去掉、保留内部文字
+    - 字面量比较（``P &lt; 0.05``）不会被误删：标签要求 ``<`` 后紧跟字母
+    """
+    text = _BLOCKQUOTE_RE.sub(
+        lambda match: f"{match.group(1)}**摘要：** {match.group(2)}".rstrip(), body
+    )
+    text = html.unescape(text)
+    text = _BR_RE.sub("\n", text)
+    text = _HTML_TAG_RE.sub("", text)
+    return text
+
+
 def render_digest(day: str, sections: Iterable[Section]) -> str:
-    """纯渲染：分类顺序固定，正文逐字保留，缺失/占位/失败给出短提示。"""
+    """纯渲染：分类顺序固定，正文做飞书友好清洗后输出，缺失/占位/失败给出短提示。"""
     blocks: list[str] = [f"📮 **dailyinfo 每日简报 · {day}**"]
     for section in sections:
         if section.kind == "body":
-            body = section.body.strip("\n")
+            body = sanitize_body_for_feishu(section.body).strip("\n")
             if body:
                 blocks.append(f"**{section.category}**\n\n{body}")
         elif section.kind == "placeholder":

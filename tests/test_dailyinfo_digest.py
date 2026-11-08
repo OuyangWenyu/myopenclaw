@@ -218,6 +218,54 @@ class TestRender:
         assert text.count("📭") == len(digest.CATEGORY_ORDER)
 
 
+class TestFeishuSanitize:
+    """dailyinfo 的 body 是给 Discord/网页的 Markdown；飞书卡片不渲染 blockquote，
+    也不渲染 HTML 标签。这里钉住“摘要可见、标签不可见”。"""
+
+    def test_decodes_and_strips_escaped_tags(self):
+        text = (
+            "1. **Far-UVC (222 nm) disrupts &lt;em&gt;Microcystis aeruginosa&lt;/em&gt;**\n"
+            "   > 该研究说明远紫外可破坏藻类细胞包膜。"
+        )
+        out = digest.sanitize_body_for_feishu(text)
+        assert "Microcystis aeruginosa" in out
+        assert "&lt;" not in out and "&gt;" not in out
+        assert "<em>" not in out
+
+    def test_sub_and_sup_keep_inner_text(self):
+        assert digest.sanitize_body_for_feishu("CO&lt;sub&gt;2&lt;/sub&gt;") == "CO2"
+        assert digest.sanitize_body_for_feishu("δ&lt;sup&gt;18&lt;/sup&gt;O") == "δ18O"
+
+    def test_raw_tags_are_stripped(self):
+        assert digest.sanitize_body_for_feishu("<em>X</em> <b>Y</b>") == "X Y"
+
+    def test_blockquote_becomes_visible_summary(self):
+        text = "1. **Title**\n   > 该研究通过 CRISPR 实现持久降脂。"
+        out = digest.sanitize_body_for_feishu(text)
+        assert "   **摘要：** 该研究通过 CRISPR 实现持久降脂。" in out
+        assert "> 该研究" not in out
+
+    def test_nested_and_no_space_blockquotes(self):
+        assert digest.sanitize_body_for_feishu(">摘要") == "**摘要：** 摘要"
+        assert digest.sanitize_body_for_feishu(">>嵌套") == "**摘要：** 嵌套"
+
+    def test_br_becomes_newline(self):
+        assert digest.sanitize_body_for_feishu("a<br>b<br/>c") == "a\nb\nc"
+
+    def test_literal_less_than_and_ampersand_are_preserved(self):
+        assert digest.sanitize_body_for_feishu("P &lt; 0.05 &amp; A") == "P < 0.05 & A"
+
+    def test_render_digest_uses_the_sanitized_body(self):
+        text = digest.render_digest(
+            "2026-11-08",
+            [digest.Section("papers", "body",
+                            "1. **A &lt;i&gt;B&lt;/i&gt;**\n   > 摘要句")],
+        )
+        assert "**摘要：** 摘要句" in text
+        assert "&lt;" not in text
+        assert "<i>" not in text
+
+
 class TestMain:
     def test_invalid_date(self, capsys):
         assert digest.main(["--date", "2026-13-01"]) == 2

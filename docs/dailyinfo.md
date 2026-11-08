@@ -91,6 +91,9 @@ DAOYUAN_FEISHU_DM_CHAT_ID=oc_...   # 用 hermes -p daoyuan send --list feishu �
 - 为空 = 不注册 job（已有 job 不会自动删除）；格式必须是 `oc_` + 32 位十六进制
 - 数据可见性跟随 dailyinfo 的 `DAILYINFO_MCP_VISIBILITY`（当前 `generated`）：
   **不依赖 Discord 推送成功**
+- body 会做**飞书友好清洗**（只影响镜像，不改 dailyinfo 原文）：`   > 摘要` 转成
+  `**摘要：** 摘要`（飞书卡片不渲染 blockquote），`&lt;i&gt;` / `<em>` / `<sub>` 等
+  HTML 解码后去标签（否则会显示成源码）
 - 占位/无更新正文不投递；缺失的分类显示 `📭 … 今日暂无简报`
 - 单类拉取失败显示 `⚠️ …`，其余类别照常投递；整体 MCP 不可达 → 非 0 退出，
   Hermes 把失败告警投到同一私聊
