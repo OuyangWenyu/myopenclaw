@@ -17,7 +17,7 @@ myopenclaw (本仓库)
 │   └── ../zhixun-agent/             ← 仅本地调试 profile 的 MCP 镜像 build context
 │
 ├── [可选·软依赖·运行时 graceful skip]
-│   └── ~/code/dailyinfo/            ← 宿主机 launchd 调度（每日论文/资讯抓取推送）
+│   └── ~/code/dailyinfo/            ← Claude Code 的 dailyinfo skills 源（生产调度在 dailyinfo 自己的 compose 栈）
 │
 ├── [配置文件·需要手动创建]
 │   ├── .env          (从 .env.example)
@@ -51,7 +51,7 @@ myopenclaw (本仓库)
 
 | 仓库 | 期望路径 | 缺失时的影响 |
 |------|----------|-------------|
-| [dailyinfo](https://github.com/iHeadWater/dailyinfo) | `~/code/dailyinfo` | AI 情报聚合不可用。launchd 定时任务找不到可执行文件 |
+| [dailyinfo](https://github.com/iHeadWater/dailyinfo) | `~/code/dailyinfo` | Claude Code 的 dailyinfo skills 不可用；不影响 dailyinfo 独立栈（调度/采集/MCP 在它自己的 compose 里） |
 
 ## 一键克隆
 
@@ -85,7 +85,6 @@ myopenclaw (本仓库)
 
 | 功能 | 替代方案 (Linux) |
 |------|-----------------|
-| dailyinfo 定时调度 | systemd user timer |
 | git-contribution-stats 采集 | systemd user timer |
 | Healthchecks.io 心跳 | systemd timer 或 cron |
 | collect-agentops 采集 | systemd timer 或 cron |

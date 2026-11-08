@@ -1,6 +1,6 @@
 # 调度系统
 
-myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集和推送）和 **Docker 容器内调度器**（备份和 Agent 工作流）。本页是全部 18 个定时任务的 single source of truth（个人 cron 不在此列）。
+myopenclaw 的定时任务分布在两层：**宿主机 launchd**（健康采集/心跳）和 **Docker 容器内调度器**（备份、Agent 工作流、语雀/研发数据）。本页是 myopenclaw 管理的定时任务的 single source of truth（个人 cron 不在此列）。**dailyinfo 的 8 个每日任务已迁到 dailyinfo 自己的 compose 栈**，见 [dailyinfo 调度](dailyinfo.md)。
 
 ## 总览
 
@@ -9,15 +9,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 | 时间 | 层级 | 调度器 | 任务 | 安装方式 |
 |------|------|--------|------|----------|
 | 每 60s | 宿主机 | launchd | Healthchecks.io 心跳 ping | `install-healthchecks-ping.sh` |
-| 03:00 | 宿主机 | launchd | arXiv 论文抓取 | `install-dailyinfo.sh` |
-| 03:30 | 宿主机 | launchd | 资源汇总抓取 | `install-dailyinfo.sh` |
-| 03:45 | 宿主机 | launchd | 代码趋势抓取 | `install-dailyinfo.sh` |
-| 04:00 | 宿主机 | launchd | 期刊论文抓取 | `install-dailyinfo.sh` |
-| 04:30 | 宿主机 | launchd | AI 资讯抓取 | `install-dailyinfo.sh` |
-| 05:30 | 宿主机 | launchd | 推送：AI 资讯 + 代码 + 资源 | `install-dailyinfo.sh` |
-| 06:00 | 宿主机 | launchd | 推送：期刊论文 | `install-dailyinfo.sh` |
 | 06:00 | Docker | yuque-mcp 调度器 | **语雀知识库快照**（变更基线） | 容器内置（`YUQUE_CHANGE_SNAPSHOT_TIME`） |
-| 07:00 | 宿主机 | launchd | 推送：arXiv 论文 | `install-dailyinfo.sh` |
 | 07:00 | Docker | yuque-mcp 调度器 | **语雀变更报告**生成（yuque-daily-digest 的数据源） | 容器内置（`YUQUE_CHANGE_REPORT_TIME`） |
 | 07:30 | Docker | Hermes cron | **工作日晨间简报**（事务 + 邮件，周一至周六） | `start.sh` 自动注册 |
 | 07:45 | Docker | repo-scanner-mcp 调度器 | **git-contribution-stats 每日全量采集**（容器内 daily sync，唯一写者） | 容器内置（服务强制 `REPO_SCANNER_WATCH_OWNS_ISSUES=1`） |
@@ -54,7 +46,6 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（数据采集
 等价于手动执行：
 
 ```bash
-./scripts/launchd/install-dailyinfo.sh                           # dailyinfo 8 个 launchd 任务
 ./scripts/launchd/install-healthchecks-ping.sh                    # Healthchecks.io 心跳
 ./scripts/launchd/install-collect-agentops.sh                     # AgentOps 健康采集
 ```
@@ -71,18 +62,10 @@ Docker 容器内的定时任务（4 个 Hermes cron + backup）由 `./scripts/st
 
 ```bash
 # 1. 检查所有 launchd 任务
-launchctl list | grep -E 'ai\.(dailyinfo|myopenclaw|git-contribution-stats)'
+launchctl list | grep -E 'ai\.(myopenclaw|git-contribution-stats)'
 
-# 预期输出（10 个 launchd 定时任务；launchctl 输出是三列 PID/退出码/Label，
-# 第 2 列是上次退出码，0 或 1 均为正常）：
-# -	0	ai.dailyinfo.push-arxiv
-# -	0	ai.dailyinfo.push-early
-# -	0	ai.dailyinfo.push-papers
-# -	0	ai.dailyinfo.run-ai_news
-# -	0	ai.dailyinfo.run-arxiv
-# -	0	ai.dailyinfo.run-code
-# -	0	ai.dailyinfo.run-papers
-# -	0	ai.dailyinfo.run-resource
+# 预期输出（launchctl 输出是三列 PID/退出码/Label，第 2 列是上次退出码，
+# 0 或 1 均为正常）：
 # -	0	ai.myopenclaw.collect-agentops
 # -	0	ai.myopenclaw.healthchecks-ping
 
@@ -112,9 +95,6 @@ docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list
 ## 卸载
 
 ```bash
-# 卸载所有 dailyinfo 任务
-./scripts/launchd/uninstall-dailyinfo.sh
-
 # 卸载单个任务
 launchctl unload -w ~/Library/LaunchAgents/<label>.plist
 ```

@@ -108,7 +108,6 @@ Docker 容器内的定时任务（备份、晨间四签、语雀日报）由 `st
 或按需选择：
 
 ```bash
-./scripts/launchd/install-dailyinfo.sh        # dailyinfo AI 情报聚合
 ./scripts/launchd/install-healthchecks-ping.sh # Healthchecks.io 心跳
 ./scripts/launchd/install-collect-agentops.sh  # AgentOps 健康采集
 ```

@@ -71,10 +71,10 @@ bash scripts/setup-uptime-kuma.sh
 | aisecretary | `http://aisecretary:8000/health` | 200-299 | 事务数据库 MCP 服务 |
 | TDAI Memory | `http://tdai-memory:8420/health` | 200-299 | Agent 长期记忆 Gateway |
 | Repo Scanner MCP | `http://repo-scanner-mcp:8001/health` | 200-299 | 研发日报数据服务 |
-| FreshRSS | `http://dailyinfo_freshrss:80` | 200-399 | RSS 聚合 |
+| FreshRSS | `http://host.docker.internal:8081` | 200-399 | RSS 聚合（dailyinfo 独立栈，宿主机 loopback） |
 | Yuque MCP | `http://yuque-mcp:18001/sse` | **仅 401** | 语雀知识库 MCP（本机 SSE）。不带 token 探针得到 401 —— "容器活着 + key 已配置"的双重信号。**刻意不接受 2xx**：key 为空时上游是无认证直通（200），接受 2xx 会让这个 fail-open 状态永远显示绿 |
 
-> **注意**：URL 使用 Docker 内部 DNS（容器名），因为 Uptime Kuma 和所有服务在同一个 `myopenclaw-net` 网络上。
+> **注意**：myopenclaw 自己的服务用 Docker 内部 DNS（容器名）；dailyinfo 是独立 compose 栈，FreshRSS 走 `host.docker.internal:8081`（宿主机 loopback），Docker 监控仍可按容器名 `dailyinfo-freshrss` / `dailyinfo-scheduler` 覆盖。
 
 **Docker 主机配置**（Docker 容器监控的前置条件）：
 
@@ -108,7 +108,8 @@ docker compose exec uptime-kuma sqlite3 /app/data/kuma.db \
 | Docker: repo-scanner-mcp | repo-scanner-mcp |
 | Docker: zotero-mcp | zotero-mcp |
 | Docker: yuque-mcp | yuque-mcp |
-| Docker: dailyinfo_freshrss | dailyinfo_freshrss |
+| Docker: dailyinfo-freshrss | dailyinfo-freshrss |
+| Docker: dailyinfo-scheduler | dailyinfo-scheduler |
 
 **Ping 监控**（可选，脚本不创建，需在 Web UI 手动添加）：
 

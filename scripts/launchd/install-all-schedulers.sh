@@ -58,11 +58,9 @@ install_task \
 #    宿主 launchd 与容器双写同一 SQLite（跨 virtiofs）会损坏数据库
 #    （database disk image is malformed），不要再安装此任务。
 
-# ── 4. dailyinfo 情报聚合 ───────────────────────────────────
-install_task \
-  "dailyinfo" \
-  "${SCRIPT_DIR}/install-dailyinfo.sh" \
-  "[ -d \"${HOME}/code/dailyinfo\" ]"
+# ── 4. dailyinfo 情报聚合 —— 已迁到 dailyinfo 自己的 compose 栈 ─────────
+#    调度（5 个 run + 3 个 Discord push）由 dailyinfo-scheduler 容器内
+#    supercronic 负责；本仓不再安装任何 dailyinfo launchd 任务。
 
 # ── 汇总 ────────────────────────────────────────────────────
 echo "============================================"
