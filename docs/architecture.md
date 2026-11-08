@@ -10,7 +10,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 |------|------|------|------|
 | hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile（爱玛士，`deepseek-flash` 多模态）；接入 team server-monitoring MCP，每日 08:30 服务器日报 → 飞书私聊 |
 | hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道（`deepseek-flash`）；接入 team server-monitoring MCP，每日 08:30 服务器日报 → 预报系统群 |
-| hermes-daoyuan | 同 hermes 镜像 | 8645 | 道元·文献学者，daoyuan profile，飞书群开放访问 |
+| hermes-daoyuan | 同 hermes 镜像 | 8645 | 道元·文献学者，daoyuan profile，**仅 Owen 私聊**（`FEISHU_GROUP_POLICY=disabled` + `FEISHU_ALLOWED_USERS`；留空是 pairing 模式）；接入 paper-queue MCP |
 | hermes-finance | 同 hermes 镜像 | 8644 | 财经助手，finance profile |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板（只读） |
 | claude-code | 自建（基于 `ubuntu:24.04`） | 9090 | Claude Code + cc-connect 飞书直连（各 tier 均 `deepseek-flash`，1M 上下文） |
@@ -24,7 +24,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 | tdai-memory | 8420 | Agent 长期记忆 Gateway，L0→L3 分层管线 |
 | aisecretary | 8000 | 事务数据库 MCP 服务，7 个 tools，SQLite 持久化 |
 | repo-scanner-mcp | 8001 | 研发日报 MCP 数据服务，来自 git-contribution-stats |
-| paper-queue-mcp | 8003 | 论文清单 MCP（FastMCP + streamable HTTP）。**独立容器是刻意的**：队列目录 `~/.myagentdata/paper-queue` 不挂给 openclaw-gateway（另有 backup-cron 的窄 rw 热备挂载） |
+| paper-queue-mcp | 8003（loopback） | 论文清单 MCP（FastMCP + streamable HTTP）。**独立容器是刻意的**：队列目录 `~/.myagentdata/paper-queue` 只挂给它（另有 backup-cron 的窄 rw 热备挂载）；道元通过 Bearer token 固定归属 Owen 写入，旧 OpenClaw HMAC 路径保留但默认休眠 |
 | yuque-mcp | —（仅容器网络） | 语雀知识库 MCP（本机 SSE，自持只读 token，不发布宿主端口）。快照 06:00 / 变更报告 07:00（北京，容器内调度）；来源 `yuque_mcp_server`，按 commit pin |
 | freshrss | 8081 | RSS 聚合，dailyinfo 数据源 |
 | uptime-kuma | 3001 | 服务监控面板，HTTP + Docker 容器状态 |
@@ -56,7 +56,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 | `~/.myagentdata/tdai-memory` | `/opt/data/tdai-memory` | tdai-memory | L0→L3 记忆数据 |
 | `~/.myagentdata/aisecretary` | `/data` | aisecretary | 事务 SQLite |
 | `~/.myagentdata/repo-scanner` | `/data` | repo-scanner-mcp | 研发日报 SQLite（只读） |
-| `~/.myagentdata/paper-queue` | `/data` | paper-queue-mcp | 论文清单 SQLite（openclaw-gateway 不挂；backup-cron 另有窄 rw 热备挂载） |
+| `~/.myagentdata/paper-queue` | `/data` | paper-queue-mcp | 论文清单 SQLite（只挂给 MCP 容器，agent 走 MCP 接口；backup-cron 另有窄 rw 热备挂载） |
 | `~/.myagentdata/yuque-mcp/change_data` | `/app/yuque/change_data` | yuque-mcp | 语雀快照 + change_summary.db + snapshots/ 正文（db 在 backup-cron 热备清单） |
 | `~/.myagentdata/yuque-mcp/backup` | `/app/yuque/backup` | yuque-mcp | 语雀知识库备份工具输出（Markdown） |
 | `~/.myagentdata/dailyinfo` | — | freshrss | RSS 数据 |

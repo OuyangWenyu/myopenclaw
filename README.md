@@ -25,7 +25,8 @@
 | 飞书直连 | cc-connect（CC飞总）+ lark-cli（Hermes CLI）+ 道元 bot + zhixun 知汛 bot + tianyi 天一 bot | — |
 | Discord 桥接 | Hermes coder（爱码士）+ OpenClaw 虾酱 | — |
 | 晨间四签 | Hermes cron skill → TDAI/AgentOps/语雀 MCP 等信号 → 飞书推送 | — |
-| AI 情报聚合 | dailyinfo 多源抓取 + AI 摘要 → 飞书 / Discord 推送 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) |
+| AI 情报聚合 | dailyinfo 多源抓取 + AI 摘要 → Discord 推送；道元每日 07:30 全量镜像 → 飞书私聊 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) |
+| 论文清单 | 道元（飞书）只记不下 → paper-queue MCP（固定归属 Owen）；下载由 mylibrary 离线完成 | [mylibrary](https://github.com/OuyangWenyu/mylibrary) |
 | 🌐 研发日报 | repo-scanner MCP 采集 35 仓库 → Hermes skill → 飞书推送；天一 bot 复用同源读能力（团队服务，服务器部署见 [server-deploy](docs/server-deploy.md)） | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
 | 🌐 水文智能问答 | zhixun 知汛助手 — OpenClaw → **远程水文 MCP（Bearer）** → 飞书 bot（**团队公共 bot**；背后的 zhixun-agent 水文 MCP 即**团队服务**；独立栈；本机 MCP 容器仅 `--with-local-mcp` 调试；服务器侧部署清单待补，见 [server-deploy](docs/server-deploy.md)） | [zhixun-agent](https://gitcode.com/dlut-water/zhixun-agent) |
 | 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |
@@ -122,7 +123,7 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 | hermes | 8642 | 主栈 | Hermes gateway — 爱玛士（默认 profile，飞书 bot） |
 | hermes-coder | 8643 | 主栈 | Hermes coder — 爱码士（Discord bot + Zotero 写入 + 论文管线） |
 | hermes-finance | 8644 | 主栈 | Hermes finance — 金融 agent（飞书 bot） |
-| hermes-daoyuan | 8645 | 主栈 | 道元 — 文献学者 agent（飞书 bot，Zotero 只读） |
+| hermes-daoyuan | 8645 | 主栈 | 道元 — 文献学者 agent（飞书 bot，Zotero 只读；仅 Owen 私聊，群聊禁用；接入 paper-queue MCP） |
 | hermes-dashboard | 9119 | 主栈 | Hermes Web 面板（只读） |
 | claude-code | 9090 | 主栈 | Claude Code + cc-connect（CC飞总，飞书直连） |
 | openclaw-gateway | 18789 | 主栈 | OpenClaw 网关（虾酱 Discord bot） |
@@ -131,7 +132,7 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 | aisecretary | 8000 | 主栈 | 事务数据库 MCP 服务 |
 | repo-scanner-mcp | 8001 | 主栈 | 研发日报 MCP 数据服务 |
 | yuque-mcp | —（仅容器网络） | 主栈 | 语雀知识库 MCP（本机 SSE，自持只读 token，不发布宿主端口；Hermes/天一接入；日报 skill 的 live 副本为 `~/.hermes/skills` 原生副本，见 [Hermes Skill 机制](docs/hermes-skills.md)） |
-| paper-queue-mcp | 8003 | 主栈 | 论文清单 MCP（独立容器，队列目录只挂给它） |
+| paper-queue-mcp | 8003（loopback） | 主栈 | 论文清单 MCP（独立容器，队列目录只挂给它；道元用 Bearer token 固定归属 Owen） |
 | dailyinfo | 8081 / 8768（均 loopback） | 独立栈 | dailyinfo 自己的 compose（FreshRSS + scheduler + 只读 MCP）；不在主栈，本仓只消费 MCP |
 | uptime-kuma | 3001 | 主栈 | 服务监控面板 |
 | backup-cron | — | 主栈 | 定时快照备份 |

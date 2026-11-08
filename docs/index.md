@@ -37,9 +37,9 @@
 - [TDAI 长期记忆](tdai-memory.md) — Agent 跨会话记忆系统
 - [语雀知识库（本机）](yuque-mcp-hermes.md) — 本机 yuque-mcp 服务（Hermes/天一接入，含每日变更推送）
 - [Zotero 文献系统](zotero-cli-cc.md) — Zotero MCP 共享服务 + paper pipeline + 道元文献 Agent
-- [论文清单](paper-queue.md) — 论文请求只记不下（独立 MCP 容器）
+- [论文清单](paper-queue.md) — 论文请求只记不下（道元通过 token 固定归属写入，独立 MCP 容器）
 - [AI 秘书](aisecretary.md) — 事务数据库 MCP 服务
-- [dailyinfo 调度](dailyinfo.md) — AI 情报聚合与定时推送
+- [dailyinfo 调度](dailyinfo.md) — AI 情报聚合、Discord 推送与道元飞书全量镜像
 - [研发日报](daily-dev-report.md) — 多仓库每日采集 + 飞书推送
 - [千问办公 AI听记](qwennote-mcp-hermes.md) — 爱玛士接入听记 MCP（OAuth，仅默认 profile）
 
