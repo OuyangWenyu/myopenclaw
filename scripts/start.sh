@@ -271,6 +271,15 @@ YAML
   echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-flash + zotero-mcp + memory 隔离）"
 fi
 
+# 道元 Feishu 访问收紧：DM 只允许指定用户；留空 = pairing 模式（不是 deny-all），
+# 所有私聊都会被要求配对码。群聊由 compose 的 FEISHU_GROUP_POLICY=disabled 关闭。
+DAOYUAN_FEISHU_APP_ID_VAL="$(grep '^DAOYUAN_FEISHU_APP_ID=.' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '[:space:]' || true)"
+DAOYUAN_FEISHU_ALLOWED_VAL="$(grep '^DAOYUAN_FEISHU_ALLOWED_USERS=.' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '[:space:]' || true)"
+if [[ -n "${DAOYUAN_FEISHU_APP_ID_VAL}" && -z "${DAOYUAN_FEISHU_ALLOWED_VAL}" ]]; then
+  echo "   ⚠️  DAOYUAN_FEISHU_ALLOWED_USERS 为空：道元会进入 pairing 模式，所有私聊都会被拒/要求配对码"
+  echo "      在 .env 填道元应用维度的 open_id（ou_...）后重跑本脚本"
+fi
+
 # ── 迁移既有 profile 的主模型到 deepseek-flash（幂等）───────────
 # 上面两个 heredoc 只在文件**不存在**时生效：已在运行的机器、以及从快照
 # `restore.sh` 恢复出来的机器都不会被自动迁移，会静默留在旧模型上，而
@@ -391,24 +400,35 @@ esac
 # server-monitoring-digest skill：两个 profile 共用同一个 repo 只读挂载。
 # 目标路径是容器内路径；宿主机上这条 symlink 是"悬空"的，但在容器里有效
 # （与 daily-dev-report 的既有模式一致）。只补缺/改指向，不覆盖真实目录。
-ensure_monitoring_skill_link() {
-  local link="$1"
-  local target="/opt/hermes-skills/server-monitoring-digest"
+ensure_skill_symlink() {
+  local link="$1" target="$2" label="$3"
   mkdir -p "$(dirname "${link}")"
   if [[ -L "${link}" ]]; then
     if [[ "$(readlink "${link}")" != "${target}" ]]; then
       ln -sfn "${target}" "${link}"
-      echo "   🔗 server-monitoring-digest skill 链接已更新: ${link}"
+      echo "   🔗 ${label} skill 链接已更新: ${link}"
     fi
   elif [[ -e "${link}" ]]; then
     echo "   ⚠️  ${link} 已存在且不是 symlink，跳过（避免覆盖 agent 维护的 skill）"
   else
     ln -s "${target}" "${link}"
-    echo "   🔗 server-monitoring-digest skill 已链接: ${link}"
+    echo "   🔗 ${label} skill 已链接: ${link}"
   fi
 }
-ensure_monitoring_skill_link "${HOME}/.hermes/skills/server-monitoring-digest"
-ensure_monitoring_skill_link "${HOME}/.hermes/profiles/coder/skills/server-monitoring-digest"
+ensure_skill_symlink "${HOME}/.hermes/skills/server-monitoring-digest" \
+  "/opt/hermes-skills/server-monitoring-digest" "server-monitoring-digest"
+ensure_skill_symlink "${HOME}/.hermes/profiles/coder/skills/server-monitoring-digest" \
+  "/opt/hermes-skills/server-monitoring-digest" "server-monitoring-digest"
+
+# 论文清单 skill：唯一一份源码在 skills/paper-queue，道元通过 symlink 复用。
+_PQ_SKILL_LINK="${HOME}/.hermes/profiles/daoyuan/skills/paper-queue"
+_pq_skill_before="$(readlink "${_PQ_SKILL_LINK}" 2>/dev/null || true)"
+ensure_skill_symlink "${_PQ_SKILL_LINK}" "/opt/hermes-skills/paper-queue" "paper-queue"
+_pq_skill_after="$(readlink "${_PQ_SKILL_LINK}" 2>/dev/null || true)"
+PQ_SKILL_CHANGED=false
+if [[ "${_pq_skill_before}" != "${_pq_skill_after}" ]]; then
+  PQ_SKILL_CHANGED=true
+fi
 
 # ── 确保 mylibrary skills 在 external_dirs 中 ────────────────────
 # aisecretary 模式：宿主机源码 → 只读挂载 → external_dirs 发现。
@@ -455,10 +475,10 @@ install_paper_fetch "${HOME}/.openclaw/skills" "~/.openclaw/skills"
 install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
 
 
-# ── 确保论文清单的归属签名密钥存在 ─────────────────────────────────
-# 插件（读 openclaw.json 的 plugins.entries）与服务端（compose 注入 sidecar 容器）
-# 共享同一个密钥，**唯一来源是 .env**。两处各自生成会让它们对不上，而那种失败的
-# 表现是"每次写入都被拒"，根因很难找。轮换 = 改 .env 里的值再跑一次本脚本。
+# ── 保留论文清单的旧归属签名密钥 ───────────────────────────────────
+# 旧 OpenClaw HMAC 链路已下架；密钥保留在 .env 供未来道元多用户身份插件复用。
+# compose 默认**不注入** sidecar（注入即重开「持密钥者可写任意 actor」的旁路）。
+# 轮换 = 改 .env 里的值再跑一次本脚本。
 if ! grep -q '^PAPER_QUEUE_ACTOR_SECRET=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
   _pq_secret="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
   {
@@ -471,40 +491,114 @@ fi
 PAPER_QUEUE_ACTOR_SECRET="${PAPER_QUEUE_ACTOR_SECRET:-$(grep '^PAPER_QUEUE_ACTOR_SECRET=' "${REPO_ROOT}/.env" 2>/dev/null | cut -d'=' -f2- || true)}"
 
 
-# ── 安装 paper-queue（清单 skill + 身份注入插件）──────────────────
-# 与 install_paper_fetch 不同：源码就在本仓库里，**每次启动都覆盖安装**，
-# 这样改了仓库源码后跑一次 start.sh 即生效，不必重建镜像。
-#
-# 这个标志必须**在函数定义之前**初始化：安装和配置注入两处都会把它置 true，
-# 谁在后面重置一次，谁就会把前面那次静默吃掉（踩过）。
+# ── 道元 paper-queue 的 Bearer token / MCP 地址 ────────────────────
+# token 由服务端绑定到固定 actor Owen；轮换 = 删掉 .env 里的 PAPER_QUEUE_DAOYUAN_TOKEN
+# 再跑一次 start.sh（up -d 会重建 paper-queue-mcp 与 hermes-daoyuan）。
+if ! grep -q '^PAPER_QUEUE_MCP_URL=' "${REPO_ROOT}/.env" 2>/dev/null; then
+  {
+    echo ""
+    echo "# 道元 → paper-queue MCP 地址（同 compose 网络；显式留空 = 停用）"
+    echo "PAPER_QUEUE_MCP_URL=http://paper-queue-mcp:8003/mcp"
+  } >> "${REPO_ROOT}/.env"
+  echo "   🔗 已写入默认 PAPER_QUEUE_MCP_URL"
+fi
+
+_pq_daoyuan_token="${PAPER_QUEUE_DAOYUAN_TOKEN:-}"
+if [[ -z "${_pq_daoyuan_token}" ]]; then
+  _pq_daoyuan_token="$(grep '^PAPER_QUEUE_DAOYUAN_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- || true)"
+fi
+if [[ -z "${_pq_daoyuan_token}" ]]; then
+  _pq_daoyuan_token="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+  # token 经环境变量传给子进程，避免出现在 ps 的 argv 里；临时文件用 mkstemp +
+  # 失败清理，避免中断时在仓库根留下一个未 gitignore 的明文 token。
+  PQ_TOKEN="${_pq_daoyuan_token}" python3 - "${REPO_ROOT}/.env" <<'PY'
+import os, pathlib, sys, tempfile
+path = pathlib.Path(sys.argv[1])
+token = os.environ["PQ_TOKEN"]
+lines = [line for line in path.read_text().splitlines()
+         if not line.startswith("PAPER_QUEUE_DAOYUAN_TOKEN=")]
+while lines and not lines[-1].strip():
+    lines.pop()
+lines += ["",
+          "# 道元 → paper-queue MCP 的固定归属 token（自动生成；轮换 = 删掉本行再跑 start.sh）",
+          f"PAPER_QUEUE_DAOYUAN_TOKEN={token}"]
+fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.name}.", suffix=".tmp")
+try:
+    with os.fdopen(fd, "w") as handle:
+        handle.write("\n".join(lines) + "\n")
+    os.chmod(tmp_name, os.stat(path).st_mode & 0o777)
+    os.replace(tmp_name, path)
+except BaseException:
+    try:
+        os.unlink(tmp_name)
+    except OSError:
+        pass
+    raise
+PY
+  echo "   🔑 已生成道元 paper-queue token 并写入 .env"
+fi
+
+# 固定归属 actor：优先 .env 的显式配置，否则取 DISCORD_ALLOWED_USERS 的第一项
+# （Owen 的 Discord 雪花）。真实 ID 只写 .env，不落公开仓库。
+_pq_daoyuan_actor_id="${PAPER_QUEUE_DAOYUAN_ACTOR_ID:-$(grep '^PAPER_QUEUE_DAOYUAN_ACTOR_ID=' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- || true)}"
+if [[ -z "${_pq_daoyuan_actor_id}" ]]; then
+  _pq_daoyuan_actor_id="$(grep '^DISCORD_ALLOWED_USERS=' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- | cut -d',' -f1 | tr -d '[:space:]' | tr -d '"' | tr -d "'" || true)"
+fi
+if [[ -n "${_pq_daoyuan_actor_id}" && ! "${_pq_daoyuan_actor_id}" =~ ^[0-9]{10,25}$ ]]; then
+  echo "   ⚠️  PAPER_QUEUE_DAOYUAN_ACTOR_ID 不是合法 Discord 雪花（${_pq_daoyuan_actor_id}），拒绝写入"
+  echo "      请在 .env 显式设置 PAPER_QUEUE_DAOYUAN_ACTOR_ID"
+  _pq_daoyuan_actor_id=""
+fi
+if [[ -n "${_pq_daoyuan_actor_id}" ]] && ! grep -q '^PAPER_QUEUE_DAOYUAN_ACTOR_ID=' "${REPO_ROOT}/.env" 2>/dev/null; then
+  {
+    echo "PAPER_QUEUE_DAOYUAN_ACTOR_ID=${_pq_daoyuan_actor_id}"
+    echo "PAPER_QUEUE_DAOYUAN_ACTOR_NAME=${PAPER_QUEUE_DAOYUAN_ACTOR_NAME:-Owen}"
+  } >> "${REPO_ROOT}/.env"
+  echo "   🪪 已写入道元 paper-queue 归属 actor（取自 DISCORD_ALLOWED_USERS）"
+fi
+if [[ -z "${_pq_daoyuan_actor_id}" ]]; then
+  echo "   ⚠️  PAPER_QUEUE_DAOYUAN_ACTOR_ID 未配置且 DISCORD_ALLOWED_USERS 为空；道元写入会被拒绝"
+fi
+if ! grep -q '^PAPER_QUEUE_DAOYUAN_ACTOR_NAME=' "${REPO_ROOT}/.env" 2>/dev/null; then
+  echo "PAPER_QUEUE_DAOYUAN_ACTOR_NAME=${PAPER_QUEUE_DAOYUAN_ACTOR_NAME:-Owen}" >> "${REPO_ROOT}/.env"
+fi
+
+# ── 道元 paper-queue MCP（Bearer token → 服务端固定归属 Owen）──────
+# 必须在 token/URL 生成之后、docker compose up 之前运行，否则首跑会因缺 token 移除条目。
+DAOYUAN_PAPER_QUEUE_STATUS=""
+if [[ -f "${DAOYUAN_CONFIG}" ]]; then
+  if DAOYUAN_PAPER_QUEUE_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_paper_queue.py" \
+      "${DAOYUAN_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
+    echo "   📄 道元 paper-queue MCP: ${DAOYUAN_PAPER_QUEUE_STATUS}"
+    if [[ "${DAOYUAN_PAPER_QUEUE_STATUS}" == *:no-token ]]; then
+      echo "   ⚠️  PAPER_QUEUE_DAOYUAN_TOKEN 为空，道元 paper-queue 已停用"
+    fi
+  else
+    echo "   ⚠️  道元 paper-queue MCP 注册失败: ${DAOYUAN_PAPER_QUEUE_STATUS}"
+    DAOYUAN_PAPER_QUEUE_STATUS="failed"
+  fi
+fi
+
+# ── 虾酱侧 paper-queue 已下架：清理 live 配置与安装副本 ────────────
+# 代码（插件 / ensure 脚本）保留在仓库，作为未来道元多用户身份插件的参考实现。
+# 这个标志必须**在这里之前**初始化：清理与其它配置注入都可能把它置 true。
 OPENCLAW_RESTART_NEEDED=false
-install_paper_queue() {
-  local src="${REPO_ROOT}/openclaw/skills/paper-queue"
-  local plugin_src="${REPO_ROOT}/openclaw/plugins/paper-queue-actor"
-  local dst="${HOME}/.openclaw/skills/paper-queue"
-  local plugin_dst="${HOME}/.openclaw/extensions/paper-queue-actor"
-
-  if [[ ! -f "${src}/SKILL.md" || ! -f "${plugin_src}/index.ts" ]]; then
-    echo "   ⚠️  paper-queue 源文件缺失，跳过安装: ${src}"
-    return
-  fi
-
-  # 内容变了就得重启网关才用得上：MCP server 是网关按需拉起的子进程，文件换了而网关
-  # 不重启，跑的还是老代码 —— 「看起来做了其实没生效」的典型。
-  if ! diff -rq --exclude=__pycache__ "${src}" "${dst}" >/dev/null 2>&1 \
-     || ! diff -rq "${plugin_src}" "${plugin_dst}" >/dev/null 2>&1; then
-    OPENCLAW_RESTART_NEEDED=true
-  fi
-
-  rm -rf "${dst}" "${plugin_dst}"
-  mkdir -p "$(dirname "${dst}")" "$(dirname "${plugin_dst}")"
-  cp -a "${src}" "${dst}"
-  cp -a "${plugin_src}" "${plugin_dst}"
-  # 跑守卫测试会在源码目录旁边留下 __pycache__，别把它带进运行时目录
-  rm -rf "${dst}/__pycache__"
-  echo "   ✅ paper-queue 已安装到 ~/.openclaw/skills + ~/.openclaw/extensions"
-}
-install_paper_queue
+if [[ -f "${OPENCLAW_CONFIG}" ]] && grep -q "paper-queue" "${OPENCLAW_CONFIG}" 2>/dev/null; then
+  _pq_cleanup="$(python3 "${REPO_ROOT}/scripts/remove_openclaw_paper_queue.py" "${OPENCLAW_CONFIG}" 2>&1 || true)"
+  case "${_pq_cleanup}" in
+    removed)
+      OPENCLAW_RESTART_NEEDED=true
+      echo "   🧹 已从虾酱配置移除 paper-queue（MCP / 插件 / skill）" ;;
+    unchanged) : ;;
+    *)
+      echo "   ⚠️  虾酱 paper-queue 清理失败: ${_pq_cleanup}" ;;
+  esac
+fi
+if [[ -d "${HOME}/.openclaw/skills/paper-queue" || -d "${HOME}/.openclaw/extensions/paper-queue-actor" ]]; then
+  rm -rf "${HOME}/.openclaw/skills/paper-queue" "${HOME}/.openclaw/extensions/paper-queue-actor"
+  OPENCLAW_RESTART_NEEDED=true
+  echo "   🧹 已删除虾酱侧的 paper-queue skill/plugin 副本"
+fi
 
 
 # ── 注入 OpenClaw Discord Bot Token ─────────────────────────────
@@ -607,23 +701,9 @@ else:
   fi
 fi
 
-# ── 接入论文清单（MCP server + 身份插件 + 禁用 paper-fetch）────────
-# 幂等手术放在独立脚本里：它跨 mcp/plugins/skills 三段，还有个 plugins.allow
-# 「存在即白名单」的陷阱（凭空创建会把别的插件全挡掉），值得单独单测。
-# mcp.servers / plugins.load 的变更**必须重启网关**才生效，所以这里记下是否变化，
-# 等 compose up 之后再决定要不要重启。
-if [[ -f "${OPENCLAW_CONFIG}" ]]; then
-  _pq_out="$(python3 "${REPO_ROOT}/scripts/ensure_openclaw_paper_queue.py" "${OPENCLAW_CONFIG}" "${PAPER_QUEUE_ACTOR_SECRET}" || true)"
-  case "${_pq_out}" in
-    updated)
-      OPENCLAW_RESTART_NEEDED=true
-      echo "   📝 已接入论文清单（MCP server + 身份插件 + 禁用 paper-fetch）" ;;
-    unchanged)
-      echo "   ✅ 论文清单配置已是最新" ;;
-    *)
-      echo "   ⚠️  论文清单配置注入失败，请检查 ${OPENCLAW_CONFIG}" ;;
-  esac
-fi
+# ── 论文清单已交给道元；虾酱侧不再注入 paper-queue ─────────────
+# 清理逻辑见上面的 remove_openclaw_paper_queue.py。旧的 ensure 脚本与插件源码
+# 保留在仓库，作为未来道元多用户身份插件的参考实现。
 
 # ── 修复 OpenClaw 第三方插件的 module 解析 ──────────────────────
 # 第三方插件安装在 ~/.openclaw/extensions/ 下，但 openclaw 包本体
@@ -865,6 +945,19 @@ if [[ "${_hermes_auth_changed}" != "true" && "${DAOYUAN_CRON_STATUS}" == written
       echo "   ⚠️  hermes-daoyuan 重启失败，请手动执行: docker compose restart hermes-daoyuan"
     fi
   fi
+fi
+
+# 道元 paper-queue：MCP 配置或 skill symlink 有变化时同样需要重启才生效。
+_daoyuan_pq_changed=false
+if [[ "${DAOYUAN_PAPER_QUEUE_STATUS}" == written* || "${DAOYUAN_PAPER_QUEUE_STATUS}" == removed* ]]; then
+  _daoyuan_pq_changed=true
+fi
+if [[ "${PQ_SKILL_CHANGED}" == "true" ]]; then
+  _daoyuan_pq_changed=true
+fi
+if [[ "${_hermes_auth_changed}" != "true" && "${_daoyuan_pq_changed}" == "true" ]]; then
+  restart_hermes_for_mcp hermes-daoyuan "written:paper-queue" \
+    "${_daoyuan_started_before}" "道元"
 fi
 
 # mcp.servers / plugins.load 的配置变更不会热加载，必须重启网关才生效
@@ -1125,8 +1218,7 @@ fi
 # ── dailyinfo 每日全量简报 → 道元飞书私聊（no-agent cron）────────────
 # 数据源是 dailyinfo 的只读 MCP；脚本 stdout 由 Hermes 原样投递，不经过 LLM。
 # 07:30 北京 = 30 23 * * *（容器 UTC）。chat id 只放 .env，仓库内不落真实值。
-DAOYUAN_DM_CHAT_ID="$(grep '^DAOYUAN_FEISHU_DM_CHAT_ID=' "${REPO_ROOT}/.env" 2>/dev/null \
-  | tail -1 | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true)"
+DAOYUAN_DM_CHAT_ID="$(grep '^DAOYUAN_FEISHU_DM_CHAT_ID=' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true)"
 DAILYINFO_URL_SET="$(grep -c '^DAILYINFO_MCP_URL=.' "${REPO_ROOT}/.env" 2>/dev/null || true)"
 DAILYINFO_KEY_SET="$(grep -c '^DAILYINFO_MCP_KEY=.' "${REPO_ROOT}/.env" 2>/dev/null || true)"
 if [[ -z "${DAOYUAN_DM_CHAT_ID}" ]]; then

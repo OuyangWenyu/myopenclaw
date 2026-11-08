@@ -535,92 +535,6 @@ class TestSchemaMigration:
         assert conn.execute("PRAGMA user_version").fetchone()[0] == pq.SCHEMA_VERSION
 
 
-class TestActorSignature:
-    """插件一旦缺席，服务端必须**拒绝写入**，而不是静默采信模型自填的身份。
-
-    密钥写在 openclaw.json 里（模型读得到），这一层防的不是"读"而是"算"：
-    模型算不出对 (actor_id, session_ref, actor_message) 的 HMAC。所以伪造在
-    "插件没加载"这个失败模式下会变成响亮的报错，而不是库里多一行看不出真假的数据。
-    """
-
-    SESSION = "agent:main:discord:channel:1"
-    MESSAGE = "1600000000000000000"
-
-    @pytest.fixture()
-    def signer(self, tmp_path, monkeypatch):
-        return _load(tmp_path, monkeypatch, secret=SECRET)
-
-    @staticmethod
-    def _sign(module, actor_id, session_ref, message_ref, secret=None):
-        """对 `add` 的默认入参签名（内容与 `_call` 构造的一致）。"""
-        args = {"items": [{"title": "X"}], "actor_id": actor_id,
-                "session_ref": session_ref, "actor_message": message_ref}
-        return sig_for(module, "paper_queue_add", args, secret or SECRET)
-
-    def _call(self, module, conn, actor_id, sig=None, key="paper_queue_add"):
-        args = {"items": [{"title": "X"}], "actor_id": actor_id,
-                "session_ref": self.SESSION, "actor_message": self.MESSAGE}
-        if key == "paper_queue_cancel":
-            args = {"request_key": "title:whatever", "actor_id": actor_id,
-                    "session_ref": self.SESSION, "actor_message": self.MESSAGE}
-        if sig is not None:
-            args["actor_sig"] = sig
-        return module.handle({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
-                              "params": {"name": key, "arguments": args}}, conn)
-
-    def test_valid_signature_is_accepted(self, signer):
-        conn = signer.connect()
-        sig = self._sign(signer, ACTOR, self.SESSION, self.MESSAGE)
-        assert self._call(signer, conn, ACTOR, sig)["result"]["isError"] is False
-        assert conn.execute("SELECT requester FROM paper_requests").fetchone()[0] == ACTOR
-
-    def test_missing_signature_is_refused(self, signer):
-        conn = signer.connect()
-        resp = self._call(signer, conn, ACTOR, sig=None)
-        assert resp["result"]["isError"] is True
-        assert "插件" in resp["result"]["content"][0]["text"]
-        assert conn.execute("SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
-
-    def test_wrong_signature_is_refused(self, signer):
-        """伪造者读得到密钥也算不出 HMAC —— 签名不对就拒。"""
-        conn = signer.connect()
-        forged = self._sign(signer, ACTOR, self.SESSION, self.MESSAGE, secret="wrong-secret")
-        assert self._call(signer, conn, ACTOR, forged)["result"]["isError"] is True
-        assert conn.execute("SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
-
-    def test_signature_bound_to_the_identity_it_covers(self, signer):
-        """拿别人的签名换一个 actor_id 也没用（签名覆盖 actor_id）。"""
-        conn = signer.connect()
-        sig_for_other = self._sign(signer, "999999", self.SESSION, self.MESSAGE)
-        assert self._call(signer, conn, ACTOR, sig_for_other)["result"]["isError"] is True
-
-    def test_cancel_also_requires_a_signature(self, signer):
-        conn = signer.connect()
-        assert self._call(signer, conn, ACTOR, sig=None,
-                          key="paper_queue_cancel")["result"]["isError"] is True
-
-    def test_list_does_not_require_a_signature(self, signer):
-        """读不验签：requester 本就是可显式传的公开参数，伪造它写不进任何东西。"""
-        conn = signer.connect()
-        resp = signer.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call",
-                              "params": {"name": "paper_queue_list",
-                                         "arguments": {"actor_id": ACTOR}}}, conn)
-        assert resp["result"]["isError"] is False
-
-    def test_missing_secret_refuses_writes_instead_of_skipping(self, tmp_path, monkeypatch):
-        """**未配置密钥时拒绝写入**，而不是静默跳过校验。
-
-        静默跳过等于 fail open：任何一次"env 被删或改名"都会让防护无声消失，
-        而插件那头还在签名 —— 表面上一切正常。
-        """
-        module = _load(tmp_path, monkeypatch, secret=None)
-        conn = module.connect()
-        resp = self._call(module, conn, ACTOR, sig="whatever")
-        assert resp["result"]["isError"] is True
-        assert "密钥" in resp["result"]["content"][0]["text"]
-        assert conn.execute("SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
-
-
 class TestInitSentinel:
     """库被删必须能被查出来：server 首次建库时在库旁边留哨兵，检查器靠它区分
     「被删」与「从没用过」—— 两者在此之前都是"打不开"，删库因此不会告警。"""
@@ -743,3 +657,157 @@ class TestActorSignature:
         module = _load(tmp_path, monkeypatch, secret=None)
         with pytest.raises(ValueError, match="密钥"):
             module.paper_queue_add(**self._args())
+
+
+# =============================================================
+# 道元（Hermes）Bearer token → 固定 actor
+# =============================================================
+
+DAOYUAN_TOKEN = "test-daoyuan-token"
+DAOYUAN_ID = "222222222222222222"       # 合成雪花（公开仓库，勿填真实账号）
+
+
+class _FakeRequest:
+    def __init__(self, headers):
+        self.headers = headers
+
+
+class _FakeRequestContext:
+    def __init__(self, request):
+        self.request = request
+
+
+class _FakeContext:
+    def __init__(self, headers=None, *, request=None):
+        self.request_context = _FakeRequestContext(
+            request if request is not None else _FakeRequest(headers or {}))
+
+
+def _bearer(token=DAOYUAN_TOKEN):
+    return _FakeContext({"authorization": f"Bearer {token}"})
+
+
+@pytest.fixture()
+def token_pq(tmp_path, monkeypatch):
+    """配置了道元 token 绑定的服务端。"""
+    module = _load(tmp_path, monkeypatch, secret=SECRET)
+    monkeypatch.setenv("PAPER_QUEUE_DAOYUAN_TOKEN", DAOYUAN_TOKEN)
+    monkeypatch.setenv("PAPER_QUEUE_DAOYUAN_ACTOR_ID", DAOYUAN_ID)
+    monkeypatch.setenv("PAPER_QUEUE_DAOYUAN_ACTOR_NAME", "Owen")
+    return module
+
+
+class TestDaoyuanToken:
+    """Bearer token 是道元的唯一身份来源：客户端传什么 actor_* 都不算数。"""
+
+    def test_add_uses_bound_actor_and_ignores_forged_fields(self, token_pq):
+        token_pq.paper_queue_add(
+            items=[{"title": "Attention Is All You Need"}],
+            actor_id=OTHER, actor_name="Forged", actor_sig="deadbeef",
+            session_ref="forged", channel_ref="forged", actor_message="forged",
+            attribution_source="single", actor_ambiguous=True,
+            ctx=_bearer())
+        row = token_pq.connect().execute(
+            "SELECT requester, requester_name, session_ref, channel_ref, message_ref,"
+            " attribution_source, attribution_ambiguous FROM paper_requests").fetchone()
+        assert row["requester"] == DAOYUAN_ID
+        assert row["requester_name"] == "Owen"
+        assert row["session_ref"] == "hermes:daoyuan"
+        assert row["channel_ref"] is None
+        assert row["message_ref"] is None
+        assert row["attribution_source"] is None
+        assert row["attribution_ambiguous"] == 0
+
+    def test_token_add_works_without_the_hmac_secret(self, tmp_path, monkeypatch):
+        module = _load(tmp_path, monkeypatch, secret=None)
+        monkeypatch.setenv("PAPER_QUEUE_DAOYUAN_TOKEN", DAOYUAN_TOKEN)
+        monkeypatch.setenv("PAPER_QUEUE_DAOYUAN_ACTOR_ID", DAOYUAN_ID)
+        module.paper_queue_add(items=[{"title": "X"}], ctx=_bearer())
+        assert module.connect().execute(
+            "SELECT requester FROM paper_requests").fetchone()[0] == DAOYUAN_ID
+
+    def test_unknown_token_is_rejected_without_writing(self, token_pq):
+        with pytest.raises(ValueError, match="token"):
+            token_pq.paper_queue_add(items=[{"title": "X"}], ctx=_bearer("wrong"))
+        assert token_pq.connect().execute(
+            "SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
+
+    @pytest.mark.parametrize("header", ["Basic abc", "Bearer ", "bearer", "Token xyz"])
+    def test_non_bearer_or_empty_scheme_is_rejected(self, token_pq, header):
+        ctx = _FakeContext({"authorization": header})
+        with pytest.raises(ValueError):
+            token_pq.paper_queue_add(items=[{"title": "X"}], ctx=ctx)
+        assert token_pq.connect().execute(
+            "SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
+
+    def test_scheme_is_case_insensitive(self, token_pq):
+        ctx = _FakeContext({"authorization": f"bearer {DAOYUAN_TOKEN}"})
+        token_pq.paper_queue_add(items=[{"title": "X"}], ctx=ctx)
+        assert token_pq.connect().execute(
+            "SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 1
+
+    def test_malformed_actor_id_env_fails_loud(self, token_pq, monkeypatch):
+        monkeypatch.setenv("PAPER_QUEUE_DAOYUAN_ACTOR_ID", "not-a-snowflake")
+        with pytest.raises(ValueError, match="ACTOR_ID"):
+            token_pq.paper_queue_add(items=[{"title": "X"}], ctx=_bearer())
+        assert token_pq.connect().execute(
+            "SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
+
+    def test_unreadable_request_context_fails_closed(self, token_pq):
+        ctx = _FakeContext(request=None)
+        with pytest.raises(ValueError):
+            token_pq.paper_queue_add(items=[{"title": "X"}], ctx=ctx)
+        assert token_pq.connect().execute(
+            "SELECT COUNT(*) FROM paper_requests").fetchone()[0] == 0
+
+    def test_no_authorization_header_still_uses_the_hmac_path(self, token_pq):
+        """虾酱/未来 HMAC 客户端不带 Authorization：仍走原签名校验，不会静默放行。"""
+        with pytest.raises(ValueError):
+            token_pq.paper_queue_add(items=[{"title": "X"}], ctx=_FakeContext())
+
+    def test_list_defaults_to_the_bound_actor(self, token_pq):
+        conn = token_pq.connect()
+        token_pq.add_items(conn, [{"title": "Mine"}],
+                           token_pq._token_actor(_bearer()))
+        token_pq.add_items(conn, [{"title": "Theirs"}], actor(actor_id=OTHER))
+        payload = json.loads(token_pq.paper_queue_list(ctx=_bearer()))
+        assert [row["title"] for row in payload["items"]] == ["Mine"]
+
+    def test_list_ignores_client_requester_for_token_clients(self, token_pq):
+        """单用户 token 不暴露跨用户读：显式 requester 也不生效。"""
+        conn = token_pq.connect()
+        token_pq.add_items(conn, [{"title": "Mine"}],
+                           token_pq._token_actor(_bearer()))
+        token_pq.add_items(conn, [{"title": "Theirs"}], actor(actor_id=OTHER))
+        payload = json.loads(
+            token_pq.paper_queue_list(requester=OTHER, ctx=_bearer()))
+        assert [row["title"] for row in payload["items"]] == ["Mine"]
+
+    def test_list_rejects_unknown_token(self, token_pq):
+        with pytest.raises(ValueError):
+            token_pq.paper_queue_list(ctx=_bearer("wrong"))
+
+    def test_cancel_uses_the_bound_actor(self, token_pq):
+        conn = token_pq.connect()
+        token_pq.add_items(conn, [{"title": "Mine"}],
+                           token_pq._token_actor(_bearer()))
+        key = conn.execute("SELECT request_key FROM paper_requests").fetchone()[0]
+        payload = json.loads(
+            token_pq.paper_queue_cancel(request_key=key, ctx=_bearer()))
+        assert payload["status"] == "cancelled"
+        row = conn.execute(
+            "SELECT cancelled_by FROM paper_requests").fetchone()
+        assert row["cancelled_by"] == DAOYUAN_ID
+
+    def test_cancel_other_requesters_row_is_not_owner(self, token_pq):
+        conn = token_pq.connect()
+        token_pq.add_items(conn, [{"title": "Theirs"}], actor(actor_id=OTHER))
+        key = conn.execute("SELECT request_key FROM paper_requests").fetchone()[0]
+        payload = json.loads(
+            token_pq.paper_queue_cancel(request_key=key, ctx=_bearer()))
+        assert payload["status"] == "not_owner"
+
+    def test_error_message_never_echoes_the_token(self, token_pq):
+        with pytest.raises(ValueError) as excinfo:
+            token_pq.paper_queue_add(items=[{"title": "X"}], ctx=_bearer("super-secret"))
+        assert "super-secret" not in str(excinfo.value)

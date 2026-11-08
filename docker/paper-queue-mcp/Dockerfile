@@ -8,8 +8,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# 只装跑服务必需的：mcp 提供 FastMCP + streamable HTTP 传输
-RUN pip install --no-cache-dir "mcp>=1.28,<2"
+# 只装跑服务必需的：mcp 提供 FastMCP + streamable HTTP 传输。
+# 必须 pin：token 通道依赖 1.30.0 的 `ctx: Context | None` 注入与
+# `request_context.request.headers`；SDK 漂移会让 token 请求静默走回 HMAC。
+RUN pip install --no-cache-dir "mcp==1.30.0"
 
 COPY server.py schema.sql /app/
 

@@ -4,6 +4,8 @@
 .env.zhixun-bot
 .env.tianyi-bot
 .env.member*
+.env.tmp
+.env.*.tmp
 # .secrets/ 目录由 git-crypt 加密，.gitattributes 中已声明
 
 # ── 云盘配置（本机路径，不入 git） ──────────────────────────────

@@ -40,6 +40,14 @@ try:
 except ImportError:  # pragma: no cover
     ZoneInfo = None  # type: ignore[assignment]
 
+try:
+    # FastMCP 只在 build_server()/main() 里导入；这里只为注解解析留一个占位 ——
+    # host 侧的守卫测试在没有 mcp 的环境里也要能 import 本模块。
+    from mcp.server.fastmcp import Context
+except ImportError:  # pragma: no cover
+    class Context:  # type: ignore[no-redef]
+        """占位：真实运行时由 FastMCP 注入。"""
+
 DEFAULT_DB = "/home/node/.myagentdata/paper-queue/queue.sqlite"
 SCHEMA_PATH = Path(__file__).resolve().parent / "schema.sql"
 PROTOCOL_VERSION = "2024-11-05"
@@ -301,6 +309,15 @@ ITEM_SIGNED_FIELDS = ("title", "doi", "doi_source", "arxiv_id", "url", "note", "
 # "{'x': 1}"），也让"伪造"至少得伪造得像样。
 ACTOR_ID_RE = re.compile(r"^\d{10,25}$")
 
+# ── 道元（Hermes）Bearer token → 固定 actor ─────────────────────────
+# 单用户阶段的身份来源：token 只能写 Owen，模型即使读到 token 也无法伪造成别人。
+# 无 Authorization 头的请求仍走上面的 HMAC 路径（虾酱/未来多用户客户端保留）。
+DAOYUAN_TOKEN_ENV = "PAPER_QUEUE_DAOYUAN_TOKEN"
+DAOYUAN_ACTOR_ID_ENV = "PAPER_QUEUE_DAOYUAN_ACTOR_ID"
+DAOYUAN_ACTOR_NAME_ENV = "PAPER_QUEUE_DAOYUAN_ACTOR_NAME"
+DAOYUAN_SESSION_REF = "hermes:daoyuan"
+_BEARER_RE = re.compile(r"^Bearer[ \t]+(\S+)[ \t]*$", re.IGNORECASE)
+
 # 体量上限：入参来自模型，没有上限就等于允许它把几 MB 文本灌进库（还会被热备上云、
 # 被消费方读走）。
 MAX_ITEMS = 50
@@ -356,6 +373,69 @@ def actor_signature_error(tool: str, args: dict) -> str | None:
     if not hmac.compare_digest(expected, provided):
         return "归属签名校验失败，拒绝写入"
     return None
+
+
+def _authorization_header(ctx: "Context | None") -> str | None:
+    """None = 没有 Authorization 头（走 HMAC 路径）。
+
+    Context 存在但读不到 HTTP 请求时必须 fail closed —— 静默退回 HMAC 会让
+    「token 通道没接上」表现成「没有 token」，而不是响亮的配置错误。
+    """
+    if ctx is None:
+        return None
+    try:
+        request = ctx.request_context.request
+    except (AttributeError, LookupError, ValueError) as exc:
+        raise ValueError("无法读取 HTTP 请求上下文，拒绝请求") from exc
+    if request is None:
+        raise ValueError("无法读取 HTTP 请求头，拒绝请求")
+    return request.headers.get("authorization")
+
+
+def _token_actor(ctx: "Context | None") -> dict | None:
+    """Bearer token 绑定的固定 actor；无 Authorization 头返回 None（HMAC 路径）。"""
+    header = _authorization_header(ctx)
+    if header is None:
+        return None
+
+    match = _BEARER_RE.match(header.strip())
+    if not match:
+        raise ValueError("Authorization 头必须是 Bearer token，拒绝请求")
+
+    configured = os.environ.get(DAOYUAN_TOKEN_ENV, "").strip()
+    supplied = match.group(1)
+    if not configured or not hmac.compare_digest(
+            supplied.encode("utf-8"), configured.encode("utf-8")):
+        raise ValueError(
+            "Bearer token 无法识别，拒绝请求"
+            "（检查 PAPER_QUEUE_DAOYUAN_TOKEN 与服务端环境是否一致）")
+
+    actor_id = os.environ.get(DAOYUAN_ACTOR_ID_ENV, "").strip()
+    if not ACTOR_ID_RE.match(actor_id):
+        raise ValueError(
+            "PAPER_QUEUE_DAOYUAN_ACTOR_ID 未配置或格式不合法，拒绝 token 请求")
+
+    return {
+        "actor_id": actor_id,
+        "actor_name": os.environ.get(DAOYUAN_ACTOR_NAME_ENV, "").strip() or "Owen",
+        "actor_message": "",
+        "channel_ref": "",
+        "session_ref": DAOYUAN_SESSION_REF,
+        "attribution_source": "",
+        "actor_ambiguous": False,
+    }
+
+
+def _token_binding_status() -> str:
+    """启动日志用；绝不返回 token 本身。"""
+    token = os.environ.get(DAOYUAN_TOKEN_ENV, "").strip()
+    actor_id = os.environ.get(DAOYUAN_ACTOR_ID_ENV, "").strip()
+    if not token:
+        return "disabled"
+    if not ACTOR_ID_RE.match(actor_id):
+        return "INVALID (PAPER_QUEUE_DAOYUAN_ACTOR_ID 未配置或格式不对)"
+    # 不回显个人 ID；启动日志只报“已配置”。
+    return "1 (daoyuan -> configured)"
 
 
 def _text(value) -> str | None:
@@ -630,15 +710,19 @@ def paper_queue_add(
     actor_id: str = "", actor_name: str = "", actor_message: str = "",
     channel_ref: str = "", session_ref: str = "", attribution_source: str = "",
     actor_ambiguous: bool = False, actor_sig: str = "",
+    ctx: Context | None = None,
 ) -> str:
     """把一篇或多篇论文记入清单（**只记不下**：不要下载、不要调用 paper-fetch）。
     用户说「下载 / 帮我下 / 加到文献库 / 同步到 Zotero」时用它；
     一条消息里有多篇就一次传多个 item。"""
     local = locals()
-    error = actor_signature_error("paper_queue_add", local)
-    if error:
-        raise ValueError(error)
-    return _dump(_with_conn(lambda conn: add_items(conn, items or [], _actor_args(local))))
+    actor = _token_actor(ctx)
+    if actor is None:
+        error = actor_signature_error("paper_queue_add", local)
+        if error:
+            raise ValueError(error)
+        actor = _actor_args(local)
+    return _dump(_with_conn(lambda conn: add_items(conn, items or [], actor)))
 
 
 def paper_queue_list(
@@ -647,12 +731,19 @@ def paper_queue_list(
     actor_id: str = "", actor_name: str = "", actor_message: str = "",
     channel_ref: str = "", session_ref: str = "", attribution_source: str = "",
     actor_ambiguous: bool = False, actor_sig: str = "",
+    ctx: Context | None = None,
 ) -> str:
     """列出清单（**只读**）。不传 requester 时默认列出**提问者自己**的清单；
     用户说「今天加的 / 过去 24 小时 / 我的清单」时，用 window 过滤。"""
     local = locals()
+    actor = _token_actor(ctx)
+    if actor is not None:
+        # 单用户 token：不暴露跨用户读。历史行仍在库里，未来多用户插件再开放。
+        requester = ""
+    else:
+        actor = _actor_args(local)
     return _dump(_with_conn(lambda conn: capped_list_payload(list_items(
-        conn, _actor_args(local),
+        conn, actor,
         window=window or None, since=since or None, until=until or None,
         requester=requester or None, include_cancelled=include_cancelled,
         limit=limit or 50,
@@ -664,14 +755,18 @@ def paper_queue_cancel(
     actor_id: str = "", actor_name: str = "", actor_message: str = "",
     channel_ref: str = "", session_ref: str = "", attribution_source: str = "",
     actor_ambiguous: bool = False, actor_sig: str = "",
+    ctx: Context | None = None,
 ) -> str:
     """撤销一条清单记录（用户说「记错了 / 不用下了 / 去掉那条」时用）。
     撤销后同一篇可以重新入队。"""
     local = locals()
-    error = actor_signature_error("paper_queue_cancel", local)
-    if error:
-        raise ValueError(error)
-    return _dump(_with_conn(lambda conn: cancel_item(conn, _actor_args(local), request_key or "")))
+    actor = _token_actor(ctx)
+    if actor is None:
+        error = actor_signature_error("paper_queue_cancel", local)
+        if error:
+            raise ValueError(error)
+        actor = _actor_args(local)
+    return _dump(_with_conn(lambda conn: cancel_item(conn, actor, request_key or "")))
 
 
 TOOLS = (paper_queue_add, paper_queue_list, paper_queue_cancel)
@@ -700,6 +795,7 @@ def main() -> int:
 
     print(f"paper-queue-mcp: streamable HTTP on {HOST}:{PORT}/mcp "
           f"(db={resolve_db()}, schema=v{SCHEMA_VERSION})")
+    print(f"paper-queue-mcp: token bindings: {_token_binding_status()}")
     asyncio.run(build_server().run_streamable_http_async())
     return 0
 

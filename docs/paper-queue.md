@@ -1,10 +1,17 @@
 # 论文清单（paper-queue）
 
-虾酱（Discord 机器人）收到「帮我下这篇论文」时**只记清单、不下载**。下载与入库由
+道元（Hermes，飞书）收到「帮我下这篇论文」时**只记清单、不下载**。下载与入库由
 `~/code/mylibrary` 离线完成。本页是**契约文档**：库结构、字段语义、读取方式。
 
 > **本清单不追踪消费状态。** 它只回答「谁在什么时候要了哪篇论文」。下载了没有、
 > 入库了没有——**靠人判断**，不在库里。
+
+当前状态（2026-11-08 起）：
+
+- **道元是唯一客户端**，通过 Bearer token 固定归属 Owen（单用户阶段）
+- 虾酱（OpenClaw）侧的 paper-queue 已下架：不再安装 MCP/插件/skill；
+  插件与签名代码保留在仓库，作为未来道元多用户身份插件的参考实现
+- 历史 DB 原样保留（同一个 `queue.sqlite`，不迁不删）；旧行的 `requester` 不改写
 
 ---
 
@@ -14,13 +21,21 @@
 |---|---|
 | 宿主（mylibrary 读这里） | `~/.myagentdata/paper-queue/queue.sqlite` |
 | `paper-queue-mcp` 容器内 | `/data/queue.sqlite` |
-| **虾酱所在的 openclaw-gateway** | **看不到 —— 刻意不挂** |
+| **hermes-daoyuan / openclaw-gateway** | **不挂载**队列目录，只能走 MCP 接口 |
+| ⚠️ claude-code / hermes / hermes-coder | 通过更宽的 `~/.myagentdata` 挂载仍可达（既有隔离缺口） |
 
-同一个文件，只挂给 `paper-queue-mcp` 这个独立容器。
+同一个文件，只**直接**挂给 `paper-queue-mcp` 这个独立容器；道元接入不新建库、不复制数据，
+历史行原样保留。
 
-> ⚠️ **为什么不挂给虾酱**：2026-09-16 实测，虾酱的 `read`/`write` 工具**够得着**那个
-> 目录（只有 `exec` 被 allowlist 挡住）。挂在一起时，被提示注入的模型可以绕开一切
-> 校验直接改库、甚至改掉服务端代码，签名整套形同虚设。现在它只能走 MCP 接口。
+> ⚠️ **已知既有缺口（非本次改动引入）**：`claude-code` 以 RW 挂载整个
+> `~/.myagentdata`（还 RW 挂载 `~/code`，能读到仓库 `.env`），`hermes` / `hermes-coder`
+> 以 RO 挂载 `~/.myagentdata`。因此“队列文件对所有 agent 不可达”目前**不成立**；
+> 将 `claude-code` 的 `.myagentdata` 收窄到实际需要的子目录、并把仓库 `.env` 移出
+> 其可写范围，是后续独立任务。
+
+> ⚠️ **为什么不挂给 agent**：2026-09-16 实测，虾酱的 `read`/`write` 工具**够得着**
+> 那个目录（只有 `exec` 被 allowlist 挡住）。挂在一起时，被提示注入的模型可以绕开
+> 一切校验直接改库、甚至改掉服务端代码，签名整套形同虚设。现在它只能走 MCP 接口。
 
 并发约定：两边都必须 `PRAGMA journal_mode = WAL` + `PRAGMA busy_timeout = 5000`。
 写入方（`paper-queue-mcp`）是短事务；读取方请只读打开：
@@ -53,14 +68,14 @@ rows = conn.execute(
 | `request_key` | 去重键，见 §3 |
 | `input_kind` | `title` / `doi` / `arxiv` / `url` —— **用户实际给出的是哪种** |
 | `raw_input` | 用户原话片段（人工核对用） |
-| `title` | 题目，**来自 Discord 对话**，通常是最可靠的标识 |
+| `title` | 题目，**来自用户对话**，通常是最可靠的标识 |
 | `doi` | DOI，可选 |
-| `doi_source` | `user`（用户给的） / `inferred`（虾酱推断的）—— **见 §4，这条很重要** |
+| `doi_source` | `user`（用户给的） / `inferred`（模型推断的）—— **见 §4，这条很重要** |
 | `arxiv_id` / `url` / `note` | 可选补充 |
-| `requester` | **权威**：宿主注入的 Discord 用户 ID（雪花） |
+| `requester` | **权威**：归属人 ID。道元 token 行固定为 `.env` 的 `PAPER_QUEUE_DAOYUAN_ACTOR_ID`（Owen 的 Discord 雪花）；历史行保留原值 |
 | `requester_name` | 显示名，非权威（会变） |
-| `channel_ref` / `message_ref` / `session_ref` | 溯源头：哪条消息、哪个频道 |
-| `attribution_source` | 归属可信度：`single`（本回合前只收到一条入站，能确定是谁触发的）/ `batched`（本回合前收到多条，取最新那条，可能张冠李戴）/ `NULL`（历史遗留：v3 之前写入的行映射不到上面两档，如实置空 —— 见 §6） |
+| `channel_ref` / `message_ref` / `session_ref` | 溯源头。道元 token 行：`session_ref="hermes:daoyuan"`，`channel_ref`/`message_ref` 为 NULL |
+| `attribution_source` | 归属可信度：`single`（本回合前只收到一条入站）/ `batched`（多条，取最新，可能张冠李戴）/ `NULL`（历史遗留，或道元 token 绑定行 —— token 绑定无法诚实声称前两档，如实置空） |
 | `attribution_ambiguous` | 1 = 该请求的归属**可能串台**，见 §6 |
 | `requested_at` | 加入时间，**严格 `YYYY-MM-DDTHH:MM:SSZ`**（UTC） |
 | `cancelled_at` / `cancelled_by` | 撤销时间与撤销人（成对出现） |
@@ -99,15 +114,17 @@ rows = conn.execute(
 
 ---
 
-## 5. 虾酱侧的三个工具
+## 5. 三个工具（道元 / 未来客户端）
 
 MCP server `docker/paper-queue-mcp/server.py`（独立容器，streamable HTTP，端口 8003）：
 
-| 工具 | 说明 |
-|---|---|
-| `paper_queue_add` | 入队，`items` 是数组（一条消息可入队多篇）。逐条返回 `queued` / `duplicate`（附已存在条目）/ `invalid`（附原因），**部分失败不回滚** |
-| `paper_queue_list` | 查清单。`window` ∈ `today` / `24h` / `7d` / `all`（默认），或显式 `since`/`until`。**不传 `requester` 时默认查提问者自己**；显式传才查别人 |
-| `paper_queue_cancel` | 撤销。撤销后可重新入队 |
+| 工具 | Hermes（道元）里的名字 | 说明 |
+|---|---|---|
+| `paper_queue_add` | `mcp__paper_queue__paper_queue_add` | 入队，`items` 是数组（一条消息可入队多篇）。逐条返回 `queued` / `duplicate`（附已存在条目）/ `invalid`（附原因），**部分失败不回滚** |
+| `paper_queue_list` | `mcp__paper_queue__paper_queue_list` | 查清单。`window` ∈ `today` / `24h` / `7d` / `all`（默认），或显式 `since`/`until`。**不传 `requester` 时默认查调用者自己**；显式传才查别人 |
+| `paper_queue_cancel` | `mcp__paper_queue__paper_queue_cancel` | 撤销。撤销后可重新入队 |
+
+skill 只有一份：`skills/paper-queue/SKILL.md`，OpenClaw 与 Hermes 共用。
 
 时间窗口**一律服务端计算**（"今天"的日界按容器 `TZ`，默认 `Asia/Shanghai`）——
 模型不做日期运算。
@@ -120,14 +137,37 @@ MCP server `docker/paper-queue-mcp/server.py`（独立容器，streamable HTTP�
 
 ## 6. 归属是怎么保证的（以及它不保证什么）
 
+### 道元（当前）：Bearer token → 固定 actor
+
+- 道元 profile 的 `mcp_servers.paper-queue` 带
+  `Authorization: Bearer ${PAPER_QUEUE_DAOYUAN_TOKEN}`
+- 服务端把该 token 绑定到固定 actor：
+  `PAPER_QUEUE_DAOYUAN_ACTOR_ID=<Owen 的 Discord 雪花>` / `PAPER_QUEUE_DAOYUAN_ACTOR_NAME=Owen`
+  （真实 ID 只放 `.env`，不落公开仓库）
+- 带该 token 的请求：**忽略**客户端传入的 `actor_*` / `actor_sig`，直接写绑定身份；
+  `session_ref="hermes:daoyuan"`，`channel_ref` / `message_ref` / `attribution_source` 为 NULL
+- 未知/错误 token 直接拒绝（每个工具都报错、零写入），不会降级到 HMAC
+- token 只能写 Owen：即使道元模型读到 token，也无法伪造成别人
+- 道元的 Feishu 已收紧为**仅 Owen 私聊**（`FEISHU_GROUP_POLICY=disabled` +
+  `FEISHU_ALLOWED_USERS`）；**该变量必须在 `.env` 里填非空**——留空是 Hermes 的
+  pairing 模式（会回复配对码），不是 deny-all。填好后当前所有请求确实都来自 Owen
+
+### 旧 OpenClaw HMAC 路径（保留，当前不安装）
+
+> 虾酱不再安装这套链路（start.sh 已移除安装/注入）；以下实现保留在仓库，
+> 作为未来道元多用户身份插件的参考。`PAPER_QUEUE_ACTOR_SECRET` 继续保留在 `.env`，
+> 但 **compose 默认不注入** `paper-queue-mcp`（注入即重开「持密钥者可写任意 actor」
+> 的旁路）。未来需要时取消 compose 里的注释即可恢复。
+
 请求人**不经过模型**：一个 OpenClaw 插件（`openclaw/plugins/paper-queue-actor/`）
 在 `before_tool_call` 钩子里把宿主知道的真实 Discord `senderId` 注入工具参数。
 模型伪造不了 —— `paper_queue_add` / `paper_queue_cancel` 只认注入的 `actor_id`，
 参数里的 `requester` 被忽略；取不到身份时**拒绝写入**，不会用模型填的名字兜底。
 
 **签名（防"插件缺席"）**：插件与服务端共享一个密钥，**唯一来源是 `.env` 的
-`PAPER_QUEUE_ACTOR_SECRET`**（`start.sh` 首次运行时生成）—— compose 把它注入 sidecar
-容器，同一份被写进 `plugins.entries.paper-queue-actor.config`。插件对
+`PAPER_QUEUE_ACTOR_SECRET`**（`start.sh` 首次运行时生成）—— 历史上 compose 把它注入
+sidecar 容器，同一份被写进 `plugins.entries.paper-queue-actor.config`（**当前默认
+不注入**，路径休眠）。插件对
 `(actor_id, session_ref, actor_message, 请求内容)` 做 HMAC-SHA256，服务端验签后才写入。
 
 > 这一层防的**不是"读"而是"算"**：密钥就写在配置文件里，模型读得到；但它算不出 HMAC。
@@ -192,17 +232,30 @@ python3 scripts/check_paper_queue.py --json     # JSON（cron/监控用）
 
 ---
 
-## 8. 装机与卸载
+## 8. 装机与卸载（道元）
 
-装机走 `./scripts/start.sh`（幂等）：安装 skill 与插件到 `~/.openclaw/`、建
-`~/.myagentdata/paper-queue/`、**生成签名密钥写入 `.env`**（唯一来源，插件与服务端
-共享）、注入 `mcp.servers`（URL 形态）+ 插件配置 + **禁用 `paper-fetch`**
-（"只记不下"由机器强制，而不是靠提示词）；`paper-queue-mcp` 容器启动时先把库升到
-当前 schema 再对外服务。
+装机走 `./scripts/start.sh`（幂等）：
 
-卸载：`docker compose stop paper-queue-mcp`，删 `~/.openclaw/skills/paper-queue` 与
-`~/.openclaw/extensions/paper-queue-actor`，移除 `openclaw.json` 里对应的
-`mcp.servers` / `plugins` / `skills` 条目，然后 `docker compose restart openclaw-gateway`。
+- 建 `~/.myagentdata/paper-queue/`（历史库原样沿用）
+- 缺失时生成 `PAPER_QUEUE_DAOYUAN_TOKEN` 写入 `.env`（不打印 token）
+- 调 `scripts/ensure_hermes_paper_queue.py` 把 `mcp_servers.paper-queue`
+  写入道元 profile（占位符形态，真实值由容器 env 展开）
+- 把 `skills/paper-queue` 通过 compose 只读挂载 + symlink 接进道元 profile
+- 清理虾酱侧残留：`remove_openclaw_paper_queue.py` 删除 `mcp.servers.paper-queue` /
+  `plugins.entries.paper-queue-actor` / `plugins.allow` 条目，并删除
+  `~/.openclaw/skills/paper-queue` 与 `~/.openclaw/extensions/paper-queue-actor`
+
+轮换 token：删掉 `.env` 里的 `PAPER_QUEUE_DAOYUAN_TOKEN=` 行，重跑 `./scripts/start.sh`；
+`up -d` 会重建 `paper-queue-mcp` 与 `hermes-daoyuan`（`restart` 不会更新容器 env）。
+
+关闭道元接入：**持久开关是清空 `.env` 的 `PAPER_QUEUE_MCP_URL=`（并一并清掉
+`PAPER_QUEUE_DAOYUAN_TOKEN`，否则 token 仍在容器里可被直接调用）**，重跑 `start.sh`。
+`ensure_hermes_paper_queue.py --disable` 只对当次生效，下一次 `start.sh` 会重新注册。
+
+服务端代码改动（`server.py`）需要重建镜像：
+`docker compose build paper-queue-mcp && ./scripts/start.sh`。
+
+虾酱侧不需要再做任何操作；若旧机器仍有残留，`./scripts/start.sh` 会自动清理。
 
 > ⚠️ 重启网关前请确认它**没有正在跑启动迁移**——迁移期间重启会把它打断、下次从头再来，
 > 表现是网关"看起来卡死"（不绑端口、不报错）。静置几分钟会自行恢复。详见 `CLAUDE.md`。

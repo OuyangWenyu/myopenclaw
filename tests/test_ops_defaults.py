@@ -135,21 +135,23 @@ class TestPaperQueueWiring:
         assert START_SH.index('mkdir -p "${HOME}/.myagentdata/paper-queue"') \
             < START_SH.index("docker compose up -d ${BUILD_FLAG}")
 
-    def test_start_sh_installs_skill_and_plugin(self):
-        assert "install_paper_queue()" in START_SH
-        assert "openclaw/skills/paper-queue" in START_SH
-        assert "openclaw/plugins/paper-queue-actor" in START_SH
+    def test_start_sh_no_longer_installs_it_for_openclaw(self):
+        """能力已移交道元：虾酱不再安装 skill/plugin，也不再写 openclaw.json。"""
+        assert "install_paper_queue" not in START_SH
+        assert "ensure_openclaw_paper_queue.py" not in START_SH
 
-    def test_start_sh_calls_the_idempotent_ensure_script(self):
-        assert "ensure_openclaw_paper_queue.py" in START_SH
+    def test_reference_implementation_is_kept(self):
+        """代码保留给未来道元多用户身份插件做参考。"""
+        assert (REPO_ROOT / "openclaw" / "plugins" / "paper-queue-actor" / "index.ts").is_file()
+        assert (REPO_ROOT / "scripts" / "ensure_openclaw_paper_queue.py").is_file()
 
-    def test_start_sh_restarts_gateway_when_config_or_code_changed(self):
-        """mcp.servers / plugins.load 不热加载，**装进去的代码换了也一样** ——
-        MCP server 是网关按需拉起的子进程，网关不重启跑的还是老代码。"""
+    def test_start_sh_cleans_up_live_openclaw_artifacts(self):
+        assert "remove_openclaw_paper_queue.py" in START_SH
+
+    def test_start_sh_restarts_gateway_when_config_changed(self):
+        """清理 mcp.servers / plugins.load 后必须重启网关才生效。"""
         assert "OPENCLAW_RESTART_NEEDED" in START_SH
         assert "docker compose restart openclaw-gateway" in START_SH
-        # 装文件时要比对内容，不能盲拷 —— 否则"改了仓库源码再跑 start.sh"是静默 no-op
-        assert "diff -rq" in START_SH
 
     def test_start_sh_skips_the_redundant_restart(self):
         """重建过的容器启动时已读到新配置，不需要再重启。
@@ -182,16 +184,14 @@ class TestPaperQueueWiring:
         )
         sidecar = self._service_block("paper-queue-mcp")
         assert "${HOME}/.myagentdata/paper-queue:/data" in sidecar
-        assert "PAPER_QUEUE_ACTOR_SECRET" in sidecar, (
-            "签名密钥必须注入 sidecar，否则它无法验签 —— 每次写入都会被拒"
-        )
+        # HMAC 密钥保留在 .env，但默认不注入：旧路径休眠（未来多用户再打开）
+        assert "\n      - PAPER_QUEUE_ACTOR_SECRET=" not in sidecar
+        assert "# - PAPER_QUEUE_ACTOR_SECRET=${PAPER_QUEUE_ACTOR_SECRET:-}" in sidecar
 
-    def test_template_registers_mcp_server(self):
+    def test_template_no_longer_registers_the_mcp_server(self):
+        """模板是新部署的唯一来源 —— 不能再把 paper-queue 装回虾酱。"""
         mcp = json.loads(OPENCLAW_EXAMPLE.read_text()).get("mcp", {}).get("servers", {})
-        assert "paper-queue" in mcp, "模板是新部署的唯一来源 —— 漏了它新机器就没有清单"
-        assert mcp["paper-queue"]["url"].startswith("http://paper-queue-mcp:"), (
-            "服务在独立容器里，模板必须用 URL 形态（stdio 形态意味着又挂回了网关）"
-        )
+        assert "paper-queue" not in mcp
 
     def test_template_disables_paper_fetch(self):
         """「只记不下」由机器强制：两个 skill 的触发语（都是"下载论文"）会互相抢。"""

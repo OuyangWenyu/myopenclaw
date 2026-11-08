@@ -11,6 +11,18 @@
 - 原生副本由 **agent 会话自行创建与修订**（frontmatter 常见 `author: hermes-agent`；Hermes 配置了 `creation_nudge_interval`，会主动推动从会话里沉淀技能）。历史版本被 agent 移入 `~/.hermes/skills/.archive/`（如 `yuque-daily-digest-dupe-20260921`、`yuque-daily-digest-symlink-20261009`、`morning-briefing-symlink-20260921`）。
 - 历史上把仓库版接入发现的机制是 **symlink**：`~/.hermes/skills/<name>` → `/opt/hermes-skills/<name>`。该机制与原生副本**反复同名撞车**（`Skill name collision` → cron 静默跳过技能加载、`last_status` 仍显示 ok、run 输出顶部有 `Skill(s) not found and skipped`），agents 按手册多次把 symlink 移出到 `.archive/`。**重建该 symlink 的来源 2026-10-12 查明：`docker/hermes/entrypoint-wrapper.sh` 里的 morning-briefing 接线块（PR #16 时代遗留，容器每次启动重放）**——当日晨间简报预加载再次被拒后定位，该块已删除；其余三个块（morning-triage-v2 / daily-dev-report / yuque-daily-digest）有意保留，morning-briefing 此后只走原生副本。
 
+## 道元 profile 的 paper-queue skill（2026-11-08）
+
+- **唯一源码**：`skills/paper-queue/SKILL.md`（旧的 `openclaw/skills/paper-queue/` 已删除；
+  未来若恢复 OpenClaw 链路，也复用这一份）
+- `hermes-daoyuan` 挂载 `./skills/paper-queue:/opt/hermes-skills/paper-queue:ro`
+- `start.sh` 建 symlink：
+  `~/.hermes/profiles/daoyuan/skills/paper-queue` → `/opt/hermes-skills/paper-queue`
+- 与默认 profile 的区别：道元的 skill 目录是 `~/.hermes/profiles/daoyuan/skills/`；
+  symlink 指向容器内路径，宿主上是悬空的，但在容器里有效
+- 若真实目录已存在，`start.sh` 跳过并警告（不覆盖 agent 自维护副本）；
+  排查：`ls -ld ~/.hermes/profiles/daoyuan/skills/paper-queue*`
+
 ## 2026-10-13 同步：晨间简报「日期误判成周末」修复
 
 当日 07:30（北京）那期晨间简报被代理**凭直觉**断言「今天是周末」吞掉（零工具调用，7 秒收工；旧 cron 表达式 `0-5` 还让它在周六也跑，session 里躺着上一期合法的周末话术）。修复已落地 live，并**同步回仓库**作为版本源：

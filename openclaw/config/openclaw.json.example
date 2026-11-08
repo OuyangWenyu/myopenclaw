@@ -129,14 +129,7 @@
     }
   },
   "mcp": {
-    "servers": {
-      "paper-queue": {
-        "url": "http://paper-queue-mcp:8003/mcp",
-        "transport": "streamable-http",
-        "connectionTimeoutMs": 10000,
-        "requestTimeoutMs": 30000
-      }
-    }
+    "servers": {}
   },
   "skills": {
     "entries": {

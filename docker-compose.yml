@@ -255,6 +255,8 @@ services:
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
+      # 论文清单 skill（与未来 OpenClaw 链路共用同一份源码；start.sh link 进 profile）
+      - ./skills/paper-queue:/opt/hermes-skills/paper-queue:ro
       # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
       - email-config-none:/opt/data/.config/himalaya
       - email-tokens-none:/opt/data/.config/ortie
@@ -282,16 +284,19 @@ services:
       # dailyinfo 只读 MCP（独立栈；URL/key 在容器内由 Hermes 展开）
       - DAILYINFO_MCP_URL=${DAILYINFO_MCP_URL:-}
       - DAILYINFO_MCP_KEY=${DAILYINFO_MCP_KEY:-}
+      # 论文清单 MCP：Bearer token 由服务端绑定到固定 actor Owen；URL 为空 = 停用
+      - PAPER_QUEUE_MCP_URL=${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}
+      - PAPER_QUEUE_DAOYUAN_TOKEN=${PAPER_QUEUE_DAOYUAN_TOKEN:-}
       # 道元不共享 TDAI memory — memory_enabled: false，独立记忆体系
-      # Feishu (道元·文献学者 — 开放给群内所有人)
+      # Feishu (道元·文献学者 — 仅 Owen 私聊；群聊禁用)
       - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${DAOYUAN_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
       - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
-      - FEISHU_GROUP_POLICY=open
-      - GATEWAY_ALLOW_ALL_USERS=true
+      - FEISHU_GROUP_POLICY=disabled
+      - FEISHU_ALLOWED_USERS=${DAOYUAN_FEISHU_ALLOWED_USERS:-}
     shm_size: "1g"
     deploy:
       resources:
@@ -407,14 +412,22 @@ services:
     container_name: paper-queue-mcp
     restart: unless-stopped
     ports:
-      - "${PAPER_QUEUE_MCP_PORT:-8003}:8003"
+      # 只绑 loopback：宿主没有消费者（mylibrary/检查器直接读 SQLite）；
+      # 容器间走 myopenclaw-net，不需要 0.0.0.0 暴露。
+      - "127.0.0.1:${PAPER_QUEUE_MCP_PORT:-8003}:8003"
     volumes:
       - ${HOME}/.myagentdata/paper-queue:/data
     environment:
       - PAPER_QUEUE_DB=/data/queue.sqlite
-      # 与插件共享的归属签名密钥（同一份写在 openclaw.json 的插件 config 里）。
-      # 两边必须一致，否则每次写入都会被拒 —— 有守卫钉着。
-      - PAPER_QUEUE_ACTOR_SECRET=${PAPER_QUEUE_ACTOR_SECRET:-}
+      # 旧 HMAC 密钥保留在 .env（未来多用户身份插件复用），但**默认不注入**：
+      # 注入即等于重新打开一条「持密钥者可写任意 actor」的旁路。将来真有多用户
+      # HMAC 客户端时再取消下面这行注释。
+      # - PAPER_QUEUE_ACTOR_SECRET=${PAPER_QUEUE_ACTOR_SECRET:-}
+      # 道元（Hermes）Bearer token → 固定归属 Owen（Discord 雪花）。
+      # 无 Authorization 头的请求仍走上面的 HMAC 路径，不受影响。
+      - PAPER_QUEUE_DAOYUAN_TOKEN=${PAPER_QUEUE_DAOYUAN_TOKEN:-}
+      - PAPER_QUEUE_DAOYUAN_ACTOR_ID=${PAPER_QUEUE_DAOYUAN_ACTOR_ID:-}
+      - PAPER_QUEUE_DAOYUAN_ACTOR_NAME=${PAPER_QUEUE_DAOYUAN_ACTOR_NAME:-Owen}
     networks:
       - myopenclaw-net
     deploy:
