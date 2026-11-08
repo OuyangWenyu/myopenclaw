@@ -365,6 +365,29 @@ if [[ -f "${OPENCLAW_CONFIG}" ]]; then
   fi
 fi
 
+# ── dailyinfo 每日全量简报 → 道元飞书私聊（no-agent cron 的脚本与配置）──
+# Hermes cron 的 --script 只认 HERMES_HOME/scripts，且拒绝解析到该目录之外的
+# symlink ⇒ 必须拷贝而不是链接。每次 start.sh 覆盖安装：仓库是唯一版本源，
+# 脚本内容更新不需要改 cron job。
+DAOYUAN_SCRIPTS_DIR="${HOME}/.hermes/profiles/daoyuan/scripts"
+mkdir -p "${DAOYUAN_SCRIPTS_DIR}"
+_tmp_digest="${DAOYUAN_SCRIPTS_DIR}/.dailyinfo_digest.py.tmp.$$"
+if install -m 644 "${REPO_ROOT}/scripts/dailyinfo_digest.py" "${_tmp_digest}"; then
+  mv -f "${_tmp_digest}" "${DAOYUAN_SCRIPTS_DIR}/dailyinfo_digest.py"
+  echo "   📜 dailyinfo_digest.py 已安装（~/.hermes/profiles/daoyuan/scripts/）"
+else
+  rm -f "${_tmp_digest}"
+  echo "   ⚠️  dailyinfo_digest.py 安装失败（每日镜像将无法运行）"
+fi
+
+# cron.wrap_response=false：否则每条投递都带 "Cronjob Response: ..." 头尾样板。
+DAOYUAN_CRON_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_cron_config.py" \
+  "${DAOYUAN_CONFIG}" 2>&1 || true)"
+case "${DAOYUAN_CRON_STATUS}" in
+  written*|unchanged*) echo "   ⏰ 道元 cron.wrap_response: ${DAOYUAN_CRON_STATUS}" ;;
+  *) echo "   ⚠️  道元 cron.wrap_response 配置失败: ${DAOYUAN_CRON_STATUS}（消息会带 Cronjob Response 包裹）" ;;
+esac
+
 # server-monitoring-digest skill：两个 profile 共用同一个 repo 只读挂载。
 # 目标路径是容器内路径；宿主机上这条 symlink 是"悬空"的，但在容器里有效
 # （与 daily-dev-report 的既有模式一致）。只补缺/改指向，不覆盖真实目录。
@@ -782,6 +805,7 @@ fi
 _openclaw_started_before="$(docker inspect openclaw-gateway --format '{{.State.StartedAt}}' 2>/dev/null || true)"
 _hermes_started_before="$(docker inspect hermes --format '{{.State.StartedAt}}' 2>/dev/null || true)"
 _coder_started_before="$(docker inspect hermes-coder --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+_daoyuan_started_before="$(docker inspect hermes-daoyuan --format '{{.State.StartedAt}}' 2>/dev/null || true)"
 
 docker compose up -d ${BUILD_FLAG}
 echo "✅ 服务已启动"
@@ -825,6 +849,22 @@ restart_hermes_for_mcp() {
 if [[ "${_hermes_auth_changed}" != "true" ]]; then
   restart_hermes_for_mcp hermes "${DEFAULT_MCP_STATUS}" "${_hermes_started_before}" "爱玛士"
   restart_hermes_for_mcp hermes-coder "${CODER_MCP_STATUS}" "${_coder_started_before}" "爱码士"
+fi
+
+# 道元的 cron.wrap_response 是投递时读取的 profile 配置；容器没在本次 up 中重建时
+# 重启一次以确保重新加载（与上面 MCP 配置同一套路）。
+if [[ "${_hermes_auth_changed}" != "true" && "${DAOYUAN_CRON_STATUS}" == written* ]]; then
+  _daoyuan_started_after="$(docker inspect hermes-daoyuan --format '{{.State.StartedAt}}' 2>/dev/null || true)"
+  if [[ "${_daoyuan_started_before}" != "${_daoyuan_started_after}" ]]; then
+    echo "   ℹ️  hermes-daoyuan 已在本次 up 中创建/重建，cron 配置随启动生效"
+  else
+    echo "🔄 道元 cron.wrap_response 有变更，重启 hermes-daoyuan 使其生效..."
+    if docker compose restart hermes-daoyuan >/dev/null 2>&1; then
+      echo "   ✅ hermes-daoyuan 已重启"
+    else
+      echo "   ⚠️  hermes-daoyuan 重启失败，请手动执行: docker compose restart hermes-daoyuan"
+    fi
+  fi
 fi
 
 # mcp.servers / plugins.load 的配置变更不会热加载，必须重启网关才生效
@@ -1080,6 +1120,97 @@ print(job.get('id', '') if job else '')
   fi
 else
   echo "   ⚠️  cron_mode 未启用，跳过 Hermes cron job 注册"
+fi
+
+# ── dailyinfo 每日全量简报 → 道元飞书私聊（no-agent cron）────────────
+# 数据源是 dailyinfo 的只读 MCP；脚本 stdout 由 Hermes 原样投递，不经过 LLM。
+# 07:30 北京 = 30 23 * * *（容器 UTC）。chat id 只放 .env，仓库内不落真实值。
+DAOYUAN_DM_CHAT_ID="$(grep '^DAOYUAN_FEISHU_DM_CHAT_ID=' "${REPO_ROOT}/.env" 2>/dev/null \
+  | tail -1 | cut -d'=' -f2- | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true)"
+DAILYINFO_URL_SET="$(grep -c '^DAILYINFO_MCP_URL=.' "${REPO_ROOT}/.env" 2>/dev/null || true)"
+DAILYINFO_KEY_SET="$(grep -c '^DAILYINFO_MCP_KEY=.' "${REPO_ROOT}/.env" 2>/dev/null || true)"
+if [[ -z "${DAOYUAN_DM_CHAT_ID}" ]]; then
+  echo "   ⚠️  DAOYUAN_FEISHU_DM_CHAT_ID 未设置，跳过 dailyinfo-digest 注册（见 .env.example）"
+elif [[ ! "${DAOYUAN_DM_CHAT_ID}" =~ ^oc_[0-9a-f]{32}$ ]]; then
+  echo "   ⚠️  DAOYUAN_FEISHU_DM_CHAT_ID 格式不对（应为 oc_ + 32 位十六进制），跳过 dailyinfo-digest 注册"
+elif [[ "${DAILYINFO_URL_SET:-0}" -lt 1 || "${DAILYINFO_KEY_SET:-0}" -lt 1 ]]; then
+  echo "   ⚠️  DAILYINFO_MCP_URL/KEY 未配置，跳过 dailyinfo-digest 注册"
+else
+  DAOYUAN_READY=false
+  for _ in $(seq 1 15); do
+    if docker compose ps hermes-daoyuan 2>/dev/null | grep -q 'Up'; then
+      DAOYUAN_READY=true
+      break
+    fi
+    sleep 2
+  done
+  if [[ "${DAOYUAN_READY}" != "true" ]]; then
+    echo "   ⚠️  hermes-daoyuan 未就绪，跳过 dailyinfo-digest 注册"
+  else
+    DAILYINFO_DIGEST_JOB_ID="$(python3 - <<'PY' 2>/dev/null || true
+import json, os
+path = os.path.expanduser("~/.hermes/profiles/daoyuan/cron/jobs.json")
+try:
+    data = json.load(open(path))
+except Exception:
+    raise SystemExit(0)
+job = next((j for j in data.get("jobs", []) if j.get("name") == "dailyinfo-digest"), None)
+print(job.get("id", "") if job else "")
+PY
+)"
+    if [[ -z "${DAILYINFO_DIGEST_JOB_ID}" ]]; then
+      docker compose exec -T hermes-daoyuan "${HERMES_BIN}" -p daoyuan cron create \
+        "30 23 * * *" \
+        --script dailyinfo_digest.py \
+        --no-agent \
+        --deliver "feishu:${DAOYUAN_DM_CHAT_ID}" \
+        --name "dailyinfo-digest" 2>/dev/null && \
+        echo "   📋 dailyinfo-digest cron job 已注册 (每日 7:30 北京 → 道元私聊)" || \
+        echo "   ⚠️  dailyinfo-digest cron job 注册失败（可去掉 2>/dev/null 重试查看原因）"
+    else
+      # 已存在：比对 schedule / script / no-agent / deliver，漂移则修正。
+      DAILYINFO_DIGEST_DRIFT="$(DAILYINFO_DM_CHAT_ID="${DAOYUAN_DM_CHAT_ID}" python3 - <<'PY' 2>/dev/null || echo unknown
+import json, os
+path = os.path.expanduser("~/.hermes/profiles/daoyuan/cron/jobs.json")
+try:
+    data = json.load(open(path))
+except Exception:
+    print("unknown")
+    raise SystemExit(0)
+job = next((j for j in data.get("jobs", []) if j.get("name") == "dailyinfo-digest"), None)
+if not job:
+    print("missing")
+    raise SystemExit(0)
+schedule = job.get("schedule")
+expr = schedule.get("expr") if isinstance(schedule, dict) else schedule
+deliver = job.get("deliver")
+deliveries = deliver if isinstance(deliver, list) else [deliver]
+want = "feishu:" + os.environ["DAILYINFO_DM_CHAT_ID"]
+script = os.path.basename(str(job.get("script") or ""))
+ok = (
+    expr == "30 23 * * *"
+    and script == "dailyinfo_digest.py"
+    and bool(job.get("no_agent"))
+    and want in deliveries
+)
+print("ok" if ok else "drift")
+PY
+)"
+      if [[ "${DAILYINFO_DIGEST_DRIFT}" == "ok" ]]; then
+        echo "   📋 dailyinfo-digest cron job 已存在且配置一致，跳过"
+      elif [[ "${DAILYINFO_DIGEST_DRIFT}" == "drift" ]]; then
+        docker compose exec -T hermes-daoyuan "${HERMES_BIN}" -p daoyuan cron edit "${DAILYINFO_DIGEST_JOB_ID}" \
+          --schedule "30 23 * * *" \
+          --script dailyinfo_digest.py \
+          --no-agent \
+          --deliver "feishu:${DAOYUAN_DM_CHAT_ID}" 2>/dev/null && \
+          echo "   🔄 dailyinfo-digest cron job 已修正（配置漂移）" || \
+          echo "   ⚠️  dailyinfo-digest cron job 修正失败"
+      else
+        echo "   ⚠️  dailyinfo-digest cron job 状态未知（jobs.json 不可读），保留现状"
+      fi
+    fi
+  fi
 fi
 
 # ── 幂等初始化 Uptime Kuma 监控项 ──────────────────────────────

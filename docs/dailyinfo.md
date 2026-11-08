@@ -69,6 +69,53 @@ DAILYINFO_MCP_KEY=<dailyinfo keys.json 里的个人 key>
 
 两者都遵循 **URL 非空 = 开关**：`.env` 里留空则移除受管条目。
 
+## 道元私聊全量镜像
+
+除了让 agent 按需查询，道元还会每天 **07:30（北京）** 把当天全部 5 类简报的正文**原样**推到「道元 bot 与用户的飞书私聊」。这是一条 **Hermes no-agent cron**（`dailyinfo-digest`），脚本 stdout 由 Hermes 直接投递，**不经过 LLM**：
+
+```text
+Hermes cron（30 23 * * * UTC）
+  → ~/.hermes/profiles/daoyuan/scripts/dailyinfo_digest.py
+  → dailyinfo MCP: list_briefings + get_briefing（跟随 next_cursor 取全文）
+  → stdout（5 类正文）
+  → Hermes 飞书适配器按 8000 字符自动分片
+  → 道元私聊
+```
+
+配置（仓库根 `.env`，gitignored）：
+
+```env
+DAOYUAN_FEISHU_DM_CHAT_ID=oc_...   # 用 hermes -p daoyuan send --list feishu 查看
+```
+
+- 为空 = 不注册 job（已有 job 不会自动删除）；格式必须是 `oc_` + 32 位十六进制
+- 数据可见性跟随 dailyinfo 的 `DAILYINFO_MCP_VISIBILITY`（当前 `generated`）：
+  **不依赖 Discord 推送成功**
+- 占位/无更新正文不投递；缺失的分类显示 `📭 … 今日暂无简报`
+- 单类拉取失败显示 `⚠️ …`，其余类别照常投递；整体 MCP 不可达 → 非 0 退出，
+  Hermes 把失败告警投到同一私聊
+- 脚本每次 `./scripts/start.sh` 覆盖安装（仓库是唯一版本源，不要手改 profile 里的副本）
+- `cron.wrap_response: false` 由 `scripts/ensure_hermes_cron_config.py` 幂等写入，
+  否则消息会带 `Cronjob Response: …` 头尾样板
+
+手工补推/预览：
+
+```bash
+# 只打印，不投递
+docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/python \
+  /opt/data/profiles/daoyuan/scripts/dailyinfo_digest.py --date 2026-11-08 | head -40
+
+# 真实投递一次（会发到私聊）
+docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan \
+  cron run dailyinfo-digest
+docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan \
+  cron runs dailyinfo-digest --limit 3
+
+# 关闭 / 删除
+docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan \
+  cron remove dailyinfo-digest
+```
+
 ## 验证
 
 ```bash

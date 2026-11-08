@@ -172,3 +172,30 @@ class TestBoundaryWiring:
         assert "dailyinfo-mcp" in DOC
         assert "ensure_hermes_dailyinfo.py" in DOC
         assert "install-dailyinfo.sh" not in DOC
+
+    def test_daoyuan_digest_script_and_helper_exist(self):
+        assert (REPO_ROOT / "scripts" / "dailyinfo_digest.py").is_file()
+        assert (REPO_ROOT / "scripts" / "ensure_hermes_cron_config.py").is_file()
+
+    def test_start_sh_installs_daoyuan_digest_before_compose_up(self):
+        up = START_SH.index("docker compose up -d ${BUILD_FLAG}")
+        assert START_SH.index("scripts/dailyinfo_digest.py") < up
+        assert "DAOYUAN_SCRIPTS_DIR" in START_SH
+        assert "ensure_hermes_cron_config.py" in START_SH
+
+    def test_start_sh_registers_daoyuan_digest_job(self):
+        assert "DAOYUAN_FEISHU_DM_CHAT_ID" in START_SH
+        assert '--name "dailyinfo-digest"' in START_SH
+        assert '"30 23 * * *"' in START_SH
+        assert "--no-agent" in START_SH
+        assert "--script dailyinfo_digest.py" in START_SH
+        assert '--deliver "feishu:${DAOYUAN_DM_CHAT_ID}"' in START_SH
+
+    def test_env_example_documents_daoyuan_dm_chat_id(self):
+        assert "# DAOYUAN_FEISHU_DM_CHAT_ID=oc_xxx" in ENV_EXAMPLE
+        assert not __import__("re").search(r"oc_[0-9a-f]{32}", ENV_EXAMPLE)
+
+    def test_doc_describes_the_daoyuan_digest(self):
+        assert "dailyinfo-digest" in DOC
+        assert "DAOYUAN_FEISHU_DM_CHAT_ID" in DOC
+        assert "dailyinfo_digest.py" in DOC
