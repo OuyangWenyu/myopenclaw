@@ -1,6 +1,6 @@
 [project]
 name = "myopenclaw"
-version = "0.1.0"
+version = "0.2.0"
 description = "个人操作系统——实用Agents管理 — Docker Compose 部署文档"
 requires-python = ">=3.12"
 
