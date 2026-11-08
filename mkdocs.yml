@@ -53,6 +53,9 @@ plugins:
 # 守卫 tests/test_member_docs.py::TestDocsNavCoverage。
 nav:
   - 首页: index.md
+  - 版本说明:
+      - v0.2.1: releases/v0.2.1.md
+      - v0.2.0: releases/v0.2.0.md
   - 开始:
       - 快速开始: setup.md
       - 架构: architecture.md
@@ -82,6 +85,7 @@ nav:
       - 服务健康通知部署记录 (2026-11-02): deployment-20261102-health-notifier.md
       - 千问办公 AI听记: qwennote-mcp-hermes.md
   - 运维:
+      - 发布流程: releasing.md
       - 调度系统: scheduling.md
       - 备份系统: backup.md
       - 服务监控: monitoring.md

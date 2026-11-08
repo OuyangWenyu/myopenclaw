@@ -1,0 +1,53 @@
+name: Release checks
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-checks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Validate version, tests and docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Install locked dependencies
+        run: uv sync --locked --group docs
+
+      - name: Verify lockfile is current
+        run: uv lock --check
+
+      - name: Verify tag matches project version
+        run: |
+          version="$(uv version --short)"
+          echo "project version: ${version}"
+          if [[ "${GITHUB_REF_TYPE}" == "tag" && "${GITHUB_REF_NAME}" != "v${version}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match v${version}" >&2
+            exit 1
+          fi
+
+      - name: Run tests
+        run: uv run --with pytest --with pyyaml pytest tests/ -q
+
+      - name: Build docs strictly
+        run: uv run mkdocs build --strict
+
+# 这个工作流只做发布校验：不创建 tag、不创建 GitHub Release、不上传 PyPI。
