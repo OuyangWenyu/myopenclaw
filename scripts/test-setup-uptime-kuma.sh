@@ -121,55 +121,42 @@ assert_contains \
     "${SCRIPT_CONTENT}"
 
 # ============================================================
-# Test 3: 条件重启（仅 ADDED > 0 时重启）
-# 用 mock 环境测试脚本行为
+# Test 3: 写库前停容器（并发写 SQLite 会损坏 b-tree）
 # ============================================================
 echo ""
-echo "🧪 Test 3: 条件重启（仅 ADDED > 0）"
+echo "🧪 Test 3: 写库前停 Kuma + 失败兜底拉起"
 
-# 验证脚本中有条件判断
 assert_contains \
-    "restart guarded by ADDED > 0 check" \
-    'ADDED' \
+    "stops Kuma before DB writes" \
+    'docker compose stop uptime-kuma' \
     "${SCRIPT_CONTENT}"
 
-# Mock 集成测试：模拟脚本的监控创建 + 重启逻辑
-test_restart_guard() {
-    local added="$1" expect_restart="$2" desc="$3"
+assert_contains \
+    "starts Kuma after DB writes" \
+    'docker compose start uptime-kuma' \
+    "${SCRIPT_CONTENT}"
 
-    # 模拟脚本末尾的重启逻辑
-    RESTART_CALLED=false
-    ADDED="${added}"
+assert_contains \
+    "restarts Kuma if the script fails midway" \
+    "trap 'docker compose start uptime-kuma" \
+    "${SCRIPT_CONTENT}"
 
-    # 复制当前脚本的重启部分来测试
-    if [[ ${ADDED} -gt 0 ]]; then
-        RESTART_CALLED=true
-    fi
-
-    if [[ "${expect_restart}" == "yes" ]]; then
-        assert_eq "${desc}" "true" "${RESTART_CALLED}"
-    else
-        assert_eq "${desc}" "false" "${RESTART_CALLED}"
-    fi
-}
-
-test_restart_guard 3 "yes" "ADDED=3 → restart triggered"
-test_restart_guard 1 "yes" "ADDED=1 → restart triggered"
-test_restart_guard 0 "no"  "ADDED=0 → restart skipped"
-
-# 验证主脚本中 docker compose restart 被条件包裹
-# （检查 restart 命令行上方应有 if 判断）
-RESTART_LINE=$(echo "${SCRIPT_CONTENT}" | grep -n 'docker compose restart uptime-kuma' | head -1 | cut -d: -f1 || echo "0")
-if [[ "${RESTART_LINE}" -gt 0 ]]; then
-    # 取 restart 前 5 行，检查是否有 if [[ ${ADDED} -gt 0 ]]
-    BEFORE_RESTART=$(echo "${SCRIPT_CONTENT}" | head -n "${RESTART_LINE}" | tail -n 5)
-    assert_contains \
-        "restart is inside conditional (if ADDED > 0)" \
-        'ADDED' \
-        "${BEFORE_RESTART}"
+# stop 必须出现在第一次写 monitor 之前
+STOP_LINE=$(echo "${SCRIPT_CONTENT}" | grep -n 'docker compose stop uptime-kuma' | head -1 | cut -d: -f1)
+WRITE_LINE=$(echo "${SCRIPT_CONTENT}" | grep -n 'INSERT INTO monitor' | head -1 | cut -d: -f1)
+if [[ -n "${STOP_LINE}" && -n "${WRITE_LINE}" && "${STOP_LINE}" -lt "${WRITE_LINE}" ]]; then
+    assert_eq "stop precedes monitor INSERT" "true" "true"
 else
     FAIL=$((FAIL + 1))
-    echo -e "  ${RED}❌${NC} docker compose restart line not found"
+    echo -e "  ${RED}❌${NC} stop (line ${STOP_LINE:-?}) must precede monitor INSERT (line ${WRITE_LINE:-?})"
+fi
+
+# 旧的「运行中 restart」写法必须消失（那是并发写库的根因）
+if echo "${SCRIPT_CONTENT}" | grep -q 'docker compose restart uptime-kuma'; then
+    FAIL=$((FAIL + 1))
+    echo -e "  ${RED}❌${NC} legacy 'docker compose restart' still present"
+else
+    assert_eq "no legacy restart path" "true" "true"
 fi
 
 # ============================================================

@@ -63,7 +63,7 @@ clone_or_update \
   "${CODE_DIR}/yuque_mcp_server" \
   "yuque_mcp_server（本机语雀 MCP 服务端）"
 
-# ── 4. dailyinfo（软依赖：launchd 调度）───────────────────────
+# ── 4. dailyinfo（软依赖：Claude Code skills 源；调度/MCP 在 dailyinfo 自己的 compose 栈）──
 clone_or_update \
   "https://github.com/iHeadWater/dailyinfo.git" \
   "${CODE_DIR}/dailyinfo" \

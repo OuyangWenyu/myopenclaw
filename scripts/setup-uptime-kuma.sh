@@ -71,6 +71,15 @@ USER_ID=$(sqlite3 "${KUMA_DB}" "SELECT id FROM user ORDER BY id LIMIT 1;")
 
 log "   👤 管理员用户 ID: ${USER_ID}"
 
+# ── 写库前必须停掉 Kuma ────────────────────────────────────────
+# sqlite3 CLI 与 Kuma 的 better-sqlite3 并发写同一个 WAL 库会损坏 b-tree：
+# 2026-11-08 实测 monitor 表出现重复页引用（integrity_check 报
+# "2nd reference to page"），Kuma 随后所有 monitor 查询都 SQLITE_CORRUPT。
+# 所以顺序固定为：停 → 写 → 起；中途失败由 trap 兜底拉起。
+log "   ⏸  停止 Uptime Kuma（避免并发写 SQLite）..."
+docker compose stop uptime-kuma >/dev/null 2>&1 || true
+trap 'docker compose start uptime-kuma >/dev/null 2>&1 || true' EXIT
+
 # ── 确保 docker_host 条目存在 ─────────────────────────────────
 DOCKER_HOST_EXISTS=$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM docker_host WHERE docker_type='socket' AND docker_daemon='/var/run/docker.sock';")
 if [[ "${DOCKER_HOST_EXISTS}" -eq 0 ]]; then
@@ -98,7 +107,7 @@ declare -a MONITORS=(
     # Like yuque: probe /mcp without a token and accept only 401. 200 means the
     # Bearer middleware is not installed (fail-open), which must turn red.
     "Repo Scanner MCP|http|http://repo-scanner-mcp:8001/mcp||[\"401\"]"
-    "FreshRSS|http|http://dailyinfo_freshrss:80||[\"200-399\"]"
+    "FreshRSS|http|http://host.docker.internal:8081||[\"200-399\"]"
     # 不带 token 探 /sse 得到 401 —— "活着 + key 已配置"的双重信号。只接受 401：
     # key 意外为空时上游是无认证直通（200），接受 2xx 会让这个 fail-open 状态
     # 永远显示绿 —— 恰好瞎掉最该报警的故障模式
@@ -120,8 +129,20 @@ declare -a MONITORS=(
     "Docker: issue-notifier|docker||issue-notifier|"
     "Docker: zotero-mcp|docker||zotero-mcp|"
     "Docker: yuque-mcp|docker||yuque-mcp|"
-    "Docker: dailyinfo_freshrss|docker||dailyinfo_freshrss|"
+    "Docker: dailyinfo-freshrss|docker||dailyinfo-freshrss|"
+    "Docker: dailyinfo-scheduler|docker||dailyinfo-scheduler|"
 )
+
+# 旧 myopenclaw 的 freshrss 容器（dailyinfo_freshrss）已迁到 dailyinfo 独立栈。
+# Docker 监控不像 HTTP 那样按 URL 收敛，遗留条目会永远红着 —— 显式清掉。
+LEGACY_DELETED=0
+for legacy in "Docker: dailyinfo_freshrss"; do
+    if [[ "$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM monitor WHERE name='${legacy}';")" -gt 0 ]]; then
+        sqlite3 "${KUMA_DB}" "DELETE FROM monitor WHERE name='${legacy}';"
+        LEGACY_DELETED=$((LEGACY_DELETED + 1))
+        log "   🗑  已删除遗留监控: ${legacy}"
+    fi
+done
 
 # ── 幂等创建监控项 ────────────────────────────────────────────
 ADDED=0
@@ -179,7 +200,7 @@ for entry in "${MONITORS[@]}"; do
 done
 
 log ""
-log "📊 注册结果: ${ADDED} 新增, ${UPDATED} 更新, ${SKIPPED} 已存在（跳过）"
+log "📊 注册结果: ${ADDED} 新增, ${UPDATED} 更新, ${LEGACY_DELETED} 删除, ${SKIPPED} 已存在（跳过）"
 
 # ── 通知渠道检查 ──────────────────────────────────────────────
 NOTIF_COUNT=$(sqlite3 "${KUMA_DB}" "SELECT COUNT(*) FROM notification WHERE active=1;" 2>/dev/null || echo "0")
@@ -191,13 +212,9 @@ if [[ "${NOTIF_COUNT}" -eq 0 ]]; then
     log "   3. 填入 webhook URL，并设为默认通知方式"
 fi
 
-# ── 仅在新增监控项时重启容器 ──────────────────────────────
-if [[ $((ADDED + UPDATED)) -gt 0 ]]; then
-    log ""
-    log "🔄 重启 Uptime Kuma 以加载新配置..."
-    docker compose restart uptime-kuma >/dev/null 2>&1
-    log "✅ Uptime Kuma 配置完成"
-else
-    log ""
-    log "✅ Uptime Kuma 配置无变更，无需重启"
-fi
+# ── 写库结束后启动容器 ────────────────────────────────────────
+log ""
+log "🔄 启动 Uptime Kuma..."
+docker compose start uptime-kuma >/dev/null 2>&1
+trap - EXIT
+log "✅ Uptime Kuma 配置完成"

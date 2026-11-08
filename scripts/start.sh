@@ -85,6 +85,21 @@ else
 fi
 echo ""
 
+# ── dailyinfo 独立栈（软依赖：本机存在则顺手拉起）──────────────
+# dailyinfo 有自己的 compose project（freshrss + scheduler + dailyinfo-mcp）。
+# 这里只做「拉起本项目时顺带拉起它」，不合并 compose；失败只警告，不阻断主栈。
+# dailyinfo 部署在远程（如 81）时设 DAILYINFO_LOCAL_STACK=0 关闭本地拉起。
+DAILYINFO_DIR="${DAILYINFO_DIR:-${HOME}/code/dailyinfo}"
+if [[ "${DAILYINFO_LOCAL_STACK:-1}" != "0" && -f "${DAILYINFO_DIR}/compose.yml" ]]; then
+  echo "📚 启动 dailyinfo 独立栈..."
+  if (cd "${DAILYINFO_DIR}" && docker compose up -d); then
+    echo "   ✅ dailyinfo 已启动（freshrss / scheduler / dailyinfo-mcp）"
+  else
+    echo "   ⚠️  dailyinfo 启动失败；主栈继续。手动检查: cd ${DAILYINFO_DIR} && docker compose up -d"
+  fi
+  echo ""
+fi
+
 # ── 从 .cloud.conf 解析 BACKUP_ROOT ─────────────────────────
 # Linux 兼容：.cloud.conf 和云盘目录缺失时降级为 warning，不阻
 # 止后续 Docker 服务启动。备份 cron 容器自身会在缺失时优雅失败。
@@ -322,6 +337,31 @@ if [[ -f "${CODER_CONFIG}" ]]; then
   else
     echo "   ⚠️  爱码士 server-monitoring MCP 注册失败: ${CODER_MCP_STATUS}"
     CODER_MCP_STATUS="failed"
+  fi
+fi
+
+# ── dailyinfo 只读 MCP（道元 + 虾酱）─────────────────────────────
+# dailyinfo 是独立 compose 栈（FreshRSS + scheduler + MCP），本仓只注册
+# MCP 客户端条目：道元 = Hermes daoyuan profile，虾酱 = OpenClaw 主网关。
+# 配置写 ${VAR} 占位符，真实 URL/key 只在容器环境里展开；两者为空 = 移除条目。
+DAOYUAN_DAILYINFO_STATUS=""
+if [[ -f "${DAOYUAN_CONFIG}" ]]; then
+  if DAOYUAN_DAILYINFO_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_dailyinfo.py" \
+      "${DAOYUAN_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
+    echo "   📚 道元 dailyinfo MCP: ${DAOYUAN_DAILYINFO_STATUS}"
+  else
+    echo "   ⚠️  道元 dailyinfo MCP 注册失败: ${DAOYUAN_DAILYINFO_STATUS}"
+    DAOYUAN_DAILYINFO_STATUS="failed"
+  fi
+fi
+OPENCLAW_DAILYINFO_STATUS=""
+if [[ -f "${OPENCLAW_CONFIG}" ]]; then
+  if OPENCLAW_DAILYINFO_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_openclaw_dailyinfo.py" \
+      "${OPENCLAW_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
+    echo "   📚 虾酱 dailyinfo MCP: ${OPENCLAW_DAILYINFO_STATUS}"
+  else
+    echo "   ⚠️  虾酱 dailyinfo MCP 注册失败: ${OPENCLAW_DAILYINFO_STATUS}"
+    OPENCLAW_DAILYINFO_STATUS="failed"
   fi
 fi
 

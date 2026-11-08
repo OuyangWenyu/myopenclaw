@@ -279,6 +279,9 @@ services:
       # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
       # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
       - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
+      # dailyinfo 只读 MCP（独立栈；URL/key 在容器内由 Hermes 展开）
+      - DAILYINFO_MCP_URL=${DAILYINFO_MCP_URL:-}
+      - DAILYINFO_MCP_KEY=${DAILYINFO_MCP_KEY:-}
       # 道元不共享 TDAI memory — memory_enabled: false，独立记忆体系
       # Feishu (道元·文献学者 — 开放给群内所有人)
       - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}
@@ -441,6 +444,9 @@ services:
       - UNPAYWALL_EMAIL=${UNPAYWALL_EMAIL:-}
       - PAPER_FETCH_NO_SCIHUB=${PAPER_FETCH_NO_SCIHUB:-}
       - GITHUB_PERSONAL_ACCESS_TOKEN=${OPENCLAW_GH_TOKEN:-}
+      # dailyinfo 只读 MCP（独立栈；${VAR} 由 OpenClaw 在激活时展开）
+      - DAILYINFO_MCP_URL=${DAILYINFO_MCP_URL:-}
+      - DAILYINFO_MCP_KEY=${DAILYINFO_MCP_KEY:-}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:18789/healthz"]
       interval: 30s
@@ -479,26 +485,6 @@ services:
     environment:
       - TZ=${TZ:-Asia/Shanghai}
       - NODE_ENV=production
-    deploy:
-      resources:
-        limits:
-          memory: 512M
-          cpus: "0.5"
-    networks:
-      - myopenclaw-net
-
-  # ── FreshRSS（dailyinfo RSS 订阅源）───────────────────────────
-  freshrss:
-    image: freshrss/freshrss:latest
-    container_name: dailyinfo_freshrss
-    restart: unless-stopped
-    ports:
-      - "${FRESHRSS_PORT:-8081}:80"
-    volumes:
-      - ${HOME}/.myagentdata/dailyinfo/freshrss/data:/var/www/FreshRSS/data
-    environment:
-      - TZ=${TZ:-Asia/Shanghai}
-      - CRON_MIN=*/15
     deploy:
       resources:
         limits:

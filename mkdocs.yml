@@ -74,6 +74,7 @@ nav:
       - Zotero 文献 (mylibrary): zotero-cli-cc.md
       - 论文清单 (paper-queue): paper-queue.md
       - 事务追踪 (aisecretary): aisecretary.md
+      - 依赖服务容器化: dependency-services.md
       - dailyinfo 调度: dailyinfo.md
       - 研发日报: daily-dev-report.md
       - issue/PR 通知 (issue-watcher): issue-watcher.md

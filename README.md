@@ -42,7 +42,7 @@
 ## 仓库配合
 
 ```
-dailyinfo/                 ← AI 情报聚合（RSS + AI 摘要）
+dailyinfo/                 ← AI 情报聚合（独立 compose 栈：FreshRSS + scheduler + 只读 MCP；本仓只消费 MCP）
 aisecretary/               ← 事务数据库 MCP
 git-contribution-stats/    ← 多仓库 Git 贡献统计（repo-scanner-mcp 源码）
 yuque_mcp_server/          ← 语雀 MCP 服务端（yuque-mcp 构建依赖）
@@ -66,7 +66,6 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
     ├─ aisecretary   (事务数据库 MCP)
     ├─ yuque-mcp     (语雀知识库 MCP，本机 SSE)
     ├─ tdai-memory   (Agent 长期记忆)
-    ├─ freshrss      (RSS 聚合，dailyinfo 数据源)
     ├─ backup-cron   (定时备份)
     └─ uptime-kuma   (服务监控)
 ```
@@ -133,7 +132,7 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 | repo-scanner-mcp | 8001 | 主栈 | 研发日报 MCP 数据服务 |
 | yuque-mcp | —（仅容器网络） | 主栈 | 语雀知识库 MCP（本机 SSE，自持只读 token，不发布宿主端口；Hermes/天一接入；日报 skill 的 live 副本为 `~/.hermes/skills` 原生副本，见 [Hermes Skill 机制](docs/hermes-skills.md)） |
 | paper-queue-mcp | 8003 | 主栈 | 论文清单 MCP（独立容器，队列目录只挂给它） |
-| freshrss | 8081 | 主栈 | RSS 聚合（dailyinfo 数据源） |
+| dailyinfo | 8081 / 8768（均 loopback） | 独立栈 | dailyinfo 自己的 compose（FreshRSS + scheduler + 只读 MCP）；不在主栈，本仓只消费 MCP |
 | uptime-kuma | 3001 | 主栈 | 服务监控面板 |
 | backup-cron | — | 主栈 | 定时快照备份 |
 | zhixun-water-mcp | 18201 | zhixun 栈（`--with-local-mcp`） | 本地水文 MCP 调试回退（默认不启动；生产连远程 Bearer 服务） |
