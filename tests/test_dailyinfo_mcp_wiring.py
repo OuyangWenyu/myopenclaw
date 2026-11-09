@@ -185,11 +185,12 @@ class TestBoundaryWiring:
 
     def test_start_sh_registers_daoyuan_digest_job(self):
         assert "DAOYUAN_FEISHU_DM_CHAT_ID" in START_SH
-        assert '--name "dailyinfo-digest"' in START_SH
-        assert '"30 23 * * *"' in START_SH
+        # 注册逻辑已抽成 ensure_daoyuan_script_cron 共用函数；断言调用参数与函数体。
+        assert 'ensure_daoyuan_script_cron "dailyinfo-digest" "30 23 * * *"' in START_SH
+        assert "dailyinfo_digest.py \"${DAOYUAN_DM_CHAT_ID}\"" in START_SH
         assert "--no-agent" in START_SH
-        assert "--script dailyinfo_digest.py" in START_SH
-        assert '--deliver "feishu:${DAOYUAN_DM_CHAT_ID}"' in START_SH
+        assert '--name "${name}"' in START_SH
+        assert '--deliver "feishu:${chat_id}"' in START_SH
 
     def test_env_example_documents_daoyuan_dm_chat_id(self):
         assert "# DAOYUAN_FEISHU_DM_CHAT_ID=oc_xxx" in ENV_EXAMPLE

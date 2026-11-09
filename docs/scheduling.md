@@ -11,6 +11,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（健康采集
 | 每 60s | 宿主机 | launchd | Healthchecks.io 心跳 ping | `install-healthchecks-ping.sh` |
 | 06:00 | Docker | yuque-mcp 调度器 | **语雀知识库快照**（变更基线） | 容器内置（`YUQUE_CHANGE_SNAPSHOT_TIME`） |
 | 07:00 | Docker | yuque-mcp 调度器 | **语雀变更报告**生成（yuque-daily-digest 的数据源） | 容器内置（`YUQUE_CHANGE_REPORT_TIME`） |
+| 07:20 | Docker | Hermes cron（**道元 profile**） | **论文清单对账**（已入库 Zotero 的条目自动撤销；`PAPER_QUEUE_MCP_URL` 非空门控，`--no-agent` 不经过 LLM；无命中静默） | `start.sh` 幂等注册（`paper-queue-sync`） |
 | 07:30 | Docker | Hermes cron | **工作日晨间简报**（事务 + 邮件，周一至周六） | `start.sh` 自动注册 |
 | 07:30 | Docker | Hermes cron（**道元 profile**） | **dailyinfo 全量简报镜像**（5 类正文 → 道元飞书私聊；`DAOYUAN_FEISHU_DM_CHAT_ID` 门控，`--no-agent` 不经过 LLM） | `start.sh` 幂等注册（`dailyinfo-digest`） |
 | 07:45 | Docker | repo-scanner-mcp 调度器 | **git-contribution-stats 每日全量采集**（容器内 daily sync，唯一写者） | 容器内置（服务强制 `REPO_SCANNER_WATCH_OWNS_ISSUES=1`） |
@@ -24,6 +25,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（健康采集
 ## 时序依赖
 
 ```
+07:20 ──────── paper-queue-sync ← paper-queue MCP + Zotero MCP（已入库条目自动撤销）
 07:30           工作日晨间简报（周一至周六）— 事务 + 邮件汇总
 07:30 ──────── dailyinfo-digest ← dailyinfo MCP（5 类全量正文 → 道元飞书私聊）
 07:45 ──────── repo-scanner-mcp daily sync（容器内）+ AgentOps 采集（宿主）← 并行
@@ -56,7 +58,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（健康采集
 > 的 07:45 daily sync 双写同一 SQLite（跨 virtiofs），会损坏数据库
 > （`database disk image is malformed`）。每日全量采集现在只由容器负责。
 
-Docker 容器内的定时任务（Hermes cron 默认 profile / coder / daoyuan + backup）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作；yuque-mcp 容器的快照/报告调度为镜像内置（服务端启动即生效，无注册步骤）。其中 yuque-daily-digest 需在 `.env` **同时**配置 `YUQUE_DAILY_PUSH_REPOS`、`YUQUE_MCP_URL`、`MCP_YUQUE_MCP_API_KEY` 三者后才会注册（缺任一项静默跳过，只留一行提示）；dailyinfo-digest 需要 `DAOYUAN_FEISHU_DM_CHAT_ID` + `DAILYINFO_MCP_URL` + `DAILYINFO_MCP_KEY`。
+Docker 容器内的定时任务（Hermes cron 默认 profile / coder / daoyuan + backup）由 `./scripts/start.sh` 和容器 entrypoint 自动注册，无需手动操作；yuque-mcp 容器的快照/报告调度为镜像内置（服务端启动即生效，无注册步骤）。其中 yuque-daily-digest 需在 `.env` **同时**配置 `YUQUE_DAILY_PUSH_REPOS`、`YUQUE_MCP_URL`、`MCP_YUQUE_MCP_API_KEY` 三者后才会注册（缺任一项静默跳过，只留一行提示）；dailyinfo-digest 需要 `DAOYUAN_FEISHU_DM_CHAT_ID` + `DAILYINFO_MCP_URL` + `DAILYINFO_MCP_KEY`；paper-queue-sync 需要 `DAOYUAN_FEISHU_DM_CHAT_ID` + `PAPER_QUEUE_MCP_URL`（URL 显式留空 = 停用，start.sh 会同时移除既有 job）。
 
 > backup-cron 的保留策略（删除超过 `BACKUP_KEEP_DAYS` 的快照）**只在 02:00 这个定时任务里执行**；容器启动时的初始备份带 `BACKUP_SKIP_PRUNE=1`，重启不会删任何快照。详见 [备份系统](backup.md)。
 
@@ -93,6 +95,7 @@ docker compose exec hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan cron 
 - [ ] `docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list` 包含 "Daily Command Center"
 - [ ] 若 `.env` 里 `YUQUE_DAILY_PUSH_REPOS` + `YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY` 三者都已配置，cron list 还应包含 "yuque-daily-digest"
 - [ ] 若 `.env` 里 `DAOYUAN_FEISHU_DM_CHAT_ID` + `DAILYINFO_MCP_URL` + `DAILYINFO_MCP_KEY` 已配置，`hermes -p daoyuan cron list` 应包含 "dailyinfo-digest"（no-agent）
+- [ ] 若 `.env` 里 `DAOYUAN_FEISHU_DM_CHAT_ID` + `PAPER_QUEUE_MCP_URL` 已配置，`hermes -p daoyuan cron list` 应包含 "paper-queue-sync"（no-agent）
 - [ ] Healthchecks.io Dashboard 显示 "Last Ping: just now"（等 60s 后刷新）
 - [ ] 次日 07:50–08:10 检查飞书是否收到晨间四签推送（含 08:10 语雀日报）
 

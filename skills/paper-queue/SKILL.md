@@ -82,6 +82,10 @@ metadata:
 （服务端会忽略）。返回的是清单条目（题目、DOI、加入时间、谁提的）。
 **不要**对结果做“我帮你下载”的承诺。
 
+> 清单每天 **07:20（北京）自动清理**：已入库 Zotero 的条目会被自动撤销。
+> 用户问「清单里怎么少了 X」时，如实说明它可能已入库 Zotero 并被自动清理 ——
+> 不要说成是你下载/入库的。
+
 ## 撤销：`paper_queue_cancel`（Hermes: `mcp__paper_queue__paper_queue_cancel`）
 
 用户说「记错了」「不用下了」「把那条去掉」时，用 add/list 返回里的 `request_key` 撤销。

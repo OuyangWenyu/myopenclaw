@@ -26,7 +26,7 @@
 | Discord 桥接 | Hermes coder（爱码士）+ OpenClaw 虾酱 | — |
 | 晨间四签 | Hermes cron skill → TDAI/AgentOps/语雀 MCP 等信号 → 飞书推送 | — |
 | AI 情报聚合 | dailyinfo 多源抓取 + AI 摘要 → Discord 推送；道元每日 07:30 全量镜像 → 飞书私聊 | [dailyinfo](https://github.com/iHeadWater/dailyinfo) |
-| 论文清单 | 道元（飞书）只记不下 → paper-queue MCP（固定归属 Owen）；下载由 mylibrary 离线完成 | [mylibrary](https://github.com/OuyangWenyu/mylibrary) |
+| 论文清单 | 道元（飞书）只记不下 → paper-queue MCP（固定归属 Owen）；下载由 mylibrary 离线完成；每日 07:20 自动清理已入库 Zotero 的条目 | [mylibrary](https://github.com/OuyangWenyu/mylibrary) |
 | 🌐 研发日报 | repo-scanner MCP 采集 35 仓库 → Hermes skill → 飞书推送；天一 bot 复用同源读能力（团队服务，服务器部署见 [server-deploy](docs/server-deploy.md)） | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
 | 🌐 水文智能问答 | zhixun 知汛助手 — OpenClaw → **远程水文 MCP（Bearer）** → 飞书 bot（**团队公共 bot**；背后的 zhixun-agent 水文 MCP 即**团队服务**；独立栈；本机 MCP 容器仅 `--with-local-mcp` 调试；服务器侧部署清单待补，见 [server-deploy](docs/server-deploy.md)） | [zhixun-agent](https://gitcode.com/dlut-water/zhixun-agent) |
 | 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |

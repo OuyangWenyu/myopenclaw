@@ -133,6 +133,48 @@ class TestSkill:
         assert not (REPO_ROOT / "openclaw" / "skills" / "paper-queue").exists()
 
 
+class TestDailySync:
+    """每日对账：已入库 Zotero 的条目自动撤销（no-agent cron）。"""
+
+    def test_script_exists(self):
+        assert (REPO_ROOT / "scripts" / "paper_queue_sync.py").is_file()
+
+    def test_start_sh_installs_the_script_before_compose_up(self):
+        up = START_SH.index("docker compose up -d ${BUILD_FLAG}")
+        assert START_SH.index("scripts/paper_queue_sync.py") < up
+        assert "install_hermes_profile_script" in START_SH
+
+    def test_start_sh_registers_the_daily_job(self):
+        assert (
+            'ensure_daoyuan_script_cron "paper-queue-sync" "20 23 * * *"' in START_SH
+        )
+        assert 'paper_queue_sync.py "${DAOYUAN_DM_CHAT_ID}"' in START_SH
+        assert "--no-agent" in START_SH
+        # 共用函数必须真的把参数传给 cron create/edit，而不是只收了参数
+        assert '--schedule "${schedule}"' in START_SH
+        assert '--script "${script}"' in START_SH
+        assert '--deliver "feishu:${chat_id}"' in START_SH
+
+    def test_registration_is_gated_on_the_queue_url(self):
+        # .env 显式留空 PAPER_QUEUE_MCP_URL = 停用（非空才算配置）
+        assert "PAPER_QUEUE_URL_SET" in START_SH
+        assert "grep -c '^PAPER_QUEUE_MCP_URL=.'" in START_SH
+        assert "跳过 paper-queue-sync 注册" in START_SH
+
+    def test_disabled_queue_removes_the_existing_job(self):
+        # 文档承诺的「持久关闭」必须真的停掉已注册的 job，而不是只跳过注册
+        assert "remove_daoyuan_script_cron" in START_SH
+        assert 'cron remove "${name}"' in START_SH
+
+    def test_doc_describes_the_daily_sync(self):
+        assert "paper-queue-sync" in DOC
+        assert "paper_queue_sync.py" in DOC
+        assert "已入库" in DOC
+
+    def test_skill_warns_that_entries_may_disappear(self):
+        assert "自动清理" in SKILL
+
+
 class TestDocs:
     def test_mentions_the_daoyuan_token_path(self):
         assert "PAPER_QUEUE_DAOYUAN_TOKEN" in DOC

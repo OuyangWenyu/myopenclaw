@@ -232,7 +232,51 @@ python3 scripts/check_paper_queue.py --json     # JSON（cron/监控用）
 
 ---
 
-## 8. 装机与卸载（道元）
+## 8. 每日自动清理（已入库 Zotero）
+
+道元每天 **07:20（北京）** 跑一次 no-agent 对账（`paper-queue-sync`，不经过 LLM）：
+
+- 取清单里的**活跃行**（`cancelled_at IS NULL`；token 只返回 Owen 自己的行）
+- 逐行按**标题**在 Zotero 库中查询；arXiv 行额外用 arXiv 号查询
+  （`arXiv.<id>.pdf` 附件会命中，解析父条目后比对标题）
+- 命中（归一化后完全相等，或一方完整包含另一方且覆盖 ≥ 90%）就调
+  `paper_queue_cancel` **撤销**该条目 —— **撤销 ≠ 删除**：行保留、可重新入队
+- 没有命中 → 不投递任何消息（静默）；有清理 → 私聊收到一条简短清单
+- **任一查询失败 → 本次不撤销任何条目**，退出码 1，Hermes 把 watchdog 告警
+  投到同一个私聊（响亮的失败，绝不静默）
+
+已知边界：
+
+- **只按标题匹配**。当前 `zotero_search` 是 Zotero quick search
+  （`titleCreatorYear`），**DOI 搜不到**，所以 DOI 只作为展示字段
+- 用户复述/翻译过的标题不会命中（宁可漏清、次日重试；误清会静默丢掉真实的下载请求）
+- 只处理 Owen 自己的行；历史 zhao 行不动
+- `cancelled_by` 不区分人工撤销与自动清理；审计线索 = 每日清理消息 +
+  `hermes -p daoyuan cron runs paper-queue-sync`
+
+手工验证 / 关闭：
+
+```bash
+# dry-run：只打印将清理的条目，不撤销
+docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/python \
+  /opt/data/profiles/daoyuan/scripts/paper_queue_sync.py --dry-run
+
+# 真实触发一次（会投递飞书私聊）
+docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan \
+  cron run paper-queue-sync
+
+# 关闭：
+#   - 临时：删除 cron job（下次 start.sh 会重新注册）
+#   - 持久：清空 .env 的 PAPER_QUEUE_MCP_URL，再跑 start.sh —— 会移除已注册的
+#     paper-queue-sync job，并移除道元的 paper-queue MCP 条目
+docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan \
+  cron remove paper-queue-sync
+```
+
+> `scripts/paper_queue_sync.py` 随 `./scripts/start.sh` 覆盖安装到
+> `~/.hermes/profiles/daoyuan/scripts/`，仓库是唯一版本源。
+
+## 9. 装机与卸载（道元）
 
 装机走 `./scripts/start.sh`（幂等）：
 
@@ -248,8 +292,11 @@ python3 scripts/check_paper_queue.py --json     # JSON（cron/监控用）
 轮换 token：删掉 `.env` 里的 `PAPER_QUEUE_DAOYUAN_TOKEN=` 行，重跑 `./scripts/start.sh`；
 `up -d` 会重建 `paper-queue-mcp` 与 `hermes-daoyuan`（`restart` 不会更新容器 env）。
 
-关闭道元接入：**持久开关是清空 `.env` 的 `PAPER_QUEUE_MCP_URL=`（并一并清掉
-`PAPER_QUEUE_DAOYUAN_TOKEN`，否则 token 仍在容器里可被直接调用）**，重跑 `start.sh`。
+关闭道元接入：**持久开关是清空 `.env` 的 `PAPER_QUEUE_MCP_URL=`**，重跑 `start.sh`：
+`ensure_hermes_paper_queue.py` 会移除道元的 MCP 条目，`start.sh` 会同时移除
+`paper-queue-sync` cron job。⚠️ 删掉/清空 `PAPER_QUEUE_DAOYUAN_TOKEN` 行**不是**
+持久开关 —— start.sh 在 token 行缺失或为空时会重新生成；token 留在容器里也已无
+消费者（MCP 条目与 job 都已移除）。
 `ensure_hermes_paper_queue.py --disable` 只对当次生效，下一次 `start.sh` 会重新注册。
 
 服务端代码改动（`server.py`）需要重建镜像：
