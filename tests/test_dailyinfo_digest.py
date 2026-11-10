@@ -47,6 +47,21 @@ def _page(body, *, total=None, cursor=None):
     )
 
 
+def _wrapped_error(code):
+    """生产形态：FastMCP 把 ToolError 包装成 "Error executing tool <name>: <CODE>"。"""
+    return FakeResult(
+        None,
+        is_error=True,
+        text=f"Error executing tool dailyinfo_get_briefing: {code}",
+    )
+
+
+@pytest.fixture(autouse=True)
+def _no_retry_backoff(monkeypatch):
+    """重试只验证调用次数；真实退避（1s/2s）会拖慢套件且不可控。"""
+    monkeypatch.setattr(digest, "RETRY_BACKOFF_SECONDS", 0)
+
+
 class Recorder:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -98,11 +113,26 @@ class TestPayload:
         result = FakeResult(None, text='{"a": 2}')
         assert digest._payload(result) == {"a": 2}
 
-    def test_tool_error_code_is_preserved(self):
-        result = FakeResult(None, is_error=True, text="NOT_FOUND")
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "NOT_FOUND",
+            "Error executing tool dailyinfo_get_briefing: NOT_FOUND",
+        ],
+    )
+    def test_tool_error_code_is_preserved(self, text):
         with pytest.raises(digest.DigestError) as exc:
-            digest._payload(result)
+            digest._payload(FakeResult(None, is_error=True, text=text))
         assert exc.value.code == "NOT_FOUND"
+
+    @pytest.mark.parametrize(
+        "text",
+        ["transport exploded", "connection reset by PEER"],
+    )
+    def test_unrecognized_error_text_is_kept(self, text):
+        with pytest.raises(digest.DigestError) as exc:
+            digest._payload(FakeResult(None, is_error=True, text=text))
+        assert exc.value.code == text
 
 
 class TestFetchBody:
@@ -134,6 +164,27 @@ class TestFetchBody:
         assert body == "fresh"
         assert len(recorder.calls) == 2
 
+    def test_wrapped_stale_cursor_restarts_from_scratch(self):
+        recorder = Recorder([_wrapped_error("STALE_CURSOR"), _page("fresh", cursor=None)])
+        body = asyncio.run(digest.fetch_body(recorder, "papers-2026-11-08"))
+        assert body == "fresh"
+        assert len(recorder.calls) == 2
+
+    def test_content_changed_is_retried(self):
+        # dailyinfo 文档：CONTENT_CHANGED = 读取期间持续变化，稍后重试。
+        recorder = Recorder([_wrapped_error("CONTENT_CHANGED"), _page("recovered", cursor=None)])
+        body = asyncio.run(digest.fetch_body(recorder, "papers-2026-11-08"))
+        assert body == "recovered"
+        assert len(recorder.calls) == 2
+
+    def test_content_changed_exhausts_retries_with_clean_code(self):
+        error = _wrapped_error("CONTENT_CHANGED")
+        recorder = Recorder([error, error, error])
+        with pytest.raises(digest.DigestError) as exc:
+            asyncio.run(digest.fetch_body(recorder, "papers-2026-11-08"))
+        assert exc.value.code == "CONTENT_CHANGED"
+        assert len(recorder.calls) == 3
+
     def test_repeated_cursor_fails(self):
         recorder = Recorder([_page("abc", total=99, cursor="same"), _page("x", total=99, cursor="same")])
         with pytest.raises(digest.DigestError) as exc:
@@ -151,6 +202,19 @@ class TestCollectDigest:
                 ]
             }
         )
+
+    def test_listing_content_changed_is_retried(self):
+        # list_briefings 同样走服务端 _consistent，一次瞬时变化不该让整份 digest 崩掉。
+        recorder = Recorder(
+            [
+                _wrapped_error("CONTENT_CHANGED"),
+                self._listing({"papers": "papers-2026-11-08"}),
+                _page("PAPERS BODY", cursor=None),
+            ]
+        )
+        sections = asyncio.run(digest.collect_digest(recorder, "2026-11-08"))
+        assert next(s for s in sections if s.category == "papers").kind == "body"
+        assert len(recorder.calls) == 3
 
     def test_orders_categories_and_marks_missing(self):
         recorder = Recorder(
@@ -170,23 +234,35 @@ class TestCollectDigest:
         assert by_category["resource"].kind == "missing"
         assert by_category["arxiv"].kind == "missing"
 
-    def test_single_category_failure_degrades_to_error(self):
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "CONTENT_CHANGED",
+            "Error executing tool dailyinfo_get_briefing: CONTENT_CHANGED",
+        ],
+    )
+    def test_single_category_failure_degrades_to_error(self, text):
+        error = FakeResult(None, is_error=True, text=text)
         recorder = Recorder(
-            [
-                self._listing({"papers": "papers-2026-11-08"}),
-                FakeResult(None, is_error=True, text="CONTENT_CHANGED"),
-            ]
+            [self._listing({"papers": "papers-2026-11-08"}), error, error, error]
         )
         sections = asyncio.run(digest.collect_digest(recorder, "2026-11-08"))
         papers = next(s for s in sections if s.category == "papers")
         assert papers.kind == "error"
         assert papers.detail == "CONTENT_CHANGED"
 
-    def test_not_found_is_treated_as_missing(self):
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "NOT_FOUND",
+            "Error executing tool dailyinfo_get_briefing: NOT_FOUND",
+        ],
+    )
+    def test_not_found_is_treated_as_missing(self, text):
         recorder = Recorder(
             [
                 self._listing({"papers": "papers-2026-11-08"}),
-                FakeResult(None, is_error=True, text="NOT_FOUND"),
+                FakeResult(None, is_error=True, text=text),
             ]
         )
         sections = asyncio.run(digest.collect_digest(recorder, "2026-11-08"))

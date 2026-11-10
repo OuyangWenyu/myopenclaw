@@ -29,7 +29,7 @@ import sys
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Awaitable, Callable, Iterable
+from typing import Any, Awaitable, Callable, Iterable, TypeVar
 
 # 固定 +8：容器没有 tzdata 也能算北京日期；Asia/Shanghai 无夏令时。
 CST = timezone(timedelta(hours=8))
@@ -40,7 +40,9 @@ CATEGORY_ORDER = ("ai_news", "code", "resource", "papers", "arxiv")
 LIST_LIMIT = 100
 BODY_PAGE_LIMIT = 20000  # get_briefing 服务端上限
 MAX_PAGES = 50
-STALE_CURSOR_RETRIES = 2
+FETCH_RETRIES = 2  # STALE_CURSOR / CONTENT_CHANGED 的重读次数
+RETRY_BACKOFF_SECONDS = 1.0  # 线性退避：1s、2s
+RETRYABLE_CODES = frozenset({"STALE_CURSOR", "CONTENT_CHANGED"})
 PLACEHOLDER_MARKERS = ("📭 过去", "无新内容")
 
 
@@ -60,6 +62,7 @@ class Section:
     detail: str = ""
 
 
+T = TypeVar("T")
 ToolCall = Callable[[str, dict[str, Any]], Awaitable[Any]]
 
 
@@ -106,7 +109,7 @@ def _payload(result: Any) -> dict[str, Any]:
                 detail = str(getattr(block, "text", "") or "").strip()
                 if detail:
                     break
-        raise DigestError(_short_code(detail) or "TOOL_ERROR")
+        raise DigestError(_error_code(detail))
     if not isinstance(payload, dict):
         raise DigestError("INVALID_PAYLOAD")
     return payload
@@ -115,6 +118,24 @@ def _payload(result: Any) -> dict[str, Any]:
 def _short_code(text: str) -> str:
     text = " ".join(str(text or "").split())
     return text[:120]
+
+
+# 只认「整串就是错误码」或「包装文本冒号后的错误码」；否则 "…by PEER" 会被误当码。
+_ERROR_CODE_RE = re.compile(r"(?:^|:\s)([A-Z][A-Z0-9_]{0,63})$")
+
+
+def _error_code(detail: str) -> str:
+    """从 MCP 工具错误文本里取公开错误码。
+
+    FastMCP 会把服务端的 ``ToolError("NOT_FOUND")`` 包装成
+    ``Error executing tool dailyinfo_get_briefing: NOT_FOUND``；拿整串去比较会让
+    NOT_FOUND / STALE_CURSOR / CONTENT_CHANGED 三个判定全部失配。
+    """
+    text = " ".join(str(detail or "").split())
+    match = _ERROR_CODE_RE.search(text)
+    if match:
+        return match.group(1)
+    return _short_code(text) or "TOOL_ERROR"
 
 
 def _error_text(exc: BaseException) -> str:
@@ -150,18 +171,25 @@ async def _fetch_body_once(call_tool: ToolCall, briefing_id: str) -> str:
     raise DigestError("PAGE_LIMIT_EXCEEDED")
 
 
-async def fetch_body(call_tool: ToolCall, briefing_id: str) -> str:
-    """读取一份简报全文；STALE_CURSOR 表示内容已变，从头重读。"""
+async def _with_retries(operation: Callable[[], Awaitable[T]]) -> T:
+    """内容在读取期间变化（STALE_CURSOR / CONTENT_CHANGED）时退避重试。"""
     last: DigestError | None = None
-    for _ in range(STALE_CURSOR_RETRIES + 1):
+    for attempt in range(FETCH_RETRIES + 1):
         try:
-            return await _fetch_body_once(call_tool, briefing_id)
+            return await operation()
         except DigestError as exc:
             last = exc
-            if exc.code != "STALE_CURSOR":
+            if exc.code not in RETRYABLE_CODES:
                 raise
+            if attempt < FETCH_RETRIES:
+                await asyncio.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
     assert last is not None
     raise last
+
+
+async def fetch_body(call_tool: ToolCall, briefing_id: str) -> str:
+    """读取一份简报全文；重试从第一页重读（旧游标在内容变化后已失效）。"""
+    return await _with_retries(lambda: _fetch_body_once(call_tool, briefing_id))
 
 
 def _briefing_ids(listing: dict[str, Any]) -> dict[str, str]:
@@ -177,9 +205,8 @@ def _briefing_ids(listing: dict[str, Any]) -> dict[str, str]:
     return ids
 
 
-async def collect_digest(call_tool: ToolCall, day: str) -> list[Section]:
-    """拉当天全部类别；先 list，再逐类 get。单类失败降级为 error section。"""
-    listing = _payload(
+async def _fetch_listing(call_tool: ToolCall, day: str) -> dict[str, Any]:
+    return _payload(
         await call_tool(
             "dailyinfo_list_briefings",
             {
@@ -190,6 +217,11 @@ async def collect_digest(call_tool: ToolCall, day: str) -> list[Section]:
             },
         )
     )
+
+
+async def collect_digest(call_tool: ToolCall, day: str) -> list[Section]:
+    """拉当天全部类别；先 list，再逐类 get。单类失败降级为 error section。"""
+    listing = await _with_retries(lambda: _fetch_listing(call_tool, day))
     ids = _briefing_ids(listing)
     sections: list[Section] = []
     for category in CATEGORY_ORDER:

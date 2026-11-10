@@ -95,8 +95,13 @@ DAOYUAN_FEISHU_DM_CHAT_ID=oc_...   # 用 hermes -p daoyuan send --list feishu �
   `**摘要：** 摘要`（飞书卡片不渲染 blockquote），`&lt;i&gt;` / `<em>` / `<sub>` 等
   HTML 解码后去标签（否则会显示成源码）
 - 占位/无更新正文不投递；缺失的分类显示 `📭 … 今日暂无简报`
+- `STALE_CURSOR` / `CONTENT_CHANGED`（读取期间内容变化）会退避重读 2 次（1s、2s），
+  仍失败才降级；错误码取 MCP 包装文本（`Error executing tool …: CODE`）的末尾，
+  不整串比较
 - 单类拉取失败显示 `⚠️ …`，其余类别照常投递；整体 MCP 不可达 → 非 0 退出，
   Hermes 把失败告警投到同一私聊
+- 已知误报：`CONTENT_CHANGED` 偶发而内容其实没变（2026-11-10 papers 一次：读取窗口内
+  宿主全树无任何写入，重读即恢复）。根因未证实，不要据此推断数据损坏
 - 脚本每次 `./scripts/start.sh` 覆盖安装（仓库是唯一版本源，不要手改 profile 里的副本）
 - `cron.wrap_response: false` 由 `scripts/ensure_hermes_cron_config.py` 幂等写入，
   否则消息会带 `Cronjob Response: …` 头尾样板
