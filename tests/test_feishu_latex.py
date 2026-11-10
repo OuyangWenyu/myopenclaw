@@ -213,6 +213,18 @@ class TestCacheKeyAndSizing:
     def test_switch_default_on(self, m, env):
         assert m.latex_images_enabled(env=env) is True
 
+    @pytest.mark.parametrize(
+        "env",
+        [{}, {"FEISHU_LATEX_INLINE_IMAGE": ""}, {"FEISHU_LATEX_INLINE_IMAGE": "0"},
+         {"FEISHU_LATEX_INLINE_IMAGE": "off"}],
+    )
+    def test_inline_switch_default_off(self, m, env):
+        assert m.latex_inline_images_enabled(env=env) is False
+
+    @pytest.mark.parametrize("value", ["1", "on", "true", "yes", "enabled", " ON "])
+    def test_inline_switch_opt_in(self, m, value):
+        assert m.latex_inline_images_enabled(env={m.LATEX_INLINE_IMAGE_ENV: value}) is True
+
     def test_cache_persistence_roundtrip(self, m, tmp_path):
         p = str(tmp_path / "cache.json")
         data = {"abc": {"key": "img_1", "width": 320, "height": 101}}
@@ -226,6 +238,21 @@ class TestCacheKeyAndSizing:
 # ---------------------------------------------------------------------------
 # ③ 编排（异步，注入 fake renderer/uploader）
 # ---------------------------------------------------------------------------
+
+
+class TestLatexToUnicode:
+    def test_converts_greek_and_symbols(self, m):
+        pytest.importorskip("pylatexenc")
+        assert m.latex_to_unicode(r"\eta=0.5") == "η=0.5"
+        assert m.latex_to_unicode(r"\langle v,u\rangle") == "⟨v,u⟩"
+
+    def test_empty_or_non_string_returns_none(self, m):
+        assert m.latex_to_unicode("") is None
+        assert m.latex_to_unicode("   ") is None
+
+    def test_converter_failure_returns_none(self, m, monkeypatch):
+        monkeypatch.setattr(m, "_LATEX_TEXT_CONVERTER", object())
+        assert m.latex_to_unicode(r"\eta") is None
 
 
 class _Fakes:
@@ -267,23 +294,51 @@ class TestOrchestration:
         assert len(elements) == 1 and elements[0]["content"] == text
         assert f.render_calls == 0 and f.upload_calls == 0
 
-    def test_happy_path_inline_and_block(self, m):
+    def test_inline_becomes_unicode_and_block_rendered(self, m, monkeypatch):
+        # 行内公式转 Unicode 文本：飞书没法行内渲染公式，图片会整行换行（2026-11-10）。
+        monkeypatch.setattr(m, "latex_to_unicode", lambda latex: "⟨v,u⟩")
         f = _Fakes()
         text = r"内积 $\langle v,u\rangle$ 与 $$p=q$$"
         out = _run(m.card_payload_with_formula_images(
             text, render_batch=f.render_batch, upload_png=f.upload))
         elements = _elements(m, out)
         content = "".join(e.get("content", "") for e in elements if e["tag"] == "markdown")
-        assert "img_fake_1" in content               # 行内嵌进 markdown 段
+        assert "⟨v,u⟩" in content                     # 行内转 Unicode
+        assert "$" not in content
+        assert "img_fake" not in content              # 行内不嵌图
         img = next(e for e in elements if e["tag"] == "img")
-        assert img["img_key"] == "img_fake_2"        # 块级独立 img
+        assert img["img_key"] == "img_fake_1"         # 块级独立 img
         assert img["size"].startswith("320px ")
+        assert f.render_calls == 1 and f.upload_calls == 1
+
+    def test_inline_source_when_conversion_unavailable(self, m, monkeypatch):
+        monkeypatch.setattr(m, "latex_to_unicode", lambda latex: None)
+        f = _Fakes()
+        text = r"内积 $\langle v,u\rangle$ 与 $$p=q$$"
+        out = _run(m.card_payload_with_formula_images(
+            text, render_batch=f.render_batch, upload_png=f.upload))
+        elements = _elements(m, out)
+        content = "".join(e.get("content", "") for e in elements if e["tag"] == "markdown")
+        assert r"$\langle v,u\rangle$" in content     # 转换不可用 → 源码兜底
+        assert f.upload_calls == 1
+
+    def test_inline_images_opt_in(self, m):
+        f = _Fakes()
+        text = r"内积 $\langle v,u\rangle$ 与 $$p=q$$"
+        out = _run(m.card_payload_with_formula_images(
+            text, render_batch=f.render_batch, upload_png=f.upload, inline_images=True))
+        elements = _elements(m, out)
+        content = "".join(e.get("content", "") for e in elements if e["tag"] == "markdown")
+        assert "img_fake_1" in content                # 行内嵌进 markdown 段
+        img = next(e for e in elements if e["tag"] == "img")
+        assert img["img_key"] == "img_fake_2"         # 块级独立 img
+        assert f.render_calls == 1 and f.upload_calls == 2
 
     def test_render_failure_keeps_that_span_source(self, m):
         f = _Fakes(fail_index=0)
         text = r"$a$ 和 $b$"
         out = _run(m.card_payload_with_formula_images(
-            text, render_batch=f.render_batch, upload_png=f.upload))
+            text, render_batch=f.render_batch, upload_png=f.upload, inline_images=True))
         elements = _elements(m, out)
         content = "".join(e.get("content", "") for e in elements if e["tag"] == "markdown")
         assert "$a$" in content                       # 第一段失败 → 源码
@@ -293,7 +348,7 @@ class TestOrchestration:
         f = _Fakes(upload_ok=False)
         text = r"$a+b$"
         out = _run(m.card_payload_with_formula_images(
-            text, render_batch=f.render_batch, upload_png=f.upload))
+            text, render_batch=f.render_batch, upload_png=f.upload, inline_images=True))
         elements = _elements(m, out)
         assert "$a+b$" in elements[0]["content"]
 
@@ -302,10 +357,12 @@ class TestOrchestration:
         text = r"$a+b$"
         cache = {}
         out1 = _run(m.card_payload_with_formula_images(
-            text, render_batch=f.render_batch, upload_png=f.upload, cache=cache))
+            text, render_batch=f.render_batch, upload_png=f.upload, cache=cache,
+            inline_images=True))
         assert f.render_calls == 1 and f.upload_calls == 1
         out2 = _run(m.card_payload_with_formula_images(
-            text, render_batch=f.render_batch, upload_png=f.upload, cache=cache))
+            text, render_batch=f.render_batch, upload_png=f.upload, cache=cache,
+            inline_images=True))
         assert out2 == out1
         assert f.render_calls == 1 and f.upload_calls == 1
         assert cache  # 缓存已写入
@@ -323,7 +380,7 @@ class TestOrchestration:
             raise RuntimeError("renderer exploded")
         text = r"$a+b$ 后面还有字"
         out = _run(m.card_payload_with_formula_images(
-            text, render_batch=boom, upload_png=_Fakes().upload))
+            text, render_batch=boom, upload_png=_Fakes().upload, inline_images=True))
         elements = _elements(m, out)
         assert text in elements[0]["content"]         # 退回原始源码的普通卡片
 
@@ -331,7 +388,7 @@ class TestOrchestration:
         f = _Fakes()
         text = r"$a$ 中间 $b$ 结尾"
         out = _run(m.card_payload_with_formula_images(
-            text, render_batch=f.render_batch, upload_png=f.upload))
+            text, render_batch=f.render_batch, upload_png=f.upload, inline_images=True))
         content = "".join(e.get("content", "") for e in elements_of(out) if e["tag"] == "markdown")
         assert "![]( )" not in content and content.count("![](img_fake_") == 2
 

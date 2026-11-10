@@ -17,10 +17,13 @@
 #      ``$...$``/``$$...$$`` stay source text (verified live 2026-10-14; KaTeX is a
 #      Docs-only capability). The only true-render path is formula→image: render
 #      PNG via matplotlib mathtext (subprocess, see docker/hermes/render-formula.py),
-#      upload via the adapter's image API, embed inline (``![](image_key)`` inside
-#      a markdown element — verified to render) and as standalone ``img`` elements
-#      (``size`` gives exact display px; user picked 320px-wide-equivalent scale
-#      for blocks, ~13px glyphs for inline).
+#      upload via the adapter's image API, and embed as standalone ``img``
+#      elements (``size`` gives exact display px; 320px-wide-equivalent scale).
+#      Block formulas (``$$...$$``) only. Inline formulas become Unicode text
+#      via pylatexenc (``\eta`` → ``η``, ``\langle`` → ``⟨``): the 600px canvas
+#      needed to dodge client upscaling cannot sit inside a chat line, so every
+#      inline image forced a line break (2026-11-10).
+#      ``FEISHU_LATEX_INLINE_IMAGE=1`` opts back into inline ``![](image_key)``.
 #
 # Tests: tests/test_feishu_markdown_card.py (card builder + patch script),
 #        tests/test_feishu_latex.py (formula parsing/substitution/orchestration).
@@ -54,6 +57,18 @@ def markdown_cards_enabled(env=None):
 def latex_images_enabled(env=None):
     value = (os.environ if env is None else env).get(LATEX_IMAGE_ENV, "")
     return str(value).strip().lower() not in _CARD_DISABLED_VALUES
+
+
+# Inline formulas default to SOURCE TEXT: a rendered inline formula is a
+# 600px-wide canvas, which cannot sit inside a chat line — every symbol forced a
+# line break (reported 2026-11-10). Opt in with FEISHU_LATEX_INLINE_IMAGE=1.
+LATEX_INLINE_IMAGE_ENV = "FEISHU_LATEX_INLINE_IMAGE"
+_LATEX_INLINE_ENABLED_VALUES = frozenset({"1", "on", "yes", "true", "enabled"})
+
+
+def latex_inline_images_enabled(env=None):
+    value = (os.environ if env is None else env).get(LATEX_INLINE_IMAGE_ENV, "")
+    return str(value).strip().lower() in _LATEX_INLINE_ENABLED_VALUES
 
 
 def _count_gfm_tables(text):
@@ -127,6 +142,8 @@ LATEX_RENDER_SCRIPT = "/opt/hermes/scripts/render-formula.py"
 # Persistent image-key cache (survives container recreation; image_keys are
 # server-side resources valid across restarts).
 LATEX_IMAGE_CACHE_PATH = "/opt/data/.cache/feishu-latex.json"
+# Lazy pylatexenc converter (installed in the image); inline math → Unicode text.
+_LATEX_TEXT_CONVERTER = None
 
 
 def _mask_code_spans(markdown):
@@ -173,6 +190,26 @@ def extract_formula_spans(markdown):
         return []
 
 
+def latex_to_unicode(latex):
+    # LaTeX math → Unicode text approximation for INLINE formulas (never raises).
+    # Feishu IM cannot render formulas, and an inline image is block-level (the
+    # 600px canvas cannot sit inside a chat line), so inline math becomes text:
+    # \eta=0.5 → η=0.5, \langle v,u\rangle → ⟨v,u⟩, \mathcal{L} → ℒ.
+    # Returns None when pylatexenc is missing or conversion fails → source text.
+    global _LATEX_TEXT_CONVERTER
+    try:
+        if not isinstance(latex, str) or not latex.strip():
+            return None
+        if _LATEX_TEXT_CONVERTER is None:
+            from pylatexenc.latex2text import LatexNodes2Text
+
+            _LATEX_TEXT_CONVERTER = LatexNodes2Text(math_mode="text")
+        text = " ".join(_LATEX_TEXT_CONVERTER.latex_to_text(latex).split())
+        return text or None
+    except Exception:
+        return None
+
+
 def formula_cache_key(kind, latex):
     return hashlib.sha256(
         f"{LATEX_RENDER_PARAMS_VERSION}|{kind}|{latex}".encode("utf-8")
@@ -208,7 +245,7 @@ def _render_item(span):
     return item
 
 
-def build_formula_card_payload(markdown, spans, images):
+def build_formula_card_payload(markdown, spans, images, inline_texts=None):
     # Card JSON 2.0 payload with the message split into interleaved elements:
     # markdown segments (inline formulas embedded as ``![](image_key)`` — client
     # renders them inline) and standalone ``img`` elements for block formulas
@@ -222,6 +259,7 @@ def build_formula_card_payload(markdown, spans, images):
         if _count_gfm_tables(markdown) > MARKDOWN_CARD_MAX_TABLES:
             return None
         images = images or {}
+        inline_texts = inline_texts or {}
         elements = []
         md_buf = []
         cursor = 0
@@ -240,7 +278,7 @@ def build_formula_card_payload(markdown, spans, images):
                 if key:
                     md_buf.append(f"![]({key})")
                 else:
-                    md_buf.append(markdown[span["start"]:span["end"]])
+                    md_buf.append(inline_texts.get(index) or markdown[span["start"]:span["end"]])
             else:  # block → standalone img element
                 if key:
                     _flush_md()
@@ -271,8 +309,12 @@ def build_formula_card_payload(markdown, spans, images):
         return None
 
 
-async def card_payload_with_formula_images(markdown, *, render_batch, upload_png, cache=None, enabled=True):
-    # Full card payload for a chunk, with formulas rendered to images when possible.
+async def card_payload_with_formula_images(
+    markdown, *, render_batch, upload_png, cache=None, enabled=True, inline_images=None
+):
+    # Full card payload for a chunk, with block formulas rendered to images when
+    # possible. Inline formulas stay source text unless ``inline_images`` (or
+    # FEISHU_LATEX_INLINE_IMAGE) opts in — images there break the line.
     # ``render_batch(items) -> [{"ok", "png", "width", "height", "error"}]`` and
     # ``upload_png(png_bytes) -> image_key`` are injected (adapter closures /
     # test fakes). Any formula that fails keeps its source text. Never raises:
@@ -283,10 +325,18 @@ async def card_payload_with_formula_images(markdown, *, render_batch, upload_png
         spans = extract_formula_spans(markdown)
         if not spans:
             return build_markdown_card_payload(markdown)
+        if inline_images is None:
+            inline_images = latex_inline_images_enabled()
         cache = cache if cache is not None else {}
         images = {}
+        inline_texts = {}
         pending = []  # (span_index, cache_key, span)
         for index, span in enumerate(spans):
+            if span["kind"] != "block" and not inline_images:
+                text = latex_to_unicode(span["latex"])
+                if text:
+                    inline_texts[index] = text
+                continue
             ck = formula_cache_key(span["kind"], span["latex"])
             if ck in cache:
                 info = cache[ck]
@@ -306,7 +356,7 @@ async def card_payload_with_formula_images(markdown, *, render_batch, upload_png
                     info = {"key": key, "width": result.get("width"), "height": result.get("height")}
                     cache[ck] = info
                     images[index] = info
-        return build_formula_card_payload(markdown, spans, images)
+        return build_formula_card_payload(markdown, spans, images, inline_texts)
     except Exception:
         return build_markdown_card_payload(markdown)
 

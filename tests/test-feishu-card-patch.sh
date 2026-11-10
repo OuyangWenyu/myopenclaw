@@ -62,7 +62,8 @@ print("RESULT no-allow-card", 1 if "allow_card" not in src else 0)
 gw_src = open("/opt/hermes/gateway/run.py", encoding="utf-8").read()
 print("RESULT topic-marker", 1 if "[myopenclaw] feishu topic reply anchor patch" in gw_src else 0)
 print("RESULT latex-module", 1 if (hasattr(A, "card_payload_with_formula_images") and hasattr(A, "extract_formula_spans")
-      and hasattr(A, "make_subprocess_renderer") and hasattr(A, "latex_images_enabled")) else 0)
+      and hasattr(A, "make_subprocess_renderer") and hasattr(A, "latex_images_enabled")
+      and hasattr(A, "latex_inline_images_enabled")) else 0)
 print("RESULT hint-math", 1 if (A._MARKDOWN_HINT_RE.search("$E=mc^2$")
       and not A._MARKDOWN_HINT_RE.search("价格是 $100")) else 0)
 print("RESULT render-script", 1 if os.path.exists("/opt/hermes/scripts/render-formula.py") else 0)
@@ -176,24 +177,39 @@ async def main():
     api.requests.clear(); api.image_uploads = 0
     r = await adapter.send("oc_probe", "内积 $\\langle v,u\\rangle$ 与 $$p=\\frac{a}{b}$$")
     content = api.requests[0][1]
-    has_inline = "![](img_fake_upload" in content
+    no_inline = "![](img_fake_upload" not in content   # 行内默认保留源码
     has_block = "\"img_key\": \"img_fake_upload\"" in content and "\"size\": \"" in content
-    print("RESULT formula-send", 1 if (api.requests[0][0] == "interactive" and has_inline
-          and has_block and api.image_uploads >= 2 and r.success) else "0")
+    print("RESULT formula-send", 1 if (api.requests[0][0] == "interactive" and no_inline
+          and has_block and r.success) else "0")
 
     api.requests.clear(); api.image_uploads = 0
     await adapter.send("oc_probe", "内积 $\\langle v,u\\rangle$ 与 $$p=\\frac{a}{b}$$")
     print("RESULT formula-cache", 1 if api.image_uploads == 0 else "0")
 
+    api.requests.clear()
+    await adapter.send("oc_probe", "行内 $\\eta=0.5$ 应同行")
+    c = api.requests[0][1]
+    print("RESULT formula-inline-unicode", 1 if ("η=0.5" in c and "$" not in c
+          and "img_fake_upload" not in c) else "0")
+
+    os.environ["FEISHU_LATEX_INLINE_IMAGE"] = "1"
+    api.requests.clear()
+    r = await adapter.send("oc_probe", "内积 $\\langle v,u\\rangle$ 与 $$p=\\frac{a}{b}$$")
+    content = api.requests[0][1]
+    has_inline = "![](img_fake_upload" in content
+    has_block = "\"img_key\": \"img_fake_upload\"" in content
+    print("RESULT formula-inline-opt-in", 1 if (has_inline and has_block and r.success) else "0")
+    os.environ.pop("FEISHU_LATEX_INLINE_IMAGE")
+
     os.environ["FEISHU_LATEX_IMAGE"] = "off"
     api.requests.clear()
-    await adapter.send("oc_probe", "内积 $\\langle v,u\\rangle$ 的量法")
+    await adapter.send("oc_probe", "内积 $$p=q$$ 的量法")
     print("RESULT formula-switch-off", 1 if ("img_fake_upload" not in api.requests[0][1]
-          and "$" in api.requests[0][1]) else "0")
+          and "$$" in api.requests[0][1]) else "0")
     os.environ.pop("FEISHU_LATEX_IMAGE")
 
     api.requests.clear()
-    await adapter.send("oc_probe", "$\\notacommand{x}$ 渲染应失败")
+    await adapter.send("oc_probe", "$$\\notacommand{x}$$ 渲染应失败")
     c = api.requests[0][1]
     print("RESULT formula-fallback", 1 if ("img_fake_upload" not in c and "notacommand" in c) else "0")
 
@@ -261,8 +277,10 @@ check "feishu 话题 metadata 带上 reply_to_message_id 锚点" 'r topic-anchor
 check "无锚点参数时 metadata 保持原样（不画蛇添足）" 'r topic-no-anchor'
 check "mathtext 真实渲染出合法 PNG（行内+块级）" 'r render-real'
 check "行内=600px 固定画布（客户端归一化宽）/块级=天然宽" 'r render-dims'
-check "含公式回复 → 行内嵌图 + 块级 img（带 size）" 'r formula-send'
+check "含公式回复 → 行内不嵌图 + 块级 img（带 size）" 'r formula-send'
 check "重复公式缓存命中（零重复渲染上传）" 'r formula-cache'
+check "行内公式 → Unicode 文本（不换行）" 'r formula-inline-unicode'
+check "FEISHU_LATEX_INLINE_IMAGE=1 → 行内也嵌图" 'r formula-inline-opt-in'
 check "FEISHU_LATEX_IMAGE=off → 保留源码文本" 'r formula-switch-off'
 check "渲染失败 → 该段回退源码（不丢内容）" 'r formula-fallback'
 

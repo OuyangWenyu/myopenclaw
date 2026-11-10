@@ -45,7 +45,7 @@ jobs:
           fi
 
       - name: Run tests
-        run: uv run --with pytest --with pyyaml pytest tests/ -q
+        run: uv run --with pytest --with pyyaml --with pylatexenc pytest tests/ -q
 
       - name: Build docs strictly
         run: uv run mkdocs build --strict

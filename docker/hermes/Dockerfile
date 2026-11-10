@@ -151,8 +151,9 @@ ENV OPENCODE_CONFIG_DIR=/opt/opencode-config
 # 公式在飞书消息（post 与卡片同）里只能以图呈现（2026-10-14 实测 + 官方语法
 # 清单）。渲染走独立子进程脚本（render-formula.py，stdin JSON → PNG），网关
 # 进程不加载 matplotlib（护住内存限制）。MPLCONFIGDIR 落数据卷 → 字体缓存
-# 跨容器重建持久化。
-RUN uv pip install --python /opt/hermes/.venv/bin/python3 matplotlib
+# 跨容器重建持久化。行内公式不转图（图片整行换行），用 pylatexenc 转 Unicode
+# 文本（\eta → η、\langle → ⟨）；块级仍走图片。
+RUN uv pip install --python /opt/hermes/.venv/bin/python3 matplotlib pylatexenc
 COPY render-formula.py /opt/hermes/scripts/render-formula.py
 ENV MPLCONFIGDIR=/opt/data/.cache/matplotlib
 

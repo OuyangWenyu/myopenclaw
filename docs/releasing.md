@@ -37,7 +37,7 @@ uv version --short
 
 ```bash
 uv sync --locked
-uv run --with pytest --with pyyaml pytest tests/ -q
+uv run --with pytest --with pyyaml --with pylatexenc pytest tests/ -q
 uv sync --group docs && uv run mkdocs build --strict
 
 # 部署面冒烟（本机栈在跑时）
