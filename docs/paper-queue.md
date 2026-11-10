@@ -148,9 +148,10 @@ skill 只有一份：`skills/paper-queue/SKILL.md`，OpenClaw 与 Hermes 共用�
   `session_ref="hermes:daoyuan"`，`channel_ref` / `message_ref` / `attribution_source` 为 NULL
 - 未知/错误 token 直接拒绝（每个工具都报错、零写入），不会降级到 HMAC
 - token 只能写 Owen：即使道元模型读到 token，也无法伪造成别人
-- 道元的 Feishu 已收紧为**仅 Owen 私聊**（`FEISHU_GROUP_POLICY=disabled` +
-  `FEISHU_ALLOWED_USERS`）；**该变量必须在 `.env` 里填非空**——留空是 Hermes 的
-  pairing 模式（会回复配对码），不是 deny-all。填好后当前所有请求确实都来自 Owen
+- 道元的 Feishu 已收紧为**仅指定用户可用**（`FEISHU_GROUP_POLICY=allowlist` +
+  `FEISHU_ALLOWED_USERS`；群聊仅名单内用户 @ 时响应，`require_mention` 默认 true）；
+  **该变量必须在 `.env` 里填非空**——留空是 Hermes 的 pairing 模式（会回复配对码），
+  不是 deny-all。填好后当前所有请求确实都来自该用户
 
 ### 旧 OpenClaw HMAC 路径（保留，当前不安装）
 

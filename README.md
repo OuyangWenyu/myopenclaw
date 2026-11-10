@@ -123,7 +123,7 @@ cp .env.tianyi-bot.example .env.tianyi-bot  # 编辑填入飞书 App ID/Secret +
 | hermes | 8642 | 主栈 | Hermes gateway — 爱玛士（默认 profile，飞书 bot） |
 | hermes-coder | 8643 | 主栈 | Hermes coder — 爱码士（Discord bot + Zotero 写入 + 论文管线） |
 | hermes-finance | 8644 | 主栈 | Hermes finance — 金融 agent（飞书 bot） |
-| hermes-daoyuan | 8645 | 主栈 | 道元 — 文献学者 agent（飞书 bot，Zotero 只读；仅 Owen 私聊，群聊禁用；接入 paper-queue MCP） |
+| hermes-daoyuan | 8645 | 主栈 | 道元 — 文献学者 agent（飞书 bot，Zotero 只读；仅指定用户可用：私聊 + 群聊 @；接入 paper-queue MCP） |
 | hermes-dashboard | 9119 | 主栈 | Hermes Web 面板（只读） |
 | claude-code | 9090 | 主栈 | Claude Code + cc-connect（CC飞总，飞书直连） |
 | openclaw-gateway | 18789 | 主栈 | OpenClaw 网关（虾酱 Discord bot） |

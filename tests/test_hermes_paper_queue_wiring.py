@@ -54,7 +54,8 @@ class TestComposeWiring:
 
     def test_daoyuan_is_owner_only(self):
         block = _service_block("hermes-daoyuan")
-        assert "FEISHU_GROUP_POLICY=disabled" in block
+        # 群聊 allowlist = 仅 FEISHU_ALLOWED_USERS（名单内用户）@ 时响应；require_mention 默认 true
+        assert "FEISHU_GROUP_POLICY=${DAOYUAN_FEISHU_GROUP_POLICY:-allowlist}" in block
         assert "GATEWAY_ALLOW_ALL_USERS=true" not in block
         assert "FEISHU_ALLOWED_USERS=${DAOYUAN_FEISHU_ALLOWED_USERS:-}" in block
 

@@ -272,7 +272,8 @@ YAML
 fi
 
 # 道元 Feishu 访问收紧：DM 只允许指定用户；留空 = pairing 模式（不是 deny-all），
-# 所有私聊都会被要求配对码。群聊由 compose 的 FEISHU_GROUP_POLICY=disabled 关闭。
+# 所有私聊都会被要求配对码。群聊由 compose 的 FEISHU_GROUP_POLICY=allowlist 限定为
+# 名单内用户 @ 时响应（require_mention 默认 true）。
 DAOYUAN_FEISHU_APP_ID_VAL="$(grep '^DAOYUAN_FEISHU_APP_ID=.' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '[:space:]' || true)"
 DAOYUAN_FEISHU_ALLOWED_VAL="$(grep '^DAOYUAN_FEISHU_ALLOWED_USERS=.' "${REPO_ROOT}/.env" 2>/dev/null | tail -1 | cut -d'=' -f2- | tr -d '[:space:]' || true)"
 if [[ -n "${DAOYUAN_FEISHU_APP_ID_VAL}" && -z "${DAOYUAN_FEISHU_ALLOWED_VAL}" ]]; then

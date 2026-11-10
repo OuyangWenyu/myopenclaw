@@ -10,7 +10,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 |------|------|------|------|
 | hermes | 自建（基于 `nousresearch/hermes-agent:latest`） | 8642 | Hermes gateway，默认 profile（爱玛士，`deepseek-flash` 多模态）；接入 team server-monitoring MCP，每日 08:30 服务器日报 → 飞书私聊 |
 | hermes-coder | 同 hermes 镜像 | 8643 | 爱码士，coder profile，飞书+Discord 双通道（`deepseek-flash`）；接入 team server-monitoring MCP，每日 08:30 服务器日报 → 预报系统群 |
-| hermes-daoyuan | 同 hermes 镜像 | 8645 | 道元·文献学者，daoyuan profile，**仅 Owen 私聊**（`FEISHU_GROUP_POLICY=disabled` + `FEISHU_ALLOWED_USERS`；留空是 pairing 模式）；接入 paper-queue MCP |
+| hermes-daoyuan | 同 hermes 镜像 | 8645 | 道元·文献学者，daoyuan profile，**仅指定用户可用**（`FEISHU_GROUP_POLICY=allowlist` + `FEISHU_ALLOWED_USERS`；群聊仅 @；留空是 pairing 模式）；接入 paper-queue MCP |
 | hermes-finance | 同 hermes 镜像 | 8644 | 财经助手，finance profile |
 | hermes-dashboard | `nousresearch/hermes-agent:latest` | 9119 | Hermes Web 面板（只读） |
 | claude-code | 自建（基于 `ubuntu:24.04`） | 9090 | Claude Code + cc-connect 飞书直连（各 tier 均 `deepseek-flash`，1M 上下文） |

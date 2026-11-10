@@ -291,7 +291,7 @@ services:
       - PAPER_QUEUE_MCP_URL=${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}
       - PAPER_QUEUE_DAOYUAN_TOKEN=${PAPER_QUEUE_DAOYUAN_TOKEN:-}
       # 道元不共享 TDAI memory — memory_enabled: false，独立记忆体系
-      # Feishu (道元·文献学者 — 仅 Owen 私聊；群聊禁用)
+      # Feishu (道元·文献学者 — 仅指定用户可用；群聊仅 @ 回复)
       - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${DAOYUAN_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
@@ -299,7 +299,8 @@ services:
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
       - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
       - FEISHU_LATEX_INLINE_IMAGE=${FEISHU_LATEX_INLINE_IMAGE:-0}
-      - FEISHU_GROUP_POLICY=disabled
+      # 群聊：allowlist = 仅 FEISHU_ALLOWED_USERS（名单内用户）@ 时响应；open/disabled 可切换
+      - FEISHU_GROUP_POLICY=${DAOYUAN_FEISHU_GROUP_POLICY:-allowlist}
       - FEISHU_ALLOWED_USERS=${DAOYUAN_FEISHU_ALLOWED_USERS:-}
     shm_size: "1g"
     deploy:
