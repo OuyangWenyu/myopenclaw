@@ -503,10 +503,11 @@ TOML
 fi
 
 # ── TDAI Memory plugin install + inject provider ───────────────
-# Runtime install (not in Dockerfile) to avoid cache invalidation of the
-# cardamum Rust build stage. The npm package ships a Python MemoryProvider
+# The npm package is baked into the image (docker/hermes/Dockerfile pins
+# @tencentdb-agent-memory/memory-tencentdb). It ships a Python MemoryProvider
 # at hermes-plugin/memory/memory_tencentdb/ that Hermes discovers under
-# /opt/hermes/plugins/memory/<name>/.
+# /opt/hermes/plugins/memory/<name>/ — this block copies it into place at
+# every start (so a stale image layer can't leave the provider missing).
 #
 # Key facts learned from integration:
 #   - The provider reads the Gateway address from env vars
@@ -531,43 +532,71 @@ else
 fi
 
 # ── Inject memory.provider into profile configs ────────────────
-# Only sets `provider: memory_tencentdb` in the existing `memory:` section.
+# Sets `provider: memory_tencentdb` inside the existing `memory:` section.
 # Gateway address comes from env vars, so no gateway_url/session_id needed
-# in config. Idempotent: skips if the provider is already set.
+# in config. Idempotent: skips when the provider is already memory_tencentdb.
+#
+# Three config shapes must work — profile configs are not all born equal:
+#   1. Hermes 默认：`memory:` 段里是 `provider: ''`      → 原地替换
+#   2. 最小配置（道元 profile 的 start.sh 模板）：只有
+#      `memory_enabled: true`，没有 provider 键            → 插到 memory: 段首
+#      （2026-11-11 之前这里走 else 分支跳过，道元因此一直没接共享记忆）
+#   3. 操作者显式选了别的非空 provider                    → 保留，不覆盖
 if [ -d "${PLUGIN_DST}" ]; then
     for config in /opt/data/config.yaml /opt/data/profiles/*/config.yaml; do
         [ -f "${config}" ] || continue
-        if grep -q 'provider: memory_tencentdb' "${config}" 2>/dev/null; then
+        if grep -qE '^  provider: memory_tencentdb[[:space:]]*$' "${config}" 2>/dev/null; then
             echo "   ✅ $(dirname "${config}"): memory provider 已配置，跳过"
             continue
         fi
-        # Replace the empty built-in provider with memory_tencentdb.
-        if grep -qE "^  provider: ''" "${config}" 2>/dev/null; then
-            python3 - "${config}" << 'PYEOF'
+        # 注意：命令替换里的 python 失败不能冒到 `set -e`（返回值用 || 兜住）
+        status="$(python3 - "${config}" << 'PYEOF'
 import sys
+
 path = sys.argv[1]
 with open(path) as f:
     lines = f.readlines()
-out = []
+
 section = None
-done = False
-for line in lines:
-    # Track the current top-level section (memory:, delegation:, etc.)
-    if line and not line[0].isspace() and line.rstrip('\n').endswith(':'):
-        section = line.rstrip('\n')[:-1]
-    # Only replace the empty provider INSIDE the top-level memory: block.
-    if not done and section == 'memory' and line.strip() == "provider: ''":
-        out.append("  provider: memory_tencentdb\n")
-        done = True
+memory_at = None
+provider_at = None
+provider_val = ""
+
+for i, line in enumerate(lines):
+    if not line.strip():
         continue
-    out.append(line)
-with open(path, 'w') as f:
-    f.writelines(out)
+    if not line[0].isspace():
+        # 顶格行：`memory:` 是段头，`key: value` 是顶层标量 —— 两者都结束上一段
+        section = line.rstrip("\n")[:-1] if line.rstrip("\n").endswith(":") else None
+        if section == 'memory' and memory_at is None:
+            memory_at = i
+        continue
+    if section == 'memory' and provider_at is None and line.strip().startswith('provider:'):
+        provider_at = i
+        provider_val = line.split(":", 1)[1].strip().strip("'\"")
+
+if memory_at is None:
+    print("no-section")
+elif provider_at is None:
+    lines.insert(memory_at + 1, "  provider: memory_tencentdb\n")
+    with open(path, "w") as f:
+        f.writelines(lines)
+    print("injected")
+elif provider_val in ("", "memory_tencentdb"):
+    lines[provider_at] = "  provider: memory_tencentdb\n"
+    with open(path, "w") as f:
+        f.writelines(lines)
+    print("injected")
+else:
+    print("kept")
 PYEOF
-            echo "   🧠 $(dirname "${config}"): memory provider → memory_tencentdb"
-        else
-            echo "   ⚠️  $(dirname "${config}"): 未找到可替换的 provider 字段，跳过"
-        fi
+)" || status="error"
+        case "${status}" in
+            injected)   echo "   🧠 $(dirname "${config}"): memory provider → memory_tencentdb" ;;
+            kept)       echo "   ℹ️  $(dirname "${config}"): 已有其它 memory provider，保留" ;;
+            no-section) echo "   ⚠️  $(dirname "${config}"): 无 memory 段，跳过 provider 注入" ;;
+            *)          echo "   ⚠️  $(dirname "${config}"): provider 注入失败，跳过" ;;
+        esac
     done
 fi
 
