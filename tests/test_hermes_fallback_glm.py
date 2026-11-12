@@ -32,15 +32,20 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 START_SH = REPO_ROOT / "scripts" / "start.sh"
 
 HOME = Path.home()
+# 2026-11-12：finance 之前不在名单里 ⇒ 它没有 fallback_model、也没有
+# reasoning_overrides，漂了没人管，直到贝小爷回用户「model provider failed after
+# retries」才暴露。名单少一个 profile 等于那份配置没有守卫。
 LIVE_CONFIGS = {
     "default": HOME / ".hermes" / "config.yaml",
     "coder": HOME / ".hermes" / "profiles" / "coder" / "config.yaml",
     "daoyuan": HOME / ".hermes" / "profiles" / "daoyuan" / "config.yaml",
+    "finance": HOME / ".hermes" / "profiles" / "finance" / "config.yaml",
 }
 LIVE_AUTH_STORES = {
     "default": HOME / ".hermes" / "auth.json",
     "daoyuan": HOME / ".hermes" / "profiles" / "daoyuan" / "auth.json",
     "coder": HOME / ".hermes" / "profiles" / "coder" / "auth.json",
+    "finance": HOME / ".hermes" / "profiles" / "finance" / "auth.json",
 }
 
 EXPECTED_MODEL = "glm-5.3-flash"
@@ -91,7 +96,7 @@ class TestStartShTemplates:
 
 
 class TestLiveConfigs:
-    """live 三份 config —— 只断言存在该文件的机器（换机/未部署时跳过）。"""
+    """live 四份 config —— 只断言存在该文件的机器（换机/未部署时跳过）。"""
 
     @pytest.mark.parametrize("profile", sorted(LIVE_CONFIGS))
     def test_fallback_and_override(self, profile: str):

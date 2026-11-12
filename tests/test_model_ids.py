@@ -301,3 +301,164 @@ class TestDeepseekChatUntouched:
         cfg = json.loads(OPENCLAW_EXAMPLE.read_text())
         ids = [m["id"] for m in cfg["models"]["providers"]["deepseek"]["models"]]
         assert "deepseek-chat" in ids
+
+
+# Hermes 认这三个名字取 zai 的 key（实测报错原文：Set GLM_API_KEY, ZAI_API_KEY,
+# Z_AI_API_KEY）。compose 里必须注入其中之一，否则 fallback_model 是空转的。
+ZAI_KEY_ENV_NAMES = ("GLM_API_KEY", "ZAI_API_KEY", "Z_AI_API_KEY")
+HERMES_PROFILES = ("hermes", "hermes-coder", "hermes-finance", "hermes-daoyuan")
+
+
+class TestFallbackModel:
+    """备份模型：主模型失败时切 zai/glm-5.3-flash。
+
+    2026-11-12 现场：贝小爷（finance）回用户「⚠️ The model provider failed after
+    retries」。直接原因是长截图超尺寸（见 test_hermes_image_limit_patch.py），
+    但**同一条链上还挂着一个真缺口**：finance 的 ``fallback_providers`` 是空列表、
+    压根没有 ``fallback_model``；而另外三个 profile 虽然写了，容器里却没有
+    GLM/ZAI key ⇒ 备份模型一次都没法真正接管。两处都钉在这里。
+    """
+
+    @staticmethod
+    def _mod():
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "ensure_hermes_model", REPO_ROOT / "scripts" / "ensure_hermes_model.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_empty_fallback_list_is_filled(self):
+        """finance 的真实形状：fallback_providers: [] + 没有 fallback_model。"""
+        mod = self._mod()
+        text = "model:\n  default: deepseek-flash\n  provider: deepseek\nfallback_providers: []\nproviders: {}\n"
+        new, status = mod.ensure_fallback(text)
+        assert status == "written"
+        doc = yaml.safe_load(new)
+        assert doc["fallback_providers"] == ["zai"]
+        assert doc["fallback_model"] == {"provider": "zai", "model": "glm-5.3-flash"}
+        assert doc["providers"] == {}, "块外的键被吞掉"
+        assert doc["model"]["default"] == "deepseek-flash"
+
+    def test_missing_both_keys_is_fixed(self):
+        mod = self._mod()
+        text = "model:\n  default: deepseek-flash\n  provider: deepseek\n"
+        new, status = mod.ensure_fallback(text)
+        assert status == "written"
+        doc = yaml.safe_load(new)
+        assert doc["fallback_providers"] == ["zai"]
+        assert doc["fallback_model"]["model"] == "glm-5.3-flash"
+
+    def test_correct_fallback_is_untouched(self):
+        mod = self._mod()
+        text = (
+            "model:\n  default: deepseek-flash\n"
+            "fallback_providers:\n- zai\n"
+            "fallback_model:\n  provider: zai\n  model: glm-5.3-flash\n"
+        )
+        new, status = mod.ensure_fallback(text)
+        assert status == "unchanged-fallback:zai/glm-5.3-flash"
+        assert new == text
+
+    def test_operator_fallback_is_not_overwritten(self):
+        """操作者显式选了别的备份模型 —— 一个字都不能动。"""
+        mod = self._mod()
+        text = (
+            "model:\n  default: deepseek-flash\n"
+            "fallback_providers:\n- anthropic\n"
+            "fallback_model:\n  provider: anthropic\n  model: claude-opus-4.6\n"
+        )
+        new, status = mod.ensure_fallback(text)
+        assert status == "unchanged-fallback:anthropic/claude-opus-4.6"
+        assert new == text
+
+    def test_fallback_is_idempotent(self):
+        mod = self._mod()
+        once, _ = mod.ensure_fallback("model:\n  default: deepseek-flash\nfallback_providers: []\n")
+        twice, status = mod.ensure_fallback(once)
+        assert twice == once
+        assert status.startswith("unchanged-fallback:")
+
+    def test_compose_injects_zai_credential(self):
+        """四个 hermes 容器都必须拿得到 zai 的钥匙，否则备份模型起不来。"""
+        for service in HERMES_PROFILES:
+            env = _service_env(service)
+            assert any(name in env for name in ZAI_KEY_ENV_NAMES), (
+                f"{service} 没注入 zai 凭据（{'/'.join(ZAI_KEY_ENV_NAMES)} 之一）"
+                " —— fallback_model 会空转"
+            )
+
+    def test_templates_carry_fallback(self):
+        """新装机器走 heredoc 模板，模板漏了同样会静默没有备份模型。"""
+        for var in ("CODER_CONFIG", "DAOYUAN_CONFIG"):
+            doc = _start_sh_heredoc_yaml(var)
+            assert doc.get("fallback_providers") == ["zai"], f"{var} 模板缺 fallback_providers"
+            assert doc.get("fallback_model") == {
+                "provider": "zai",
+                "model": "glm-5.3-flash",
+            }, f"{var} 模板缺 fallback_model"
+
+
+class TestReasoningOverride:
+    """glm-5.3-flash 强制思考 —— 缺 ``agent.reasoning_overrides`` 会被智谱 400。
+
+    这条由 ``tests/test_hermes_fallback_glm.py`` 在 live 配置上钉着；这里钉的是
+    ``scripts/ensure_hermes_model.py`` 能不能**自动补齐**它（start.sh 每次调用），
+    否则换机 / 从快照恢复出来的机器又得手工补。
+    """
+
+    @staticmethod
+    def _mod():
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "ensure_hermes_model", REPO_ROOT / "scripts" / "ensure_hermes_model.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    def test_agent_block_without_override_is_fixed(self):
+        """finance 的真实形状：agent 段存在，但没有 reasoning_overrides。"""
+        mod = self._mod()
+        text = "model:\n  default: deepseek-flash\nagent:\n  max_turns: 90\n  service_tier: ''\nterminal:\n  backend: local\n"
+        new, status = mod.ensure_reasoning_override(text)
+        assert status == "written"
+        doc = yaml.safe_load(new)
+        assert doc["agent"]["reasoning_overrides"] == {"glm-5.3-flash": "low"}
+        assert doc["agent"]["max_turns"] == 90, "兄弟键被吞"
+        assert doc["terminal"] == {"backend": "local"}, "块外的键被吞"
+
+    def test_missing_agent_block_appends(self):
+        mod = self._mod()
+        new, status = mod.ensure_reasoning_override("model:\n  default: deepseek-flash\n")
+        assert status == "written"
+        assert yaml.safe_load(new)["agent"]["reasoning_overrides"]["glm-5.3-flash"] == "low"
+
+    def test_operator_effort_is_preserved(self):
+        mod = self._mod()
+        text = "agent:\n  reasoning_overrides:\n    glm-5.3-flash: high\n"
+        new, status = mod.ensure_reasoning_override(text)
+        assert status == "unchanged-reasoning:glm-5.3-flash=high"
+        assert new == text
+
+    def test_other_models_in_block_are_preserved(self):
+        mod = self._mod()
+        text = "agent:\n  reasoning_overrides:\n    kimi-k2: high\n  max_turns: 90\n"
+        new, status = mod.ensure_reasoning_override(text)
+        assert status == "written"
+        ro = yaml.safe_load(new)["agent"]["reasoning_overrides"]
+        assert ro == {"kimi-k2": "high", "glm-5.3-flash": "low"}
+
+    def test_idempotent_and_apply_file_status(self, tmp_path):
+        mod = self._mod()
+        once, _ = mod.ensure_reasoning_override("agent:\n  max_turns: 90\n")
+        twice, status = mod.ensure_reasoning_override(once)
+        assert twice == once and status == "unchanged-reasoning:glm-5.3-flash=low"
+        # apply_file 串起三步，状态要能被 start.sh 打印
+        cfg = tmp_path / "config.yaml"
+        cfg.write_text("model:\n  default: deepseek-flash\nagent:\n  max_turns: 90\n")
+        assert mod.apply_file(cfg).startswith("written")
+        assert "reasoning_overrides" in cfg.read_text()

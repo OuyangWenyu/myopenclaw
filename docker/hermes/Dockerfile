@@ -170,6 +170,17 @@ COPY feishu_markdown_card.py patch-feishu.py /tmp/
 RUN /opt/hermes/.venv/bin/python3 /tmp/patch-feishu.py && \
     rm -f /tmp/feishu_markdown_card.py /tmp/patch-feishu.py
 
+# ── 图片尺寸误判补丁（myopenclaw）─────────────────────────────
+# DeepSeek 把「图太大」报成 "You have uploaded an unsupported image"，措辞里没有
+# 任何尺寸词汇 ⇒ 上游 error_classifier 落到 format_error（不可重试）直接终止。
+# 补丁把这句话加进 _IMAGE_TOO_LARGE_PATTERNS，归一到 image_too_large 即走上游自带
+# 的「缩到最长边 8000px 再重试一次」（2026-11-12 实测 391×8000 可通过）。
+# 同样是对 upstream 源文件的锚点手术：失配即构建失败。守卫:
+# tests/test_hermes_image_limit_patch.py
+COPY patch-image-limit.py /tmp/
+RUN /opt/hermes/.venv/bin/python3 /tmp/patch-image-limit.py && \
+    rm -f /tmp/patch-image-limit.py
+
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the

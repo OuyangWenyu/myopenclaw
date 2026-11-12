@@ -46,6 +46,10 @@ services:
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       # Blocked by Hermes env blacklist, materialized to secrets files by entrypoint
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      # 备份模型凭据：主模型 deepseek-flash 失败时切 zai/glm-5.3-flash。Hermes 认
+      # GLM_API_KEY / ZAI_API_KEY / Z_AI_API_KEY 三者，这里复用 .env 的 GLM_API_KEY
+      # （此前四个 profile 都写了 fallback_model 却没有钥匙 ⇒ 备份是空转的）
+      - GLM_API_KEY=${GLM_API_KEY:-}
       - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo — 主模型已切 deepseek-flash，此注入当前无消费方（待清理）
       # Outlook OAuth（非机密配置，repo .env 单一来源；token 由 ortie 管理，不经环境传递）
       - EMAIL_OUTLOOK_ADDRESS=${EMAIL_OUTLOOK_ADDRESS:-}
@@ -146,6 +150,7 @@ services:
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GLM_API_KEY=${GLM_API_KEY:-}
       - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo — 主模型已切 deepseek-flash，此注入当前无消费方（待清理）
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -225,6 +230,7 @@ services:
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
@@ -293,6 +299,7 @@ services:
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
