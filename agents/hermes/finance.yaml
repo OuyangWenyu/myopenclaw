@@ -1,0 +1,21 @@
+# Finance profile. Group chats are open and every user is allowed through.
+# Kanban dispatch is off; hermes-coder is the only dispatcher.
+
+service: hermes-finance
+profile: finance
+feishu_env_prefix: FINANCE_FEISHU
+port: "${HERMES_FINANCE_PORT:-8644}:8642"
+bundles:
+  - kanban-off
+  - zotero
+  - shared-rclone
+env:
+  FEISHU_GROUP_POLICY: open
+  GATEWAY_ALLOW_ALL_USERS: "true"
+mounts:
+  - data
+  - gh
+  - opencode
+  - lark
+  - zotero-data
+  - email-mask

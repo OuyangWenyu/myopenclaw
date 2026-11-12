@@ -1,0 +1,48 @@
+# Default profile (爱玛士), the orchestrator. Outlook credentials, the private
+# OneDrive rclone config, and the Docker socket are mounted only here.
+# Kanban dispatch stays off: a worker forked in this container inherits those
+# credentials, so a coder worker could read this profile's mail. The dispatcher
+# runs in hermes-coder.
+
+service: hermes
+port: "${HERMES_PORT:-8642}:8642"
+feishu_env_prefix: FEISHU
+build:
+  context: ./docker/hermes
+  dockerfile: Dockerfile
+  args:
+    - "GITHUB_TOKEN=${GH_TOKEN:-}"
+extra_hosts:
+  - host.docker.internal:host-gateway
+bundles:
+  - kanban-off
+  - gitcode
+  - xiaomi
+  - zotero
+  - server-monitoring
+env:
+  # Non-secret Outlook settings. The repo .env is the single source.
+  # ortie holds the OAuth token; it is not passed through the environment.
+  EMAIL_OUTLOOK_ADDRESS: "${EMAIL_OUTLOOK_ADDRESS:-}"
+  EMAIL_OUTLOOK_ACCOUNT_NAME: "${EMAIL_OUTLOOK_ACCOUNT_NAME:-}"
+  EMAIL_OUTLOOK_DISPLAY_NAME: "${EMAIL_OUTLOOK_DISPLAY_NAME:-}"
+  EMAIL_OUTLOOK_GRANT: "${EMAIL_OUTLOOK_GRANT:-}"
+  EMAIL_OUTLOOK_CLIENT_ID: "${EMAIL_OUTLOOK_CLIENT_ID:-}"
+  EMAIL_OUTLOOK_IMAP_HOST: "${EMAIL_OUTLOOK_IMAP_HOST:-}"
+  EMAIL_OUTLOOK_IMAP_PORT: "${EMAIL_OUTLOOK_IMAP_PORT:-}"
+  EMAIL_OUTLOOK_SMTP_HOST: "${EMAIL_OUTLOOK_SMTP_HOST:-}"
+  EMAIL_OUTLOOK_SMTP_PORT: "${EMAIL_OUTLOOK_SMTP_PORT:-}"
+  # Read-only OneDrive, this profile only. Its rclone.conf (gdrive + onedrive)
+  # is mounted at /opt/onedrive. The other profiles use the shared rclone.conf
+  # from the shared-rclone bundle.
+  RCLONE_CONFIG: /opt/onedrive/rclone.conf
+mounts:
+  - data
+  - onedrive
+  - gh
+  - opencode
+  - lark
+  - zotero-data
+  - team-skills
+  - myagentdata
+  - docker-sock

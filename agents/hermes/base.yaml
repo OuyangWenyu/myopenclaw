@@ -1,0 +1,120 @@
+# Shared definition for the four hermes agent services.
+# Per-agent files list only what differs. The renderer emits environment as
+# base.env, then selected bundles, then derived keys, then the agent's env.
+# Regenerate the compose region with:
+#   uv run --with pyyaml scripts/render_agents.py
+#
+# Mount order is part of the contract: Docker Compose's service config hash
+# changes when volume order changes, and a changed hash recreates the container.
+# Environment order does not.
+
+order: [default, coder, finance, daoyuan]
+
+service_defaults:
+  image: myopenclaw/hermes:latest
+  restart: unless-stopped
+  shm_size: 1g
+  memory: 4G
+  cpus: "2.0"
+  network: myopenclaw-net
+
+env:
+  # gh reads GH_TOKEN directly. Hermes's env blacklist does not match this
+  # name, so the value reaches the process instead of a secrets file.
+  GH_TOKEN: "${GH_TOKEN:-}"
+  GITHUB_TOKEN: "${GH_TOKEN:-}"
+  HERMES_REPO_SCANNER_KEY: "${HERMES_REPO_SCANNER_KEY:-}"
+  OPENCODE_API_KEY: "${OPENCODE_API_KEY:-}"
+  MOONSHOT_API_KEY: "${MOONSHOT_API_KEY:-}"
+  KIMI_CN_API_KEY: "${MOONSHOT_API_KEY:-}"
+  # Hermes blocks DEEPSEEK_API_KEY, OPENROUTER_API_KEY, and OPENAI_API_KEY.
+  # The entrypoint writes them to secrets files before the process starts.
+  DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+  # Fallback credential for zai/glm-5.3-flash when deepseek-flash fails.
+  # Hermes accepts GLM_API_KEY, ZAI_API_KEY, or Z_AI_API_KEY. This reuses
+  # GLM_API_KEY from .env. Without the key, a configured fallback is a no-op.
+  GLM_API_KEY: "${GLM_API_KEY:-}"
+  OPENROUTER_API_KEY: "${OPENROUTER_API_KEY:-}"
+  OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+  LARK_CLI_APP_ID: "${LARK_CLI_APP_ID:-}"
+  LARK_CLI_APP_SECRET: "${LARK_CLI_APP_SECRET:-}"
+  LARK_USER_OPEN_ID: "${LARK_USER_OPEN_ID:-}"
+  LARK_CLI_IDM_APP_ID: "${LARK_CLI_IDM_APP_ID:-}"
+  LARK_CLI_IDM_APP_SECRET: "${LARK_CLI_IDM_APP_SECRET:-}"
+  # The Hermes MCP client expands this in config.yaml's Authorization header.
+  # An empty expansion is a 401. A same-named variable in ~/.hermes/.env is
+  # not part of that expansion.
+  MCP_YUQUE_MCP_API_KEY: "${MCP_YUQUE_MCP_API_KEY:-}"
+  # The memory provider falls back to 127.0.0.1:8420 when these are unset,
+  # which is unreachable from the container.
+  MEMORY_TENCENTDB_GATEWAY_HOST: tdai-memory
+  MEMORY_TENCENTDB_GATEWAY_PORT: "8420"
+  FEISHU_DOMAIN: feishu
+  FEISHU_CONNECTION_MODE: websocket
+  FEISHU_MARKDOWN_CARD: "${FEISHU_MARKDOWN_CARD:-1}"
+  FEISHU_LATEX_IMAGE: "${FEISHU_LATEX_IMAGE:-1}"
+  FEISHU_LATEX_INLINE_IMAGE: "${FEISHU_LATEX_INLINE_IMAGE:-0}"
+
+bundles:
+  # hermes-coder is the only kanban dispatcher. Every other container sets
+  # this to 0 so it does not take the same global dispatch lock.
+  # Guard: tests/test_hermes_kanban_wiring.py
+  kanban-off:
+    HERMES_KANBAN_DISPATCH_IN_GATEWAY: "0"
+  gitcode:
+    GITCODE_TOKEN: "${GITCODE_TOKEN:-}"
+  # No current consumer. The primary model is deepseek-flash. Kept so a
+  # rollback to MiMo does not require a compose change. Pending cleanup.
+  xiaomi:
+    XIAOMI_API_KEY: "${XIAOMI_API_KEY:-}"
+  zotero:
+    ZOT_DATA_DIR: /opt/zotero-data
+    ZOTERO_API_KEY: "${ZOTERO_API_KEY:-}"
+    ZOTERO_LIBRARY_ID: "${ZOTERO_LIBRARY_ID:-}"
+    ZOTERO_LIBRARY_TYPE: "${ZOTERO_LIBRARY_TYPE:-user}"
+    GDRIVE_PAPERS_LOCAL_PATH: "${GDRIVE_PAPERS_LOCAL_PATH:-}"
+  # Empty URL disables the client. The real URL and token live only in .env.
+  # Default uses this for on-demand queries and a daily private digest; coder
+  # uses it for on-demand queries and the forecast-system group digest.
+  server-monitoring:
+    SERVER_MONITORING_MCP_URL: "${SERVER_MONITORING_MCP_URL:-}"
+    SERVER_MONITORING_MCP_TOKEN: "${SERVER_MONITORING_MCP_TOKEN:-}"
+  shared-rclone:
+    RCLONE_CONFIG: /opt/data/rclone/rclone.conf
+
+mounts:
+  data: "${HOME}/.hermes:/opt/data"
+  onedrive: "${HOME}/.hermes-onedrive:/opt/onedrive:rw"
+  gh: "${HOME}/.config/gh:/opt/gh-config"
+  opencode: "${HOME}/.config/opencode:/opt/opencode-config"
+  lark: "${HOME}/.lark-cli:/opt/lark-config"
+  zotero-data: "${HOME}/Zotero:/opt/zotero-data:ro"
+  gitcode: "${HOME}/.gitcode:/opt/gitcode-config"
+  aisecretary-skills: "${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro"
+  morning-briefing: ./skills/morning-briefing:/opt/hermes-skills/morning-briefing:ro
+  morning-triage: ./skills/morning-triage-v2:/opt/hermes-skills/morning-triage-v2:ro
+  daily-dev-report: ./skills/daily-dev-report:/opt/hermes-skills/daily-dev-report:ro
+  yuque-knowledge: ./skills/yuque-knowledge:/opt/hermes-skills/yuque-knowledge:ro
+  yuque-daily-digest: ./skills/yuque-daily-digest:/opt/hermes-skills/yuque-daily-digest:ro
+  server-monitoring-digest: ./skills/server-monitoring-digest:/opt/hermes-skills/server-monitoring-digest:ro
+  # Shared with the future OpenClaw path. start.sh links this into the profile.
+  paper-queue: ./skills/paper-queue:/opt/hermes-skills/paper-queue:ro
+  myagentdata: "${HOME}/.myagentdata:/opt/myagentdata:ro"
+  docker-sock: /var/run/docker.sock:/var/run/docker.sock:ro
+  # Hides the shared mail config and tokens. Mail is authorized only for the
+  # default profile.
+  email-config-none: email-config-none:/opt/data/.config/himalaya
+  email-tokens-none: email-tokens-none:/opt/data/.config/ortie
+
+mount_groups:
+  team-skills:
+    - morning-briefing
+    - morning-triage
+    - aisecretary-skills
+    - daily-dev-report
+    - yuque-knowledge
+    - yuque-daily-digest
+    - server-monitoring-digest
+  email-mask:
+    - email-config-none
+    - email-tokens-none

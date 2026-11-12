@@ -1,0 +1,34 @@
+# Daoyuan profile, literature only. Feishu is an allowlist: an empty
+# FEISHU_ALLOWED_USERS is pairing mode, not deny-all. Group chats reply only
+# when a listed user mentions the bot; open and disabled are the other
+# policies. This agent reads the paper queue and dailyinfo and has no Zotero
+# write key. It shares the TDAI gateway with the other profiles as of
+# 2026-11-11, after Feishu access was narrowed to the owner.
+# Kanban dispatch is off; hermes-coder is the only dispatcher.
+
+service: hermes-daoyuan
+profile: daoyuan
+feishu_env_prefix: DAOYUAN_FEISHU
+port: "${HERMES_DAOYUAN_PORT:-8645}:8642"
+bundles:
+  - kanban-off
+  - shared-rclone
+env:
+  # Read-only dailyinfo MCP on its own stack. Hermes expands the URL and key
+  # inside the container.
+  DAILYINFO_MCP_URL: "${DAILYINFO_MCP_URL:-}"
+  DAILYINFO_MCP_KEY: "${DAILYINFO_MCP_KEY:-}"
+  # Paper-queue MCP. The server binds this bearer token to a fixed actor.
+  # An empty URL disables the client.
+  PAPER_QUEUE_MCP_URL: "${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}"
+  PAPER_QUEUE_DAOYUAN_TOKEN: "${PAPER_QUEUE_DAOYUAN_TOKEN:-}"
+  FEISHU_GROUP_POLICY: "${DAOYUAN_FEISHU_GROUP_POLICY:-allowlist}"
+  FEISHU_ALLOWED_USERS: "${DAOYUAN_FEISHU_ALLOWED_USERS:-}"
+mounts:
+  - data
+  - gh
+  - opencode
+  - lark
+  - zotero-data
+  - paper-queue
+  - email-mask

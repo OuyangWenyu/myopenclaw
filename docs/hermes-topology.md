@@ -159,6 +159,26 @@ ls ~/.hermes/.env ~/.hermes/profiles/*/.env 2>/dev/null
 
 注意：`/opt/data` 是共享卷，`/opt/data/*/logs/gateway.log` 这种通配会**读到别人的日志**。查某个 profile 必须指到它自己的路径。
 
+## 服务定义从哪来
+
+四个 hermes 服务的 compose 段不是手写的。来源是 `agents/hermes/`：
+
+- `base.yaml`：四个服务相同的字段、环境变量、挂载目录，以及被多个 agent 共用的变量组
+- `<agent>.yaml`：端口、`profile`、飞书应用前缀、要启用的变量组、自己独有的环境变量、挂载。`HERMES_PROFILE` 和 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 由前两项推导，不手写
+- 环境变量的输出顺序由渲染器固定：公共变量、所选变量组（按清单里的顺序）、推导出的变量、agent 自己的变量。这个顺序不进入配置哈希
+- 挂载按清单顺序输出，顺序变了会重建容器
+
+改完清单后重新生成，不要改 `docker-compose.yml` 里 `>>> GENERATED` 和 `<<< GENERATED` 之间的内容：
+
+```bash
+uv run --with pyyaml scripts/render_agents.py          # 写回 compose
+uv run --with pyyaml scripts/render_agents.py --check  # 只检查有没有人改过生成结果
+```
+
+加一个 hermes agent：新增一个清单文件，把它的名字加进 `base.yaml` 的 `order`，再跑上面的命令。挂载顺序会进入 Docker 的配置哈希，顺序变了就会重建容器。
+
+`hermes-dashboard` 不在这套清单里，仍然手写。
+
 ## 已知的历史包袱
 
 - `~/.hermes/profiles/default/` 只有一个空的 `pairing/` —— **废弃空壳**。root profile 的 home 是 `~/.hermes` 本身，Hermes 启动时会 warn 并跳过这个目录
