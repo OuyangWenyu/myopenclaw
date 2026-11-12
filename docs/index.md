@@ -28,6 +28,8 @@
 ## Agent 与渠道
 
 - [Hermes 渠道](hermes-channels.md) — 飞书/钉钉/Discord 消息平台配置
+- [Kanban 多 profile 协作](kanban.md) — 飞书 `/kanban` 建卡 → 派给另一个 profile 执行 → 结果回会话
+- [Hermes 拓扑：容器 × profile × .env](hermes-topology.md) — 5 容器 / 4 身份 / 四份 `.env` 谁读谁、谁优先
 - [OpenClaw 渠道](openclaw-channels.md) — Discord/飞书渠道配置
 - [Hermes Skill 机制](hermes-skills.md) — live 执行源与仓库版本源的关系
 - [飞书 CLI](lark-cli.md) — lark-cli 飞书命令行工具

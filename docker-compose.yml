@@ -30,6 +30,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
     environment:
+      # ── Kanban：总管的容器不跑派发循环 ──────────────────────────────────
+      # 爱玛士（default）是总管：拆活、建卡、指派、验收 —— 它照旧是这条路的上游。
+      # 但"派发执行器"（60s 扫板 + spawn worker）不能放在这里：worker 是 dispatcher
+      # 的 subprocess，会继承**本容器**的挂载（真邮箱配置、OneDrive token），
+      # 于是一个 coder worker 就能读到爱玛士的邮件凭据。
+      # 派发执行器放在 hermes-coder（见该服务），worker 落在那边的车间。
+      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
@@ -121,6 +128,16 @@ services:
       - email-tokens-none:/opt/data/.config/ortie
 
     environment:
+      # ── Kanban 派发执行器（"工头"）在本容器 ─────────────────────────────
+      # 总管是 default（爱玛士）：它拆活、建卡、指派、验收。这里只跑那个 60s 的
+      # 机械循环（扫板 → 抢占 → spawn `hermes -p <assignee> … chat -q work
+      # kanban task t_x`），不做任何判断。
+      # 为什么工头在这儿：worker 是它的子进程，只能继承本容器的挂载/凭据；
+      # 而 coder 需要的 /opt/gitcode-config、/opt/myagentdata、aisecretary skills
+      # 只挂在这里，同时本容器**没有**爱玛士的真邮箱配置与 OneDrive token。
+      # 刻意不设 HERMES_KANBAN_DISPATCH_IN_GATEWAY（默认 true）；其余三个
+      # hermes 容器都显式设成 0 —— 否则它们会抢同一把全局派发锁。
+      # 守卫：tests/test_hermes_kanban_wiring.py
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
@@ -199,6 +216,8 @@ services:
       - email-tokens-none:/opt/data/.config/ortie
 
     environment:
+      # Kanban 派发关闭：全机唯一的 dispatcher 是 hermes-coder（见该服务注释）。
+      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
@@ -265,6 +284,8 @@ services:
       - email-tokens-none:/opt/data/.config/ortie
 
     environment:
+      # Kanban 派发关闭：全机唯一的 dispatcher 是 hermes-coder（见该服务注释）。
+      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
