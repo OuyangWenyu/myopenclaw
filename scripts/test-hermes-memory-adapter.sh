@@ -38,16 +38,18 @@ count_occurrences() {
 
 WRAPPER="${REPO_ROOT}/docker/hermes/entrypoint-wrapper.sh"
 WRAPPER_CONTENT=$(cat "${WRAPPER}")
+DOCKERFILE="${REPO_ROOT}/docker/hermes/Dockerfile"
+DOCKERFILE_CONTENT=$(cat "${DOCKERFILE}")
 COMPOSE="${REPO_ROOT}/docker-compose.yml"
 COMPOSE_CONTENT=$(cat "${COMPOSE}")
 
 # ============================================================
 # Test 1: entrypoint-wrapper 运行时安装 npm 包
 # ============================================================
-echo "🧪 Test 1: entrypoint-wrapper — 运行时 npm 安装"
-assert_contains "installs memory-tencentdb at runtime" \
-    "npm install -g" "${WRAPPER_CONTENT}"
-assert_contains "references memory-tencentdb package" \
+echo "🧪 Test 1: 安装源 — 镜像内置 npm 包（2026-11 起从 runtime 挪进 Dockerfile）"
+assert_contains "Dockerfile installs memory-tencentdb" \
+    "npm install -g @tencentdb-agent-memory/memory-tencentdb" "${DOCKERFILE_CONTENT}"
+assert_contains "entrypoint references memory-tencentdb package" \
     "memory-tencentdb" "${WRAPPER_CONTENT}"
 
 # ============================================================
@@ -90,12 +92,13 @@ assert_contains "tracks top-level section for injection" \
 echo ""
 echo "🧪 Test 5: docker-compose — Gateway env"
 GATEWAY_HOST_COUNT=$(count_occurrences 'MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory' "${COMPOSE_CONTENT}")
-# 3 个 hermes 服务 + 1 个 claude-code = 至少 3（hermes 三兄弟）
-if [[ "${GATEWAY_HOST_COUNT}" -ge 3 ]]; then
-    echo -e "  ${GREEN}✅${NC} Gateway host env 在 ≥3 个服务 (found ${GATEWAY_HOST_COUNT})"
+# 4 个 hermes 服务（hermes / coder / finance / daoyuan）+ 1 个 claude-code = 5
+# 2026-11-11 起道元也接入共享记忆：少一个 profile 就会静默只写本机 127.0.0.1:8420。
+if [[ "${GATEWAY_HOST_COUNT}" -ge 5 ]]; then
+    echo -e "  ${GREEN}✅${NC} Gateway host env 在 ≥5 个服务 (found ${GATEWAY_HOST_COUNT})"
     PASS=$((PASS + 1))
 else
-    echo -e "  ${RED}❌${NC} Gateway host env 数量不足 (found ${GATEWAY_HOST_COUNT}, need ≥3)"
+    echo -e "  ${RED}❌${NC} Gateway host env 数量不足 (found ${GATEWAY_HOST_COUNT}, need ≥5)"
     FAIL=$((FAIL + 1))
 fi
 assert_contains "Gateway port env present" \

@@ -267,8 +267,9 @@ mcp_servers:
     timeout: 120
 memory:
   memory_enabled: true
+  provider: memory_tencentdb
 YAML
-  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-flash + zotero-mcp + memory 隔离）"
+  echo "   📝 已创建 Hermes daoyuan profile 配置（模型: deepseek-flash + zotero-mcp + TDAI 共享记忆）"
 fi
 
 # 道元 Feishu 访问收紧：DM 只允许指定用户；留空 = pairing 模式（不是 deny-all），

@@ -311,7 +311,12 @@ services:
       # 论文清单 MCP：Bearer token 由服务端绑定到固定 actor Owen；URL 为空 = 停用
       - PAPER_QUEUE_MCP_URL=${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}
       - PAPER_QUEUE_DAOYUAN_TOKEN=${PAPER_QUEUE_DAOYUAN_TOKEN:-}
-      # 道元不共享 TDAI memory — memory_enabled: false，独立记忆体系
+      # 道元共享 TDAI 记忆（2026-11-11 起）：飞书已收紧为仅 owner，讨论不再
+      # 面向公共用户，因此与其他 profile 共用同一 Gateway（同一份 SQLite）。
+      # 配置侧 `memory.provider: memory_tencentdb` 由 entrypoint 幂等注入；
+      # 这里必须给 Gateway 地址，否则 provider 退回 127.0.0.1:8420 连不上。
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
       # Feishu (道元·文献学者 — 仅指定用户可用；群聊仅 @ 回复)
       - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${DAOYUAN_FEISHU_APP_SECRET:-}
