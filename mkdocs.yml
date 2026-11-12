@@ -73,6 +73,8 @@ nav:
       - Hermes 渠道: hermes-channels.md
       - OpenClaw 渠道: openclaw-channels.md
       - Hermes Skill 机制: hermes-skills.md
+      - Hermes 看板 (kanban): kanban.md
+      - 容器 / profile / .env 三层: hermes-topology.md
       - 飞书 CLI (lark-cli): lark-cli.md
   - 能力服务:
       - TDAI 长期记忆: tdai-memory.md
