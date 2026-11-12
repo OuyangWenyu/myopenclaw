@@ -9,12 +9,12 @@
 
 ## 容器与身份
 
-| 容器 | 启动命令 | 服务的 profile | 飞书 App |
+| 容器 | 启动命令 | 服务的 profile | 飞书 App（来源 env 变量） |
 |---|---|---|---|
-| `hermes` | `gateway run` | **default（爱玛士，总管）** | `cli_a955c934…` |
-| `hermes-coder` | `gateway run --profile coder --replace` | coder（爱码士） | `cli_a97f150b…` |
-| `hermes-finance` | `gateway run --profile finance` | finance | `cli_aa192fa6…` |
-| `hermes-daoyuan` | `gateway run --profile daoyuan` | daoyuan（道元） | `cli_aae704d6…` |
+| `hermes` | `gateway run` | **default（爱玛士，总管）** | `FEISHU_APP_ID` |
+| `hermes-coder` | `gateway run --profile coder --replace` | coder（爱码士） | `CODER_FEISHU_APP_ID` |
+| `hermes-finance` | `gateway run --profile finance` | finance | `FINANCE_FEISHU_APP_ID` |
+| `hermes-daoyuan` | `gateway run --profile daoyuan` | daoyuan（道元） | `DAOYUAN_FEISHU_APP_ID` |
 | `hermes-dashboard` | `dashboard --host 0.0.0.0` | **无**（只读网页 UI，不跑 agent） | — |
 
 四个 agent 容器**都挂载同一个宿主目录**：`~/.hermes` → 容器内 `/opt/data`（读写）。

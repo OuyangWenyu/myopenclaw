@@ -405,3 +405,61 @@ class TestTeamSidePositioning:
             )
             assert row is not None, f"能力地图缺 {label} 行"
             assert "🌐" in row, f"能力地图「{label}」行缺 🌐（团队侧标注）: {row[:80]}"
+
+
+# 公开仓库的文档里不许出现凭据/租户标识样式串。
+# 只收「出现即泄露」的形态；长 hex / 长 base64 不收 —— 文档里的 commit SHA、
+# 路径（myagentdata/dailyinfo/...）会误伤，那两条属于 ACCESS.md 的严格清单。
+PUBLIC_DOC_SECRET_PATTERNS = [
+    # `\b` 不能省：否则 "risk-based-approach" 里的 "sk-based-approach" 会误报
+    (r"\bsk-[A-Za-z0-9_\-]{10,}", "API key（sk- 前缀，含 sk-or-v1- / sk-proj- 形态）"),
+    (r"ghp_[A-Za-z0-9]{20,}", "GitHub PAT"),
+    (r"github_pat_[A-Za-z0-9_]{20,}", "GitHub fine-grained PAT"),
+    (r"Bearer\s+[A-Za-z0-9_\-]{20,}", "Bearer token 字面量"),
+    # 飞书 app_id 不是密钥，但它是租户指纹，公开仓库里只该写 env 变量名或占位符。
+    # 占位符形态 cli_xxxx… / cli_<…> / cli_* 不算 —— 只有「像真 ID」才命中。
+    (r"cli_(?!x{4,}|\*|<)[a-z0-9]{8,}", "飞书 app_id 字面量"),
+]
+
+
+class TestPublicDocsNoSecrets:
+    """2026-11-12：docs/hermes-topology.md 曾写进四个真实飞书 app_id 的前 8 位。
+
+    app_id 配不出 token（要 app_secret），但它把租户指纹留在了公开仓库里 ——
+    这类串出现在文档里没有任何收益，写 env 变量名反而更有用（读者能直接去
+    .env 找）。此守卫钉死这一档：文档只描述「从哪拿」，不给值。
+    """
+
+    SCAN_FILES = ("CLAUDE.md", "README.md", "mkdocs.yml")
+
+    def _files(self) -> list[Path]:
+        files = sorted(DOCS_DIR.rglob("*.md"))
+        files += [REPO_ROOT / name for name in self.SCAN_FILES]
+        return [p for p in files if p.is_file()]
+
+    def test_no_credential_or_tenant_literals(self):
+        hits: list[str] = []
+        for path in self._files():
+            text = path.read_text(encoding="utf-8")
+            for pattern, label in PUBLIC_DOC_SECRET_PATTERNS:
+                for m in re.finditer(pattern, text):
+                    line_no = text.count("\n", 0, m.start()) + 1
+                    hits.append(f"{path.relative_to(REPO_ROOT)}:{line_no} {label}: {m.group(0)[:24]}")
+        assert not hits, "公开文档里出现凭据/租户标识字面量（改写成 env 变量名或占位符）:\n" + "\n".join(hits)
+
+    def test_patterns_catch_known_bad_shapes(self):
+        """反向自检：守卫本身不能退化成永远绿。"""
+        bad = [
+            "飞书 app 是 cli_a955c934abcd1234",
+            "OPENROUTER key: sk-or-v1-0123456789abcdef",
+            "curl -H 'Authorization: Bearer abcdefghijklmnopqrstuvwx'",
+        ]
+        for sample in bad:
+            assert any(re.search(p, sample) for p, _ in PUBLIC_DOC_SECRET_PATTERNS), sample
+        good = [
+            "`FEISHU_APP_ID=cli_xxxxxxxxxxxxxxxx`",
+            "`FEISHU_APP_ID=cli_<你的 app id>`",
+            "占位符 `cli_*`",
+        ]
+        for sample in good:
+            assert not any(re.search(p, sample) for p, _ in PUBLIC_DOC_SECRET_PATTERNS), sample
