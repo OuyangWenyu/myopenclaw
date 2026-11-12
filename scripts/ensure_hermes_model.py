@@ -155,6 +155,35 @@ def _block_end(lines: list[str], start: int) -> int:
     return end
 
 
+def _block_item_indent(lines: list[str], start: int, end: int) -> str | None:
+    """块内已有列表项的缩进；块里还没有列表项时返回 ``None``。
+
+    同一序列必须同一缩进：``fallback_providers:`` 下一行是 ``  - anthropic``（Hermes
+    自己 ``save_config`` 写的形状，见 utils.IndentDumper），再补一条列 0 的 ``- zai``
+    会让整个文件变成 **解析失败**（``expected <block end>, but found '-'``）。
+    """
+    for line in lines[start + 1 : end]:
+        stripped = line.lstrip(" \t")
+        if stripped.startswith("- "):
+            return line[: len(line) - len(stripped)]
+    return None
+
+
+def _file_item_indent(lines: list[str]) -> str:
+    """文件里顶层列表项的常见缩进（新块跟随文件自身形状，不制造混合缩进）。
+
+    顶层序列只有两种历史形状：列 0（旧配置）与 2 空格（Hermes 写入器）。嵌套列表的
+    缩进更深，不参与判断；没有列表时按列 0（与上游默认配置一致）。
+    """
+    counts: dict[str, int] = {}
+    for line in lines:
+        stripped = line.lstrip(" \t")
+        if stripped.startswith("- "):
+            indent = line[: len(line) - len(stripped)]
+            counts[indent] = counts.get(indent, 0) + 1
+    return "  " if counts.get("  ", 0) > counts.get("", 0) else ""
+
+
 def current_fallback(text: str) -> tuple[str | None, str | None]:
     """读 ``fallback_model`` 的 ``(provider, model)``；键不存在返回 ``(None, None)``。"""
     lines = text.splitlines(keepends=True)
@@ -186,7 +215,8 @@ def _ensure_fallback_provider(text: str) -> tuple[str, bool]:
         if j is None:
             blk = _find_model_block(lines)
             j = blk[1] if blk else len(lines)
-        lines[j:j] = ["fallback_providers:\n", f"- {FALLBACK_PROVIDER}\n"]
+        indent = _file_item_indent(lines)
+        lines[j:j] = ["fallback_providers:\n", f"{indent}- {FALLBACK_PROVIDER}\n"]
         return "".join(lines), True
 
     inline = _inline_value(lines[i], _FALLBACK_PROVIDERS_HEADER)
@@ -196,8 +226,11 @@ def _ensure_fallback_provider(text: str) -> tuple[str, bool]:
         if FALLBACK_PROVIDER in items:
             return text, False
         items.append(FALLBACK_PROVIDER)
-        # 行内形态 → 块列表：上游默认配置本来就是 `fallback_providers:\n- zai` 这个形状
-        lines[i:end] = ["fallback_providers:\n"] + [f"- {item}\n" for item in items]
+        # 行内形态 → 块列表：跟随该块（或整份文件）已有的缩进形状，不制造混合缩进
+        indent = _block_item_indent(lines, i, end)
+        if indent is None:
+            indent = _file_item_indent(lines)
+        lines[i:end] = ["fallback_providers:\n"] + [f"{indent}- {item}\n" for item in items]
         return "".join(lines), True
 
     present = {
@@ -207,7 +240,10 @@ def _ensure_fallback_provider(text: str) -> tuple[str, bool]:
     }
     if FALLBACK_PROVIDER in present:
         return text, False
-    lines[end:end] = [f"- {FALLBACK_PROVIDER}\n"]
+    indent = _block_item_indent(lines, i, end)
+    if indent is None:
+        indent = _file_item_indent(lines)
+    lines[end:end] = [f"{indent}- {FALLBACK_PROVIDER}\n"]
     return "".join(lines), True
 
 

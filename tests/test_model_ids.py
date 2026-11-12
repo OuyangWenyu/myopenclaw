@@ -381,6 +381,55 @@ class TestFallbackModel:
         assert twice == once
         assert status.startswith("unchanged-fallback:")
 
+    def test_indented_list_keeps_indentation(self):
+        """Hermes 自己 ``save_config`` 写的形状：列表项缩进 2 格。
+
+        2026-11-12 排查 webhook 时实证：这种文件如果 ``fallback_providers`` 里没有 zai，
+        旧实现会在块尾补一条**列 0** 的 ``- zai``，与已有的 ``  - anthropic`` 缩进不同
+        —— ``yaml.safe_load`` 直接 ``expected <block end>, but found '-'``，整份配置
+        报废（网关起不来）。补的项必须跟随块内已有缩进。
+        """
+        mod = self._mod()
+        text = (
+            "model:\n  default: deepseek-flash\n"
+            "fallback_providers:\n  - anthropic\n"
+            "fallback_model:\n  provider: zai\n  model: glm-5.3-flash\n"
+        )
+        new, status = mod.ensure_fallback(text)
+        assert status == "written"
+        doc = yaml.safe_load(new)  # 混合缩进会在这里抛 ParserError
+        assert doc["fallback_providers"] == ["anthropic", "zai"]
+        assert "\n- zai\n" not in new, "补的项没跟随块内缩进"
+
+    def test_indented_inline_empty_list(self):
+        """行内 ``[]`` 改写成块列表时，也要跟随文件自身的列表形状。"""
+        mod = self._mod()
+        text = (
+            "model:\n  default: deepseek-flash\n"
+            "fallback_providers: []\n"
+            "toolsets:\n  - hermes-cli\n  - terminal\n"
+            "agent:\n  toolsets:\n    - web\n"
+        )
+        new, status = mod.ensure_fallback(text)
+        assert status == "written"
+        doc = yaml.safe_load(new)
+        assert doc["fallback_providers"] == ["zai"]
+        assert "fallback_providers:\n  - zai\n" in new
+
+    def test_missing_keys_follow_indented_file(self):
+        """缺键时新插入的块也跟随文件形状，不制造两种缩进混排。"""
+        mod = self._mod()
+        text = (
+            "model:\n  default: deepseek-flash\n"
+            "toolsets:\n  - hermes-cli\n  - terminal\n"
+            "agent:\n  toolsets:\n    - web\n"
+        )
+        new, status = mod.ensure_fallback(text)
+        assert status == "written"
+        doc = yaml.safe_load(new)
+        assert doc["fallback_providers"] == ["zai"]
+        assert "fallback_providers:\n  - zai\n" in new
+
     def test_compose_injects_zai_credential(self):
         """四个 hermes 容器都必须拿得到 zai 的钥匙，否则备份模型起不来。"""
         for service in HERMES_PROFILES:
