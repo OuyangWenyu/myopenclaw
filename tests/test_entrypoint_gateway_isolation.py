@@ -51,8 +51,12 @@ flag="$1"; dir="$2"
 echo "s6-svc $flag $(basename "$dir")" >> "${S6_FAKE_LOG}"
 case "$flag" in
   -k)
-    # 重启本容器 gateway：保持 up
-    rm -f "$dir/state.up"; touch "$dir/state.up"
+    # 重启本容器 gateway：保持 up。S6_FAKE_OWN_CRASHLOOP 指定时模拟真机 2026-11-12
+    # 的现场：本 profile 起一次就退（app_id 被游荡抢占 → exit 78），kill 也救不回来。
+    rm -f "$dir/state.up"
+    if [ "$(basename "$dir")" != "${S6_FAKE_OWN_CRASHLOOP:-__none__}" ]; then
+      touch "$dir/state.up"
+    fi
     ;;
   -dk)
     n=0; [ -f "$dir/killcount" ] && n=$(cat "$dir/killcount"); n=$((n+1)); echo "$n" > "$dir/killcount"
@@ -88,6 +92,7 @@ def _run_block(
     unkillable: str | None = None,
     pre_create_dirs: bool = True,
     wait: int = 0,
+    own_down: bool = False,
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
     svc_root = tmp_path / "service"
     if pre_create_dirs:
@@ -95,6 +100,10 @@ def _run_block(
             d = svc_root / name
             d.mkdir(parents=True)
             (d / "state.up").touch()  # 启动窗口：全部先站着
+        if own_down:
+            # 模拟 2026-11-12 的真机现场：本 profile 的 gateway 被游荡抢了 app_id，
+            # 启动即 exit 78，服务不在岗。
+            (svc_root / f"gateway-{profile}" / "state.up").unlink()
 
     hermes_home = tmp_path / "hermes_home"
     (hermes_home / "profiles" / "coder").mkdir(parents=True)
@@ -124,6 +133,8 @@ def _run_block(
         ]
     )
     env = os.environ.copy()
+    if own_down:
+        env["S6_FAKE_OWN_CRASHLOOP"] = f"gateway-{profile}"
     if revive:
         env["S6_FAKE_REVIVE"] = revive
     if unkillable:
@@ -210,4 +221,17 @@ class TestSweepAgainstRealBootTiming:
             "wait 循环在服务目录尚未出现时把清扫子壳打死了（pipefail + ls 失败）: "
             + r.stderr
         )
-        assert "✅ gateway 隔离完成" in r.stdout, "清扫未跑到底"
+        # 2026-11-12 修：等不到服务树时**不许**再假报"✅ 隔离完成" —— 那正是真机上
+        # 四容器各留两个游荡、爱码士/道元 exit 78 的那次。改为大声告警。
+        assert "✅ gateway 隔离完成" not in r.stdout, "服务树没出现却仍然报「隔离完成」"
+        assert "隔离可能扫漏" in r.stdout, "服务树缺失没有告警"
+
+    def test_own_gateway_down_is_brought_up_after_sweep(self, tmp_path: Path):
+        """本 profile 被游荡抢了 app_id → exit 78；清完外部要把它拉起来一次。"""
+        r, call_log, _, _ = _run_block(tmp_path, "daoyuan", own_down=True)
+        assert r.returncode == 0, r.stderr
+        log = call_log.read_text()
+        assert "s6-svc -u gateway-daoyuan" in log, "没有尝试拉起本 profile 的 gateway"
+        assert "本 profile gateway 未在岗" in r.stdout
+        # 拉起之后仍应只留自家的服务在跑
+        assert "s6-svc -dk gateway-default" in log

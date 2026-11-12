@@ -662,7 +662,11 @@ fi
 # 邮箱=桩 → 用户 DM 时好时坏）。旧版单遍清扫在开机风暴下会扫到不完整的
 # 服务集而漏杀；漏掉的游荡会改写共享 gateway_state.json 自我复活（hydra）。
 # 加固版后台任务：
-#   1) 有界等待 4 个 gateway 服务出现；
+#   1) 有界等待 4 个 gateway 服务出现；上限 900s 而不是 90s —— 2026-11-12 实测
+#      stage2 的 `chown -R /opt/data/home` 在 virtiofs 上要 10 分钟，服务目录比
+#      旧上限晚得多才出现：清扫会扫了个空、还照样打印"✅ 完成"，随后 s6 把四个
+#      profile 的网关全起在每个容器里（爱码士/道元撞 app_id 冲突 exit 78，爱玛士
+#      与贝小爷各有 4 份连接在抢）。等不到就**大声告警**，不再假报完成。
 #   2) 多轮清扫（每轮重新 glob —— hermes 会陆续创建/重建服务）：本 profile
 #      的 gateway 只重启一次（清理旧连接），其余每个都 kill+disable，每轮
 #      重施（不碰任何 state 文件：共享卷上它们属于其他容器的活 gateway）；
@@ -674,7 +678,7 @@ S6_SVC="${S6_SVC:-/package/admin/s6-2.15.0.0/command/s6-svc}"
 GW_SVC_ROOT="${GW_SVC_ROOT:-/run/service}"
 GW_SWEEP_PASSES="${GW_SWEEP_PASSES:-8}"
 GW_SWEEP_INTERVAL="${GW_SWEEP_INTERVAL:-20}"
-GW_SWEEP_WAIT="${GW_SWEEP_WAIT:-90}"
+GW_SWEEP_WAIT="${GW_SWEEP_WAIT:-900}"
 if [ -x "${S6_SVC}" ]; then
   (
     S6_SVSTAT="${S6_SVC%/*}/s6-svstat"
@@ -685,10 +689,14 @@ if [ -x "${S6_SVC}" ]; then
       # `|| true` 承重：pipefail 下 ls 无匹配会失败，整个子壳会被 set -e 静默打死
       #（2026-10-12 真机事故：wrapper 先跑、服务目录后出现 —— 清扫一行没干）。
       found="$(ls -d "${GW_SVC_ROOT}"/gateway-*/ 2>/dev/null | wc -l | tr -d ' ' || true)"
-      [ "${found}" -ge 4 ] && break
+      [ "${found:-0}" -ge 4 ] && break
       sleep 5
       waited=$((waited + 5))
     done
+    # 循环外重扫一次：GW_SWEEP_WAIT=0 时循环体一次都没跑，found 还没赋过值。
+    found="$(ls -d "${GW_SVC_ROOT}"/gateway-*/ 2>/dev/null | wc -l | tr -d ' ' || true)"
+    tree_ready=0
+    [ "${found:-0}" -ge 4 ] && tree_ready=1
     restarted_own=0
     pass=1
     while [ "${pass}" -le "${GW_SWEEP_PASSES}" ]; do
@@ -733,9 +741,20 @@ if [ -x "${S6_SVC}" ]; then
         echo "   ❌ 警告：多余 gateway 未被压制: ${svc_name}（$("${S6_SVSTAT}" "${svc_dir}" 2>/dev/null | head -1)）"
       fi
     done
-    if [ "${strays}" -eq 0 ]; then
+    # 本 profile 兜底：若它自己没在岗（例如被更早的游荡抢了 app_id 而 exit 78），
+    # 清完外部之后再拉一次。只做一次，不做循环重试 —— 真起不来时告警比刷屏有用。
+    own_dir="${GW_SVC_ROOT}/gateway-${HERMES_PROFILE}"
+    own_state="$("${S6_SVSTAT}" "${own_dir}" 2>/dev/null | head -1 || true)"
+    if ! printf '%s' "${own_state}" | grep -q '^up'; then
+      "${S6_SVC}" -u "${own_dir}" 2>/dev/null || true
+      echo "   ⚠️ 本 profile gateway 未在岗（${own_state:-无状态}），已尝试拉起"
+    fi
+    if [ "${tree_ready}" -eq 0 ]; then
+      echo "   ⚠️ 等满 ${GW_SWEEP_WAIT}s 只见到 ${found:-0} 个 gateway 服务目录 —— 隔离可能扫漏，启动后请复查"
+    fi
+    if [ "${strays}" -eq 0 ] && [ "${tree_ready}" -eq 1 ]; then
       echo "   ✅ gateway 隔离完成：仅 ${HERMES_PROFILE} 在岗"
-    else
+    elif [ "${strays}" -ne 0 ]; then
       echo "   ❌ gateway 隔离未竟：${strays} 个多余服务仍在运行，请人工检查"
     fi
   ) &
