@@ -53,7 +53,7 @@ hermes kanban notify-subscribe <task_id> --platform feishu --chat-id <oc_…> \
 
 1. **卡里必须写明产物的绝对路径**。默认 `scratch` workspace 跑完就删，worker 的"临时目录"不会留下来。写 `/opt/data/tmp/xxx.md` 这种。
 2. **报问题的人和修问题的人不是同一身份**。`default`（爱玛士）握着 server-monitoring / aisecretary 等 MCP，真正干活的 `coder` 有另一套。所以**卡里必须自带证据**（报错原文、容器名、时间戳），worker 无法借用你的上下文。
-3. **一个容器一个 dispatcher**。别为了"让 coder 的网关起来"在 `hermes` 容器里 `s6-svc -u /run/service/gateway-coder`——那会和 `hermes-coder` 容器里的同名网关**抢同一个 profile、同一条飞书连接**，出现重复回复和 `gateway_state.json` 双写。
+3. **一个容器一个 dispatcher**。别为了"让 coder 的网关起来"在 `hermes` 容器里 `s6-svc -u /run/service/gateway-coder`——那会和 `hermes-coder` 容器里的同名网关**抢同一个 profile、同一条飞书连接**，出现重复回复和 `gateway_state.json` 双写。（网关隔离本身怎么维持、出现「某 bot 完全没反应」怎么定位，见 [Hermes 拓扑](hermes-topology.md#网关隔离一个容器一个网关)。）
 4. **worker 继承的是派发容器的挂载与环境变量**，不是 assignee 的。这就是下一节那条约定存在的原因。
 
 ## 角色归角色，机制归机制

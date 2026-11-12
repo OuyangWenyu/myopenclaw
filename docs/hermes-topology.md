@@ -99,6 +99,47 @@ docker compose exec hermes sh -lc 'v=某变量名; \
 
 详见 [docs/kanban.md](kanban.md)。
 
+## 网关隔离：一个容器一个网关
+
+基础镜像的 s6 会在**每个**容器里、按共享卷上的 `gateway_state.json`，给四个 profile 都建
+`gateway-<profile>` 服务。所以"一个容器只跑自己的 agent"**不是结构保证**，是
+`entrypoint-wrapper.sh` 里的后台清扫维持出来的：等四个服务目录出现 → 非本 profile 的
+`s6-svc -dk`（kill + disable；刻意不碰共享的 state 文件，那属于别的容器的活网关）→ 每 20s
+重扫一轮（防 hydra 复活）→ 终检，最后对本 profile 补一次 `s6-svc -u`。
+
+为什么这么在意：**飞书 app 凭据看容器 env，不看 profile**。容器里那个 `gateway-finance`
+游荡，会拿**本容器**的 `FEISHU_APP_ID` 去连飞书 —— 于是两个网关抢同一个 app 的长连接。
+
+### 2026-11-12 的两种现场
+
+| 症状 | 真因 | 处置 |
+|---|---|---|
+| 某个 bot **完全没反应，且日志一条错误都没有**（该 profile 的 `gateway.log` 冻结、无 inbound 行） | 同一 app 上曾有两条 WS：游荡被 kill 后飞书仍把事件投给已死的连接，活着的网关收不到 | 重启该 profile 的网关（`s6-svc -k`）即恢复 |
+| 自家网关 `exit 78`，日志 `Another local Hermes gateway is already using this Feishu app_id (PID …)` | 游荡先抢到了本容器的 app_id，正牌启动即退 | 先 `-dk` 清掉外部，再 `-u` 拉起自己 |
+
+触发条件很隐蔽：清扫原来只等 **90s**，而 stage2 的 `chown -R /opt/data/home` 在 virtiofs 上
+能跑 **10 分钟** —— 清扫等到超时、一轮没扫，却仍打印「✅ 隔离完成」。修完是 **900s** +
+等不到就告警 + 末尾兜底拉起 own（守卫 `tests/test_entrypoint_gateway_isolation.py`）。
+重建容器时若看到启动"Up 了但网关几分钟不起"，先看 `[stage2] Fixing ownership` 是否还在跑，
+不要急着加服务。
+
+### 处置口诀
+
+```bash
+S6=/package/admin/s6-2.15.0.0/command/s6-svc
+
+# 1) 看谁在跑（每容器应恰好 1 个 up，其余 down）
+docker compose exec -T <容器> sh -lc 'for d in /run/service/gateway-*; do printf "%-16s %s\n" "$(basename $d)" "$(/package/admin/s6-2.15.0.0/command/s6-svstat $d)"; done'
+# 2) 非本 profile 的一律 kill + disable
+docker compose exec -T <容器> sh -lc "$S6 -dk /run/service/gateway-<其它>"
+# 3) 自家的拉起来（若 exit 78，先确认外部已清干净）
+docker compose exec -T <容器> sh -lc "$S6 -u /run/service/gateway-<own>"
+```
+
+重建容器前记得备份 lark-cli 的 user token（`/root/.local/share/lark-cli`，存容器内 keychain，
+不在挂载卷上）：`docker compose cp <容器>:/root/.local/share/lark-cli /tmp/lark-cli-<容器>`，
+重建后拷回并 `chown root:root` + `chmod 700`。
+
 ## 排查命令
 
 ```bash
@@ -121,5 +162,5 @@ ls ~/.hermes/.env ~/.hermes/profiles/*/.env 2>/dev/null
 ## 已知的历史包袱
 
 - `~/.hermes/profiles/default/` 只有一个空的 `pairing/` —— **废弃空壳**。root profile 的 home 是 `~/.hermes` 本身，Hermes 启动时会 warn 并跳过这个目录
-- 2026-11-11 清理过一个手工拉起的 `gateway-coder` 残留（双写 `gateway_state.json`）。别再在 `hermes` 容器里用 `s6-svc -u /run/service/gateway-<profile>` 去"补一个网关"
+- 2026-11-11 清理过一个手工拉起的 `gateway-coder` 残留（双写 `gateway_state.json`）。别再在 `hermes` 容器里用 `s6-svc -u /run/service/gateway-<profile>` 去"补一个网关" —— 想补之前先读上一节的「网关隔离」
 - `CLAUDE.md` 曾说 coder 的 Zotero 查询走共享 zotero-mcp，实际 `hermes -p coder mcp list` 只有 `server-monitoring`（coder 是拿 `ZOTERO_API_KEY` 走 API/pipeline，不是 MCP）

@@ -91,6 +91,8 @@ Discord 网关 (`gateway.discord.gg`) 在国内可能间歇性 DNS 解析失败�
 > 1. **finance 一个兜底都没配** —— `fallback_providers: []` 且没有 `fallback_model`，而守卫的 `LIVE_CONFIGS` 只列了 default/coder/daoyuan 三份，等于那份配置没人看。现在 `tests/test_hermes_fallback_glm.py` 覆盖 **四份**，`scripts/ensure_hermes_model.py` 每次 `start.sh` 都会幂等补齐 `fallback_providers` / `fallback_model` / `agent.reasoning_overrides`（三者都只在缺失或等于 canonical 时改写，操作者手选的别的兜底或档位原样保留）。
 > 2. **三个「配好了」的 profile 其实也是空转的** —— 容器里没有 zai 的钥匙，`hermes` 会直接说 `No usable credentials found for provider 'zai'. Set GLM_API_KEY, ZAI_API_KEY, Z_AI_API_KEY.`。现在 compose 给四个 hermes 容器注入 `GLM_API_KEY=${GLM_API_KEY:-}`（复用 `.env` 里那把智谱 key），由 `tests/test_model_ids.py::TestFallbackModel` 钉住。
 >
+> 同源的另一类坑（飞书长连接被别的 profile 的游荡抢走，表现为「完全没反应、日志无错」）见 [Hermes 拓扑 · 网关隔离](hermes-topology.md#网关隔离一个容器一个网关)。
+>
 > 顺带一条与模型无关但同一条链上的坑：**长截图会超 DeepSeek 的视觉尺寸上限**（实测 1220×24948 被拒、缩到最长边 8000px 即通过），而 DeepSeek 的报错文案是 "You have uploaded an unsupported image"（不含任何尺寸词汇）⇒ 上游分类器判成不可重试的 `format_error`，直接回「model provider failed」。构建期补丁 `docker/hermes/patch-image-limit.py` 把这句话归一到 `image_too_large`，走上游自带的「缩图重试一次」。
 
 **既有 profile 的模型迁移**：`start.sh` 每次启动都会调用 `scripts/ensure_hermes_model.py`，幂等地把历史遗留的模型名迁移到 canonical 的 `deepseek-flash` —— 只改已知历史取值（`mimo-v2.5` / `mimo-v2.5-pro`、以及非 canonical 的 `deepseek-v4-*`），**不覆盖**操作者手选的其他模型（与 `ensure_hermes_web_search.py` 同一原则）。脚本用文本手术改写，不依赖宿主机 PyYAML、不破坏注释与 key 顺序。
