@@ -1,6 +1,6 @@
 # Hermes 拓扑：容器 × profile × `.env`
 
-这张机器上跑着 **5 个容器、4 个身份、1 块看板**。三者分别是什么、谁决定什么，是排查问题的第一块地基。
+这张机器的**个人栈**跑着 **5 个容器、4 个身份、1 块看板**。三者分别是什么、谁决定什么，是排查问题的第一块地基。扫码新建的助手不在这组数字里，见文末。
 
 ## 一句话
 
@@ -185,3 +185,7 @@ uv run --with pyyaml scripts/render_agents.py --check  # 只检查有没有人�
 - `~/.hermes/profiles/default/` 只有一个空的 `pairing/` —— **废弃空壳**。root profile 的 home 是 `~/.hermes` 本身，Hermes 启动时会 warn 并跳过这个目录
 - 2026-11-11 清理过一个手工拉起的 `gateway-coder` 残留（双写 `gateway_state.json`）。别再在 `hermes` 容器里用 `s6-svc -u /run/service/gateway-<profile>` 去"补一个网关" —— 想补之前先读上一节的「网关隔离」
 - `CLAUDE.md` 曾说 coder 的 Zotero 查询走共享 zotero-mcp，实际 `hermes -p coder mcp list` 只有 `server-monitoring`（coder 是拿 `ZOTERO_API_KEY` 走 API/pipeline，不是 MCP）
+
+## 扫码新增的助手
+
+扫码创建的 Hermes 不是 `~/.hermes/profiles/` 里的第五个身份，也不进上面这张表。每个助手有自己的目录 `~/.hermes-agents/<id>/`，容器由另一份 compose 项目 `hermes-bind` 拉起。操作步骤、默认能力和停用方式见 [扫码新增 Hermes](hermes-bind.md)。

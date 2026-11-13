@@ -50,6 +50,7 @@ myopenclaw 由主栈 16 个 Docker 服务 + zhixun 独立栈（默认 1 个 bot�
 | 宿主机路径 | 容器内路径 | 容器 | 说明 |
 |------------|-----------|------|------|
 | `~/.hermes` | `/opt/data` | hermes 四兄弟 | Hermes 全部数据 |
+| `~/.hermes-agents/<id>` | `/opt/data` | `hermes-bind-*` | 扫码新增的助手，各自一份目录，不进四个 profile。见 [扫码新增 Hermes](hermes-bind.md) |
 | `~/.claude` | `/opt/claude-config` | claude-code | Claude Code 配置和凭证 |
 | `~/.cc-connect` | `/opt/cc-config` | claude-code | cc-connect 配置 |
 | `~/.openclaw` | `/home/node/.openclaw` | openclaw | OpenClaw 配置和 memory |

@@ -77,6 +77,7 @@ nav:
       - Hermes Skill 机制: hermes-skills.md
       - Hermes 看板 (kanban): kanban.md
       - 容器 / profile / .env 三层: hermes-topology.md
+      - 扫码新增 Hermes: hermes-bind.md
       - 飞书 CLI (lark-cli): lark-cli.md
   - 能力服务:
       - TDAI 长期记忆: tdai-memory.md

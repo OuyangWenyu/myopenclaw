@@ -25,7 +25,7 @@ backup-cron 容器每天凌晨 2:00 对所有持久化数据做快照备份到�
 
 ```
 backup-all-docker.sh
-  ├── hermes/scripts/backup.sh     → Hermes 数据
+  ├── hermes/scripts/backup.sh     → Hermes 数据，另存 ~/.hermes-agents
   ├── openclaw/scripts/backup.sh   → OpenClaw 数据
   ├── claude/scripts/backup.sh     → Claude Code + cc-connect 数据
   ├── scripts/backup-data.sh       → ~/.myagentdata
@@ -41,6 +41,7 @@ backup-all-docker.sh
 | 范围 | 内容 |
 |------|------|
 | Hermes | `config.yaml`、`SOUL.md`、`memories/`、`skills/`、`hooks/`、`cron/`、`.contacts/`、`.config/himalaya/`、`.config/ortie/`（Outlook OAuth token） |
+| 扫码 Hermes | `~/.hermes-agents/` 另存到 `$BACKUP_ROOT/hermes-agents/`。对话和 `config.yaml` 在快照里。每个 `.env` 和 `secrets/` 排除，换机要重新扫码。见 [扫码新增 Hermes](hermes-bind.md) |
 | Claude Code | `settings.json`、`projects/`、`skills/`、`plans/`、`tasks/`、cc-connect `config.toml` |
 | OpenClaw | `openclaw.json`、`agents/`（会话库热备）、`flows/`、`extensions/`、`memory/main.sqlite` + `memory-tdai/memories.sqlite`（热备份；2.0 迁移后本机已不存在） |
 | TDAI Memory | `memories.sqlite`（sqlite3 热备）、`scene_blocks/`、`persona.md`、`checkpoint.json` |
@@ -70,6 +71,7 @@ backup-all-docker.sh
 - 大型缓存、临时会话、日志
 - `~/.config/gh`、`~/.config/opencode` 中的敏感内容（需重新配置）
 - `~/.hermes/secrets/`（API Key 文件）
+- 扫码助手目录里的 `.env` 和 `secrets/`（应用密钥与模型钥匙不进云盘）
 - 其他 auth token（Outlook 的 ortie token 例外：恢复后无需重新浏览器授权）
 
 ## 手动备份
