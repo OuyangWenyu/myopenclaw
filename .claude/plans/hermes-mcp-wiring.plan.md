@@ -172,7 +172,7 @@ apply_hermes_mcp late
 ### 4. 验收
 
 ```bash
-MAIN=/Users/owen/code/myopenclaw
+MAIN="$HOME/code/myopenclaw"
 S='hermes,hermes-coder,hermes-finance,hermes-daoyuan'
 uv run --with pyyaml scripts/render_agents.py
 uv run --with pyyaml scripts/render_agents.py --check

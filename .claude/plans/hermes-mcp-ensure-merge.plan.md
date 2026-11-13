@@ -43,7 +43,7 @@
 ### A4: 重新渲染并验收
 
 ```bash
-MAIN=/Users/owen/code/myopenclaw
+MAIN="$HOME/code/myopenclaw"
 S='hermes,hermes-coder,hermes-finance,hermes-daoyuan'
 uv run --with pyyaml scripts/render_agents.py
 # worktree 目录名不同会改变项目名与路径解析，必须按主目录解析才能和线上比较
