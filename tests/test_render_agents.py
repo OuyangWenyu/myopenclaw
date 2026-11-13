@@ -220,7 +220,6 @@ def test_real_manifests_list_the_four_services_once() -> None:
         "gitcode",
         "xiaomi",
         "zotero",
-        "server-monitoring",
         "shared-rclone",
     ]
     assert "GDRIVE_PAPERS_LOCAL_PATH" in base["bundles"]["zotero"]
@@ -249,6 +248,171 @@ def test_real_manifests_list_the_four_services_once() -> None:
     assert "kanban-off" not in by_service["hermes-coder"]["bundles"]
     coder_env = dict(render_agents.resolve_env(base, by_service["hermes-coder"]))
     assert "HERMES_KANBAN_DISPATCH_IN_GATEWAY" not in coder_env
+    assert by_service["hermes"]["mcp"] == ["server-monitoring"]
+    assert by_service["hermes-coder"]["mcp"] == ["server-monitoring"]
+    assert "mcp" not in by_service["hermes-finance"]
+    assert by_service["hermes-daoyuan"]["mcp"] == ["dailyinfo", "paper-queue"]
+    daoyuan_env = dict(render_agents.resolve_env(base, by_service["hermes-daoyuan"]))
+    assert (
+        daoyuan_env["PAPER_QUEUE_MCP_URL"]
+        == "${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}"
+    )
+    assert render_agents.mcp_rows(base, agents) == [
+        (
+            "early",
+            "hermes",
+            "HERMES_DEFAULT_CONFIG",
+            "ensure_hermes_server_monitoring.py",
+            "DEFAULT_MCP_STATUS",
+            "server-monitoring",
+        ),
+        (
+            "early",
+            "hermes-coder",
+            "CODER_CONFIG",
+            "ensure_hermes_server_monitoring.py",
+            "CODER_MCP_STATUS",
+            "server-monitoring",
+        ),
+        (
+            "early",
+            "hermes-daoyuan",
+            "DAOYUAN_CONFIG",
+            "ensure_hermes_dailyinfo.py",
+            "DAOYUAN_DAILYINFO_STATUS",
+            "dailyinfo",
+        ),
+        (
+            "late",
+            "hermes-daoyuan",
+            "DAOYUAN_CONFIG",
+            "ensure_hermes_paper_queue.py",
+            "DAOYUAN_PAPER_QUEUE_STATUS",
+            "paper-queue",
+        ),
+    ]
+
+
+def test_mcp_keys_land_between_bundles_and_derived(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "base.yaml",
+        BASE + """\
+mcp:
+  demo:
+    script: ensure_hermes_demo.py
+    phase: early
+    env:
+      DEMO: demo
+    "on":
+      one:
+        config_var: HERMES_DEFAULT_CONFIG
+        status_var: DEMO_STATUS
+""",
+    )
+    _write(
+        tmp_path,
+        "one.yaml",
+        """\
+service: one
+profile: coder
+port: "1:1"
+bundles: [extra]
+mcp: [demo]
+env:
+  ONLY: mine
+mounts: [data]
+""",
+    )
+    base, agents = render_agents.load(tmp_path)
+    assert [key for key, _ in render_agents.resolve_env(base, agents[0][1])] == [
+        "SHARED",
+        "EXTRA",
+        "DEMO",
+        "HERMES_PROFILE",
+        "ONLY",
+    ]
+
+
+def test_unknown_mcp_is_rejected(tmp_path: Path) -> None:
+    _write(tmp_path, "base.yaml", BASE)
+    _write(tmp_path, "one.yaml", AGENT + "mcp: [missing]\n")
+    with pytest.raises(ManifestError, match="unknown mcp"):
+        render_agents.load(tmp_path)
+
+
+def test_mcp_on_must_match_agent_selection(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "base.yaml",
+        BASE + """\
+mcp:
+  demo:
+    script: ensure_hermes_demo.py
+    phase: early
+    env:
+      DEMO: demo
+    "on":
+      one:
+        config_var: HERMES_DEFAULT_CONFIG
+        status_var: DEMO_STATUS
+""",
+    )
+    _write(tmp_path, "one.yaml", AGENT)
+    with pytest.raises(ManifestError, match="on lists"):
+        render_agents.load(tmp_path)
+
+
+def test_bare_on_key_is_rejected(tmp_path: Path) -> None:
+    """YAML 1.1 reads an unquoted on key as boolean true."""
+    _write(
+        tmp_path,
+        "base.yaml",
+        BASE + """\
+mcp:
+  demo:
+    script: ensure_hermes_demo.py
+    phase: early
+    env:
+      DEMO: demo
+    on:
+      one:
+        config_var: HERMES_DEFAULT_CONFIG
+        status_var: DEMO_STATUS
+""",
+    )
+    _write(tmp_path, "one.yaml", AGENT + "mcp: [demo]\n")
+    with pytest.raises(ManifestError, match="quote the on key"):
+        render_agents.load(tmp_path)
+
+
+def test_mcp_env_cannot_repeat_a_base_key(tmp_path: Path) -> None:
+    _write(
+        tmp_path,
+        "base.yaml",
+        BASE + """\
+mcp:
+  demo:
+    script: ensure_hermes_demo.py
+    phase: early
+    env:
+      SHARED: other
+    "on":
+      one:
+        config_var: HERMES_DEFAULT_CONFIG
+        status_var: DEMO_STATUS
+""",
+    )
+    _write(tmp_path, "one.yaml", AGENT + "mcp: [demo]\n")
+    with pytest.raises(ManifestError, match="duplicates env key"):
+        render_agents.load(tmp_path)
+
+
+def test_mcp_table_matches_manifests() -> None:
+    table = render_agents.render_mcp_table(*render_agents.load())
+    assert (REPO_ROOT / "agents" / "hermes" / "mcp.tsv").read_text(
+        encoding="utf-8"
+    ) == table
 
 
 def test_compose_region_matches_manifests() -> None:

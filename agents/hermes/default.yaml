@@ -19,6 +19,7 @@ bundles:
   - gitcode
   - xiaomi
   - zotero
+mcp:
   - server-monitoring
 env:
   # Non-secret Outlook settings. The repo .env is the single source.

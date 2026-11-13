@@ -47,11 +47,18 @@ class TestCompose:
 
 class TestStartSh:
     def test_ensure_helper_called_for_both_profiles_before_up(self):
-        assert "ensure_hermes_server_monitoring.py" in START_SH
-        assert '"${HERMES_DEFAULT_CONFIG}" --env-file' in START_SH
-        assert '"${CODER_CONFIG}" --env-file' in START_SH
+        table = (REPO_ROOT / "agents" / "hermes" / "mcp.tsv").read_text(encoding="utf-8")
+        assert (
+            "early\thermes\tHERMES_DEFAULT_CONFIG\t"
+            "ensure_hermes_server_monitoring.py\tDEFAULT_MCP_STATUS\tserver-monitoring"
+        ) in table
+        assert (
+            "early\thermes-coder\tCODER_CONFIG\t"
+            "ensure_hermes_server_monitoring.py\tCODER_MCP_STATUS\tserver-monitoring"
+        ) in table
         up_marker = "docker compose up -d ${BUILD_FLAG}"
-        assert START_SH.index("ensure_hermes_server_monitoring.py") < START_SH.index(up_marker)
+        assert "apply_hermes_mcp early" in START_SH
+        assert START_SH.index("apply_hermes_mcp early") < START_SH.index(up_marker)
 
     def test_restart_logic_for_both_profiles(self):
         assert "DEFAULT_MCP_STATUS" in START_SH

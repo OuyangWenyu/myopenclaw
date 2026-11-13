@@ -73,12 +73,6 @@ bundles:
     ZOTERO_LIBRARY_ID: "${ZOTERO_LIBRARY_ID:-}"
     ZOTERO_LIBRARY_TYPE: "${ZOTERO_LIBRARY_TYPE:-user}"
     GDRIVE_PAPERS_LOCAL_PATH: "${GDRIVE_PAPERS_LOCAL_PATH:-}"
-  # Empty URL disables the client. The real URL and token live only in .env.
-  # Default uses this for on-demand queries and a daily private digest; coder
-  # uses it for on-demand queries and the forecast-system group digest.
-  server-monitoring:
-    SERVER_MONITORING_MCP_URL: "${SERVER_MONITORING_MCP_URL:-}"
-    SERVER_MONITORING_MCP_TOKEN: "${SERVER_MONITORING_MCP_TOKEN:-}"
   shared-rclone:
     RCLONE_CONFIG: /opt/data/rclone/rclone.conf
 
@@ -105,6 +99,55 @@ mounts:
   # default profile.
   email-config-none: email-config-none:/opt/data/.config/himalaya
   email-tokens-none: email-tokens-none:/opt/data/.config/ortie
+
+# MCP registrations. An agent lists ids under mcp:; this catalog supplies the
+# container env and the row start.sh runs. `phase: late` waits until start.sh
+# has written PAPER_QUEUE_DAOYUAN_TOKEN. `on` names the shell variables the
+# restart and digest code already read; it must match the agents that list
+# the id. The key is quoted: bare `on` is boolean true in YAML 1.1.
+mcp:
+  # Empty URL disables the client. The real URL and token live only in .env.
+  # Default uses this for on-demand queries and a daily private digest; coder
+  # uses it for on-demand queries and the forecast-system group digest.
+  server-monitoring:
+    script: ensure_hermes_server_monitoring.py
+    phase: early
+    env:
+      SERVER_MONITORING_MCP_URL: "${SERVER_MONITORING_MCP_URL:-}"
+      SERVER_MONITORING_MCP_TOKEN: "${SERVER_MONITORING_MCP_TOKEN:-}"
+    "on":
+      hermes:
+        config_var: HERMES_DEFAULT_CONFIG
+        status_var: DEFAULT_MCP_STATUS
+      hermes-coder:
+        config_var: CODER_CONFIG
+        status_var: CODER_MCP_STATUS
+  # Read-only dailyinfo MCP on its own stack. Hermes expands the URL and key
+  # inside the container. Registering it does not restart the container.
+  dailyinfo:
+    script: ensure_hermes_dailyinfo.py
+    phase: early
+    env:
+      DAILYINFO_MCP_URL: "${DAILYINFO_MCP_URL:-}"
+      DAILYINFO_MCP_KEY: "${DAILYINFO_MCP_KEY:-}"
+    "on":
+      hermes-daoyuan:
+        config_var: DAOYUAN_CONFIG
+        status_var: DAOYUAN_DAILYINFO_STATUS
+  # Paper-queue MCP. The server binds this bearer token to a fixed actor.
+  # An empty URL disables the client. phase is late: start.sh creates the
+  # token between the two apply_hermes_mcp calls, and running this earlier
+  # deletes the entry on first boot.
+  paper-queue:
+    script: ensure_hermes_paper_queue.py
+    phase: late
+    env:
+      PAPER_QUEUE_MCP_URL: "${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}"
+      PAPER_QUEUE_DAOYUAN_TOKEN: "${PAPER_QUEUE_DAOYUAN_TOKEN:-}"
+    "on":
+      hermes-daoyuan:
+        config_var: DAOYUAN_CONFIG
+        status_var: DAOYUAN_PAPER_QUEUE_STATUS
 
 mount_groups:
   team-skills:

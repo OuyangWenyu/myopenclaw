@@ -6,10 +6,11 @@ by splitting on service keys, and they never run ``docker compose config``, so
 an ``extends`` block would make their negative assertions pass for the wrong
 reason. This script is a dev-time tool: ``scripts/start.sh`` does not call it.
 
-Environment order is fixed here (base, then selected bundles, then derived
-keys, then the agent's own keys). Compose's service config hash ignores that
-order. Mount order is the agent's listed order, and that order does change
-the hash.
+Environment order is fixed here (base, then selected bundles, then selected
+MCP entries, then derived keys, then the agent's own keys). Compose's service
+config hash ignores that order. Mount order is the agent's listed order, and
+that order does change the hash. The same run writes ``agents/hermes/mcp.tsv``,
+which ``scripts/start.sh`` reads; start.sh does not call this script.
 
 Exit codes follow the repo convention: 0 ok, 1 the compose region drifted
 (``--check``), 2 the manifests themselves are invalid.
@@ -27,6 +28,12 @@ import yaml
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AGENTS_DIR = REPO_ROOT / "agents" / "hermes"
 COMPOSE_PATH = REPO_ROOT / "docker-compose.yml"
+MCP_TABLE_PATH = AGENTS_DIR / "mcp.tsv"
+_MCP_PHASES = frozenset({"early", "late"})
+_CONFIG_VARS = frozenset({"HERMES_DEFAULT_CONFIG", "CODER_CONFIG", "DAOYUAN_CONFIG"})
+_SCRIPT_RE = re.compile(r"ensure_hermes_[a-z0-9_]+\.py\Z")
+_STATUS_VAR_RE = re.compile(r"[A-Z][A-Z0-9_]*\Z")
+_MCP_ID_RE = re.compile(r"[a-z][a-z0-9-]*\Z")
 
 BEGIN = (
     "  # >>> GENERATED: hermes agents. Source: agents/hermes/. "
@@ -86,6 +93,7 @@ def load(agents_dir: Path | None = None) -> tuple[dict, list[tuple[str, dict]]]:
     services = [agent["service"] for _, agent in agents]
     if len(services) != len(set(services)):
         raise ManifestError(f"duplicate service names: {services}")
+    _validate_mcp(base, agents)
     return base, agents
 
 
@@ -123,11 +131,111 @@ def _validate_base(base: dict) -> None:
             raise ManifestError(f"mount group collides with mount id {name}")
 
 
+def _validate_mcp(base: dict, agents: list[tuple[str, dict]]) -> None:
+    """Reject an MCP catalog that does not match the agent selections.
+
+    ``on`` is the shell wiring start.sh already consumes. It has to name
+    exactly the services whose manifests list that MCP id, so neither side
+    can be updated alone.
+    """
+    catalog = base.get("mcp") or {}
+    if not isinstance(catalog, dict):
+        raise ManifestError("base.yaml: mcp must be a mapping")
+    env = base.get("env") or {}
+    bundles = base.get("bundles") or {}
+    bundle_keys = {key for mapping in bundles.values() for key in mapping}
+    owned: dict[str, str] = {}
+    for name, spec in catalog.items():
+        if not _MCP_ID_RE.fullmatch(name):
+            raise ManifestError(f"mcp id must be a lowercase name, got {name!r}")
+        if not isinstance(spec, dict):
+            raise ManifestError(f"mcp {name} must be a mapping")
+        if name in env or name in bundles:
+            raise ManifestError(f"mcp name collides with a bundle or env key: {name}")
+        if spec.get("phase") not in _MCP_PHASES:
+            raise ManifestError(f"mcp {name}: phase must be early or late")
+        script = spec.get("script")
+        if not isinstance(script, str) or not _SCRIPT_RE.fullmatch(script):
+            raise ManifestError(
+                f"mcp {name}: script must be an ensure_hermes_*.py file name"
+            )
+        mapping = spec.get("env")
+        if not isinstance(mapping, dict) or not mapping:
+            raise ManifestError(f"mcp {name}: env must be a non-empty mapping")
+        for key, value in mapping.items():
+            if not isinstance(value, str):
+                raise ManifestError(
+                    f"mcp {name}: {key} must be a YAML string, got {value!r}"
+                )
+            if key in owned:
+                raise ManifestError(
+                    f"env key {key} is in both mcp {owned[key]} and {name}"
+                )
+            if key in env or key in bundle_keys:
+                raise ManifestError(f"mcp {name} duplicates env key {key}")
+            owned[key] = name
+        if True in spec:
+            raise ManifestError(
+                f"mcp {name}: quote the on key; bare on is boolean true in YAML 1.1"
+            )
+        on = spec.get("on")
+        if not isinstance(on, dict) or not on:
+            raise ManifestError(f"mcp {name}: on must list at least one service")
+        for service, wiring in on.items():
+            if not isinstance(wiring, dict):
+                raise ManifestError(f"mcp {name}: on.{service} must be a mapping")
+            config_var = wiring.get("config_var")
+            status_var = wiring.get("status_var")
+            if config_var not in _CONFIG_VARS:
+                raise ManifestError(
+                    f"mcp {name}: config_var {config_var!r} is not defined in start.sh"
+                )
+            if not isinstance(status_var, str) or not _STATUS_VAR_RE.fullmatch(
+                status_var
+            ):
+                raise ManifestError(
+                    f"mcp {name}: status_var must be an uppercase shell name, "
+                    f"got {status_var!r}"
+                )
+
+    selected_by_service: dict[str, list[str]] = {}
+    for _, agent in agents:
+        service = agent["service"]
+        raw = agent.get("mcp") or []
+        if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+            raise ManifestError(f"{service}: mcp must be a list of names")
+        if len(raw) != len(set(raw)):
+            raise ManifestError(f"{service}: duplicate mcp entry")
+        unknown = [item for item in raw if item not in catalog]
+        if unknown:
+            raise ManifestError(f"{service}: unknown mcp {unknown[0]!r}")
+        selected_by_service[service] = list(raw)
+
+    for name, spec in catalog.items():
+        declared = {
+            service for service, items in selected_by_service.items() if name in items
+        }
+        wired = set(spec["on"])
+        if declared != wired:
+            raise ManifestError(
+                f"mcp {name}: on lists {sorted(wired)}, "
+                f"but agents select it on {sorted(declared)}"
+            )
+    status_vars = [
+        wiring["status_var"]
+        for spec in catalog.values()
+        for wiring in spec["on"].values()
+    ]
+    if len(status_vars) != len(set(status_vars)):
+        raise ManifestError("mcp status_var values must be unique")
+
+
 def resolve_env(base: dict, agent: dict) -> list[tuple[str, str]]:
     """Resolve one agent's environment in renderer order.
 
-    Order is ``base.env``, then each selected bundle, then keys derived from
-    ``profile`` and ``feishu_env_prefix``, then the agent's own ``env``. A key
+    Order is ``base.env``, then each selected bundle, then each selected MCP
+    entry, then keys derived from ``profile`` and ``feishu_env_prefix``, then
+    the agent's own ``env``. A key
     that arrives from two of those sources is an error. A key that exists only
     in a bundle the agent does not select may still be set by the agent: the
     default profile's ``RCLONE_CONFIG`` differs from the shared-rclone bundle.
@@ -174,12 +282,59 @@ def resolve_env(base: dict, agent: dict) -> list[tuple[str, str]]:
     for name in selected:
         for key, value in bundles[name].items():
             append(key, value, f"bundle {name}")
+    catalog = base.get("mcp") or {}
+    for name in _selected_mcp(service, agent, catalog):
+        for key, value in catalog[name]["env"].items():
+            append(key, value, f"mcp {name}")
     for key, value in _derived_env(service, agent):
         origin = "profile" if key == "HERMES_PROFILE" else "feishu_env_prefix"
         append(key, value, origin)
     for key, value in agent_env.items():
         append(key, value, "agent env")
     return resolved
+
+
+def _selected_mcp(service: str, agent: dict, catalog: dict) -> list[str]:
+    raw = agent.get("mcp") or []
+    if not isinstance(raw, list) or not all(isinstance(item, str) for item in raw):
+        raise ManifestError(f"{service}: mcp must be a list of names")
+    unknown = [name for name in raw if name not in catalog]
+    if unknown:
+        raise ManifestError(f"{service}: unknown mcp {unknown[0]!r}")
+    return raw
+
+
+def mcp_rows(base: dict, agents: list[tuple[str, dict]]) -> list[tuple[str, ...]]:
+    """Return TSV rows in agent order, then each agent's ``mcp`` list order."""
+    catalog = base.get("mcp") or {}
+    rows: list[tuple[str, ...]] = []
+    for _, agent in agents:
+        service = agent["service"]
+        for name in _selected_mcp(service, agent, catalog):
+            spec = catalog[name]
+            wiring = spec["on"][service]
+            rows.append(
+                (
+                    spec["phase"],
+                    service,
+                    wiring["config_var"],
+                    spec["script"],
+                    wiring["status_var"],
+                    name,
+                )
+            )
+    return rows
+
+
+def render_mcp_table(base: dict, agents: list[tuple[str, dict]]) -> str:
+    """Render ``agents/hermes/mcp.tsv``, including its comment and header."""
+    lines = [
+        "# Generated from agents/hermes/. "
+        "Regenerate: uv run --with pyyaml scripts/render_agents.py",
+        "phase\tservice\tconfig_var\tscript\tstatus_var\tserver",
+    ]
+    lines.extend("\t".join(row) for row in mcp_rows(base, agents))
+    return "\n".join(lines) + "\n"
 
 
 def _selected_bundles(service: str, agent: dict, bundles: dict) -> list[str]:
@@ -385,26 +540,39 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--check",
         action="store_true",
-        help="exit 1 when docker-compose.yml does not match the manifests",
+        help="exit 1 when the compose region or mcp.tsv does not match",
     )
     args = parser.parse_args(argv)
     try:
-        section = render_section(*load())
+        base, agents = load()
+        section = render_section(base, agents)
+        table = render_mcp_table(base, agents)
         text = COMPOSE_PATH.read_text(encoding="utf-8")
-        if args.check:
-            current = extract_generated(text)
-        else:
-            COMPOSE_PATH.write_text(splice(text, section), encoding="utf-8")
-            return 0
+        current = extract_generated(text)
     except ManifestError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
-    if current != section:
-        print(
-            "docker-compose.yml hermes region does not match agents/hermes/",
-            file=sys.stderr,
-        )
-        return 1
+    current_table = (
+        MCP_TABLE_PATH.read_text(encoding="utf-8") if MCP_TABLE_PATH.is_file() else ""
+    )
+    if args.check:
+        drifted = []
+        if current != section:
+            drifted.append("docker-compose.yml hermes region")
+        if current_table != table:
+            drifted.append("agents/hermes/mcp.tsv")
+        if drifted:
+            print(
+                "does not match agents/hermes/: " + ", ".join(drifted), file=sys.stderr
+            )
+            print(
+                "Regenerate: uv run --with pyyaml scripts/render_agents.py",
+                file=sys.stderr,
+            )
+            return 1
+        return 0
+    COMPOSE_PATH.write_text(splice(text, section), encoding="utf-8")
+    MCP_TABLE_PATH.write_text(table, encoding="utf-8")
     return 0
 
 

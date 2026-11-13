@@ -13,15 +13,10 @@ port: "${HERMES_DAOYUAN_PORT:-8645}:8642"
 bundles:
   - kanban-off
   - shared-rclone
+mcp:
+  - dailyinfo
+  - paper-queue
 env:
-  # Read-only dailyinfo MCP on its own stack. Hermes expands the URL and key
-  # inside the container.
-  DAILYINFO_MCP_URL: "${DAILYINFO_MCP_URL:-}"
-  DAILYINFO_MCP_KEY: "${DAILYINFO_MCP_KEY:-}"
-  # Paper-queue MCP. The server binds this bearer token to a fixed actor.
-  # An empty URL disables the client.
-  PAPER_QUEUE_MCP_URL: "${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}"
-  PAPER_QUEUE_DAOYUAN_TOKEN: "${PAPER_QUEUE_DAOYUAN_TOKEN:-}"
   FEISHU_GROUP_POLICY: "${DAOYUAN_FEISHU_GROUP_POLICY:-allowlist}"
   FEISHU_ALLOWED_USERS: "${DAOYUAN_FEISHU_ALLOWED_USERS:-}"
 mounts:

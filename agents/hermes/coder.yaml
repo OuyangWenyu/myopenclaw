@@ -19,8 +19,9 @@ bundles:
   - gitcode
   - xiaomi
   - zotero
-  - server-monitoring
   - shared-rclone
+mcp:
+  - server-monitoring
 env:
   DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN:-}"
   DISCORD_ALLOWED_USERS: "${DISCORD_ALLOWED_USERS:-}"

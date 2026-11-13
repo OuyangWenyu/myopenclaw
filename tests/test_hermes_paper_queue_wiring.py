@@ -74,8 +74,15 @@ class TestComposeWiring:
 
 class TestStartShWiring:
     def test_registers_the_hermes_mcp_before_compose_up(self):
+        table = (REPO_ROOT / "agents" / "hermes" / "mcp.tsv").read_text(encoding="utf-8")
+        assert (
+            "late\thermes-daoyuan\tDAOYUAN_CONFIG\t"
+            "ensure_hermes_paper_queue.py\tDAOYUAN_PAPER_QUEUE_STATUS\tpaper-queue"
+        ) in table
+        token = START_SH.index("_pq_daoyuan_token")
+        late = START_SH.index("apply_hermes_mcp late")
         up = START_SH.index("docker compose up -d ${BUILD_FLAG}")
-        assert START_SH.index("ensure_hermes_paper_queue.py") < up
+        assert token < late < up
 
     def test_generates_the_token_and_url(self):
         assert "PAPER_QUEUE_DAOYUAN_TOKEN" in START_SH

@@ -164,14 +164,15 @@ ls ~/.hermes/.env ~/.hermes/profiles/*/.env 2>/dev/null
 四个 hermes 服务的 compose 段不是手写的。来源是 `agents/hermes/`：
 
 - `base.yaml`：四个服务相同的字段、环境变量、挂载目录，以及被多个 agent 共用的变量组
-- `<agent>.yaml`：端口、`profile`、飞书应用前缀、要启用的变量组、自己独有的环境变量、挂载。`HERMES_PROFILE` 和 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 由前两项推导，不手写
-- 环境变量的输出顺序由渲染器固定：公共变量、所选变量组（按清单里的顺序）、推导出的变量、agent 自己的变量。这个顺序不进入配置哈希
+- `<agent>.yaml`：端口、`profile`、飞书应用前缀、要启用的变量组、`mcp` 列表、自己独有的环境变量、挂载。`HERMES_PROFILE` 和 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 由前两项推导，不手写
+- `mcp` 列表同时决定容器环境变量，和 `start.sh` 读的 `agents/hermes/mcp.tsv`。paper-queue 在表里是 `late`：token 写入 `.env` 之后才注册
+- 环境变量的输出顺序由渲染器固定：公共变量、所选变量组、所选 MCP、推导出的变量、agent 自己的变量。这个顺序不进入配置哈希
 - 挂载按清单顺序输出，顺序变了会重建容器
 
-改完清单后重新生成，不要改 `docker-compose.yml` 里 `>>> GENERATED` 和 `<<< GENERATED` 之间的内容：
+改完清单后重新生成，不要改 `docker-compose.yml` 里 `>>> GENERATED` 和 `<<< GENERATED` 之间的内容，也不要手改 `mcp.tsv`：
 
 ```bash
-uv run --with pyyaml scripts/render_agents.py          # 写回 compose
+uv run --with pyyaml scripts/render_agents.py          # 写回 compose 和 mcp.tsv
 uv run --with pyyaml scripts/render_agents.py --check  # 只检查有没有人改过生成结果
 ```
 
