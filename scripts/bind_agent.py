@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import stat
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -353,6 +354,90 @@ def serve(host: str = LOOPBACK_HOST, port: int = 8766) -> None:
         server.server_close()
 
 
+MODEL_ENV_KEYS = ("DEEPSEEK_API_KEY", "GLM_API_KEY")
+
+
+def load_model_env(path: Path) -> dict[str, str]:
+    """Read only the shared model keys from a dotenv file.
+
+    Args:
+        path: Repository ``.env`` or a test fixture. Other keys are ignored.
+
+    Returns:
+        ``DEEPSEEK_API_KEY`` and ``GLM_API_KEY``. Missing keys are empty strings.
+    """
+    found = {key: "" for key in MODEL_ENV_KEYS}
+    if not path.is_file():
+        return found
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        name, value = stripped.split("=", 1)
+        if name in found:
+            found[name] = value.strip().strip('"').strip("'")
+    return found
+
+
+def launch_record(root: Path, result: BindResult) -> dict[str, object]:
+    """Describe how to start the container. The app secret is not included.
+
+    Args:
+        root: Agents root that holds ``compose.yml``.
+        result: Outcome of :func:`materialize`.
+
+    Returns:
+        Container name, compose path, and the exact ``docker compose up`` argv.
+    """
+    container = f"hermes-bind-{result.agent_id}"
+    compose_file = str(root / "compose.yml")
+    return {
+        "agent_id": result.agent_id,
+        "container_name": container,
+        "compose_file": compose_file,
+        "created": result.created,
+        "up_command": [
+            "docker",
+            "compose",
+            "-f",
+            compose_file,
+            "-p",
+            "hermes-bind",
+            "up",
+            "-d",
+            container,
+        ],
+    }
+
+
+def materialize_stdin(root: Path, payload: dict, env_file: Path) -> dict[str, object]:
+    """Turn one credential object into a home and a launch record.
+
+    Args:
+        root: Agents root, normally ``~/.hermes-agents``.
+        payload: ``client_id``, ``client_secret``, ``open_id``, ``tenant_brand``.
+        env_file: Dotenv file that supplies the two model keys.
+
+    Returns:
+        The public launch record.
+
+    Raises:
+        BindError: ``open_id`` is empty, or the record would contain the secret.
+    """
+    credential = Credential(
+        client_id=str(payload.get("client_id", "")),
+        client_secret=str(payload.get("client_secret", "")),
+        open_id=str(payload.get("open_id", "")),
+        tenant_brand=str(payload.get("tenant_brand") or "feishu"),
+    )
+    result = materialize(root, credential, model_env=load_model_env(env_file))
+    record = launch_record(root, result)
+    encoded = json.dumps(record)
+    if credential.client_secret and credential.client_secret in encoded:
+        raise BindError("launch record must not contain the app secret")
+    return record
+
+
 def main(argv: list[str] | None = None) -> int:
     """Command line entry. ``--print-register-options`` prints JSON and exits."""
     parser = argparse.ArgumentParser(description=__doc__)
@@ -361,9 +446,24 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Print the registerApp options as JSON",
     )
+    parser.add_argument(
+        "--materialize-stdin",
+        action="store_true",
+        help="Read one credential JSON object from stdin and write its home",
+    )
+    parser.add_argument("--root", help="Agents root for --materialize-stdin")
+    parser.add_argument("--env-file", help="Dotenv file with the two model keys")
     args = parser.parse_args(argv)
     if args.print_register_options:
         print(json.dumps(register_options(load_defaults())))
+        return 0
+    if args.materialize_stdin:
+        if not args.root or not args.env_file:
+            parser.error("--materialize-stdin requires --root and --env-file")
+        payload = json.load(sys.stdin)
+        record = materialize_stdin(Path(args.root), payload, Path(args.env_file))
+        json.dump(record, sys.stdout)
+        sys.stdout.write("\n")
         return 0
     parser.error("nothing to do")
     return 2

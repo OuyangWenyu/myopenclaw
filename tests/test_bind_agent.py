@@ -196,6 +196,70 @@ def test_register_app_options_are_create_only_and_chat_only() -> None:
     assert package["dependencies"]["@larksuiteoapi/node-sdk"] == "1.72.0"
 
 
+def test_bind_tool_lockfile_pins_the_sdk_and_qr_library() -> None:
+    """npm ci from this lockfile is the bind tool's environment."""
+    package_root = REPO_ROOT / "services" / "agent-bind"
+    package = json.loads((package_root / "package.json").read_text(encoding="utf-8"))
+    assert package["dependencies"] == {
+        "@larksuiteoapi/node-sdk": "1.72.0",
+        "qrcode": "1.5.4",
+    }
+    lock = json.loads((package_root / "package-lock.json").read_text(encoding="utf-8"))
+    packages = lock["packages"]
+    assert packages["node_modules/@larksuiteoapi/node-sdk"]["version"] == "1.72.0"
+    assert packages["node_modules/qrcode"]["version"] == "1.5.4"
+
+
+def test_bind_page_renders_a_qr_without_the_secret() -> None:
+    """The loopback page shows the verification URL as a QR code and nothing else."""
+    url = "https://accounts.feishu.cn/oauth/v1/verify?code=abc&x=<script>"
+    rendered = subprocess.run(
+        ["node", "scripts/feishu_register_app.mjs", "--render-page", url],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert rendered.returncode == 0, rendered.stderr
+    html = rendered.stdout
+    assert '<svg width="280" height="280" ' in html
+    assert "client_secret" not in html + rendered.stderr
+    assert "<script>" not in html
+    assert (
+        "https://accounts.feishu.cn/oauth/v1/verify?code=abc&amp;x=&lt;script&gt;"
+        in html
+    )
+
+    refused = subprocess.run(
+        [
+            "node",
+            "scripts/feishu_register_app.mjs",
+            "--host",
+            "0.0.0.0",
+            "--render-page",
+            url,
+        ],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert refused.returncode != 0
+    assert "<svg" not in refused.stdout
+    assert "client_secret" not in refused.stdout + refused.stderr
+
+    served = subprocess.run(
+        ["node", "scripts/feishu_register_app.mjs", "--serve-check", url],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert served.returncode == 0, served.stderr
+    assert "<svg" in served.stdout
+    assert "client_secret" not in served.stdout + served.stderr
+
+
 def test_bind_page_refuses_to_listen_on_every_interface() -> None:
     """A public bind page could attach the shared model key to someone else's app."""
     bind_agent = _load()
@@ -274,3 +338,85 @@ def test_hermes_backup_keeps_bound_agents_and_drops_env(tmp_path: Path) -> None:
     mount = "${HOME}/.hermes-agents:/root/.hermes-agents:ro"
     assert compose.count(mount) == 1
     assert compose.index(mount) > compose.index("\n  backup-cron:")
+
+
+def test_apply_credential_plans_compose_up_without_starting_it(tmp_path: Path) -> None:
+    """A scanned credential becomes a home and a compose command. Docker stays idle."""
+    env_file = tmp_path / "model.env"
+    env_file.write_text(
+        "DEEPSEEK_API_KEY=sk-test\nGLM_API_KEY=glm-test\nGH_TOKEN=do-not-copy\n",
+        encoding="utf-8",
+    )
+    root = tmp_path / "agents"
+    credential = {
+        "client_id": "cli_test",
+        "client_secret": "secret-value",
+        "open_id": "ou_scanner",
+        "tenant_brand": "feishu",
+    }
+    completed = _apply_credential(root, env_file, credential)
+    assert completed.returncode == 0, completed.stderr
+    assert "secret-value" not in completed.stdout + completed.stderr
+    record = json.loads(completed.stdout)
+    home = root / record["agent_id"]
+    config = yaml.safe_load(
+        (home / "profiles" / "owner" / "config.yaml").read_text(encoding="utf-8")
+    )
+    assert config["memory"]["provider"] == "local"
+    env_path = home / ".env"
+    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600
+    env_text = env_path.read_text(encoding="utf-8")
+    assert "FEISHU_APP_SECRET=secret-value" in env_text
+    assert "GH_TOKEN" not in env_text
+    assert record["container_name"] == f"hermes-bind-{record['agent_id']}"
+    assert record["up_command"] == [
+        "docker",
+        "compose",
+        "-f",
+        str(root / "compose.yml"),
+        "-p",
+        "hermes-bind",
+        "up",
+        "-d",
+        record["container_name"],
+    ]
+
+    again = _apply_credential(root, env_file, credential)
+    assert again.returncode == 0, again.stderr
+    assert json.loads(again.stdout)["agent_id"] == record["agent_id"]
+    assert [path for path in root.iterdir() if path.is_dir()] == [home]
+
+    ready = subprocess.run(
+        ["node", "scripts/feishu_register_app.mjs", "--render-ready"],
+        cwd=REPO_ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert ready.returncode == 0, ready.stderr
+    assert "已启动，可以私聊" in ready.stdout
+    assert "client_secret" not in ready.stdout
+    assert "secret-value" not in ready.stdout
+
+
+def _apply_credential(
+    root: Path, env_file: Path, credential: dict
+) -> subprocess.CompletedProcess[str]:
+    """Run the public dry-run entry. It must not execute docker compose."""
+    return subprocess.run(
+        [
+            "node",
+            "scripts/feishu_register_app.mjs",
+            "--apply-credential",
+            "--root",
+            str(root),
+            "--env-file",
+            str(env_file),
+            "--dry-run",
+        ],
+        cwd=REPO_ROOT,
+        input=json.dumps(credential),
+        capture_output=True,
+        text=True,
+        check=False,
+    )

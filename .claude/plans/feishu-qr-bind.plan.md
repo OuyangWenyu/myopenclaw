@@ -22,7 +22,7 @@
 | `onQRCodeReady({ url, expireIn })` 给出验证链接 | 页面把这个 URL 画成二维码。链接约 10 分钟、一次一人 |
 | 成功返回 `client_id`、`client_secret` | 这就是 Hermes 要的 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` |
 | 成功还可返回 `user_info.open_id`、`user_info.tenant_brand` | `open_id` 写成这个 agent 的白名单。字段在类型上是可选的 |
-| `createOnly: true` | 确认页只有「新建应用」，不能选已有应用。避免扫码时改写爱玛士或斐斐现有应用的权限 |
+| `createOnly: true` | 确认页只有「新建应用」，不能选已有应用。避免扫码时改写已有应用的权限 |
 | `addons.preset: false` | 丢掉平台默认的「智能体清单」。那份清单含文档写入、云盘、建群、通讯录。默认机器人不要这些 |
 | `addons.scopes` / `addons.events` | 在最小基座（只有机器人能力）上补我们列出的权限和事件 |
 | 长连接是抢消息，不是广播 | 同一个 App ID 只能有一个网关。第二个进程会抢同一条连接 |
@@ -167,9 +167,9 @@ memory:
 
 ### 3. 接上 `registerApp`
 
-绑定页只听 `127.0.0.1`。SDK 版本在绑定服务的依赖里钉死。日志和页面都不打印 `client_secret` 和完整 `.env`。
+绑定页只听 `127.0.0.1`，由同一个 Node 进程把验证链接画成二维码。SDK 与画码库由 `services/agent-bind` 的 `package-lock.json` 锁定，用 `npm ci` 安装。日志和页面都不打印 `client_secret` 和完整 `.env`。
 
-真人扫一次码（斐斐或另一个测试飞书账号，新建应用，不选已有应用）。然后：
+真人扫一次码（用一个测试飞书账号，新建应用，不选已有应用）。然后：
 
 - 容器日志有飞书长连接
 - 扫码人私聊得到回复
