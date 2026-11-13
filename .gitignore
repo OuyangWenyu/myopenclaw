@@ -37,6 +37,12 @@ __pycache__/
 # ── Claude Code 本地开发目录（plans / prds / skills / settings 不随项目走）──
 .claude/
 
+# ── Trellis 本地开发工作流（规格 / 任务 / 日志 / 平台脚手架都不入库）──
+.trellis/
+.dsh/
+.agents/
+AGENTS.md
+
 # Node
 node_modules/
 
