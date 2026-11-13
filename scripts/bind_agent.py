@@ -154,10 +154,7 @@ def materialize(
             "created_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "status": "ready",
         }
-        (staging / "bind.json").write_text(
-            json.dumps(record, indent=2) + "\n",
-            encoding="utf-8",
-        )
+        _write_json_atomic(staging / "bind.json", record)
         staging.rename(home)
     except Exception:
         if staging.exists():
@@ -170,6 +167,41 @@ def materialize(
         compose_text=_write_compose(root),
         created=True,
     )
+
+
+def _write_json_atomic(path: Path, payload: dict) -> None:
+    """Write JSON through a temporary sibling, then replace atomically."""
+    temporary = path.with_name(f"{path.name}.tmp")
+    temporary.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    os.replace(temporary, path)
+
+
+def mark_failed(root: Path, agent_id: str, reason: str) -> dict:
+    """Record why a bound agent never reached a usable state.
+
+    Args:
+        root: Agents root that holds every scanned agent.
+        agent_id: Directory name under ``root``.
+        reason: Short explanation shown to the operator.
+
+    Returns:
+        The updated ``bind.json`` mapping.
+
+    Raises:
+        BindError: The id is not a plain directory name, or no ``bind.json``
+            exists for it.
+    """
+    if not agent_id or agent_id in {".", ".."} or "/" in agent_id or "\\" in agent_id:
+        raise BindError("agent_id must be a plain directory name")
+    bind_path = root / agent_id / "bind.json"
+    if not bind_path.is_file():
+        raise BindError(f"bind.json not found for agent {agent_id}")
+    record = json.loads(bind_path.read_text(encoding="utf-8"))
+    record["status"] = "failed"
+    record["failure_reason"] = reason.strip()[:500]
+    record["failed_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    _write_json_atomic(bind_path, record)
+    return record
 
 
 def _new_agent_id(root: Path) -> str:
@@ -457,12 +489,25 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="Read one credential JSON object from stdin and write its home",
     )
-    parser.add_argument("--root", help="Agents root for --materialize-stdin")
+    parser.add_argument(
+        "--mark-failed",
+        action="store_true",
+        help="Mark an existing agent's bind.json as failed",
+    )
+    parser.add_argument("--root", help="Agents root")
+    parser.add_argument("--agent-id", help="Agent directory name for --mark-failed")
+    parser.add_argument("--reason", default="", help="Failure reason for --mark-failed")
     parser.add_argument("--env-file", help="Dotenv file with the two model keys")
     args = parser.parse_args(argv)
     try:
         if args.print_register_options:
             print(json.dumps(register_options(load_defaults())))
+            return 0
+        if args.mark_failed:
+            if not args.root or not args.agent_id:
+                parser.error("--mark-failed requires --root and --agent-id")
+            record = mark_failed(Path(args.root), args.agent_id, args.reason)
+            print(json.dumps({"agent_id": record["agent_id"], "status": record["status"]}))
             return 0
         if args.materialize_stdin:
             if not args.root or not args.env_file:

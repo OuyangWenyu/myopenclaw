@@ -22,6 +22,14 @@ const packageRoot = path.join(repoRoot, "services", "agent-bind");
 const LOOPBACK_HOST = "127.0.0.1";
 const BIND_PORT = 8766;
 
+// How long to wait for the Feishu websocket before giving up.
+const CONNECT_TIMEOUT_MS = 90_000;
+const CONNECT_POLL_MS = 2_000;
+const CONNECT_PATTERN = /connected to wss:\/\//;
+// Keep the result page reachable long enough to read it.
+const READY_HOLD_MS = 10 * 60 * 1000;
+const FAILURE_HOLD_MS = 60 * 1000;
+
 /**
  * Load the registerApp options from the committed defaults file.
  *
@@ -148,7 +156,7 @@ ${svg}
 }
 
 /**
- * Build the page shown after the container has been started.
+ * Build the page shown once the Feishu websocket is up.
  *
  * @returns {string} HTML with no credential fields.
  */
@@ -157,11 +165,201 @@ function renderReadyPage() {
 <html lang="zh-CN">
 <head><meta charset="utf-8"><title>绑定飞书助手</title></head>
 <body>
-<p>已启动，可以私聊</p>
+<p>已连上，可以私聊</p>
+<p>页面会保留 10 分钟；终端 Ctrl-C 可提前结束。</p>
 <p>应用密钥不会显示在这个页面上。</p>
 </body>
 </html>
 `;
+}
+
+/**
+ * Build the page shown when the container never reached Feishu.
+ *
+ * @param {string} reason Short machine-generated explanation.
+ * @returns {string} HTML with no credential fields.
+ */
+function renderFailurePage(reason) {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>绑定飞书助手</title></head>
+<body>
+<p>没连上飞书，已停掉这个容器。</p>
+<p>${escapeHtml(reason)}</p>
+<p>排查：<code>docker logs hermes-bind-&lt;id&gt;</code>；确认后重新扫码即可重试。</p>
+<p>应用密钥不会显示在这个页面上。</p>
+</body>
+</html>
+`;
+}
+
+/**
+ * Turn a listen failure into one actionable line.
+ *
+ * @param {Error & {code?: string}} error
+ * @param {number} port
+ * @returns {string}
+ */
+function describeListenError(error, port) {
+  if (error && error.code === "EADDRINUSE") {
+    return `端口 ${port} 已被占用；查看占用进程：lsof -nP -iTCP:${port} -sTCP:LISTEN`;
+  }
+  return `绑定页面启动失败：${(error && error.message) || "unknown error"}`;
+}
+
+/** Sleep helper for the connection poll. */
+function sleep(milliseconds) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+/**
+ * Read the tail of one container's logs.
+ *
+ * @param {string} container Container name.
+ * @returns {{ok: boolean, text: string, reason: string}}
+ */
+function readContainerLogs(container) {
+  const result = spawnSync("docker", ["logs", "--tail", "200", container], {
+    encoding: "utf8",
+    timeout: 5_000,
+  });
+  if (result.error) {
+    return { ok: false, text: "", reason: result.error.message };
+  }
+  const text = `${result.stdout || ""}${result.stderr || ""}`;
+  return {
+    ok: result.status === 0,
+    text,
+    reason: result.status === 0 ? "" : "docker logs failed",
+  };
+}
+
+/**
+ * Poll until the container logs show the Feishu websocket, or time out.
+ *
+ * @param {string} container Container name.
+ * @param {{timeoutMs?: number, intervalMs?: number}} [options]
+ * @returns {Promise<{ok: boolean, reason: string, logs: string}>}
+ */
+async function waitForConnection(container, options = {}) {
+  const timeoutMs = Number(options.timeoutMs ?? CONNECT_TIMEOUT_MS);
+  const intervalMs = Number(options.intervalMs ?? CONNECT_POLL_MS);
+  const deadline = Date.now() + timeoutMs;
+  let reason = "no feishu websocket log within timeout";
+  let logs = "";
+  for (;;) {
+    const read = readContainerLogs(container);
+    logs = read.text;
+    if (read.ok && CONNECT_PATTERN.test(read.text)) {
+      return { ok: true, reason: "", logs };
+    }
+    if (!read.ok && read.reason) {
+      reason = read.reason;
+    }
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return { ok: false, reason, logs };
+    }
+    await sleep(Math.min(intervalMs, remaining));
+  }
+}
+
+/**
+ * Stop the one container this bind started.
+ *
+ * @param {{container_name: string, compose_file: string}} record
+ * @returns {{ok: boolean, text: string}}
+ */
+function stopContainer(record) {
+  const result = spawnSync(
+    "docker",
+    [
+      "compose",
+      "-f",
+      record.compose_file,
+      "-p",
+      "hermes-bind",
+      "stop",
+      record.container_name,
+    ],
+    { encoding: "utf8" },
+  );
+  return {
+    ok: result.status === 0,
+    text: `${result.stdout || ""}${result.stderr || ""}`,
+  };
+}
+
+/**
+ * Ask bind_agent.py to record the failure in bind.json.
+ *
+ * @param {{agent_id: string, compose_file: string}} record
+ * @param {string} reason
+ * @returns {boolean} Whether bind.json was updated.
+ */
+function markFailed(record, reason) {
+  const result = spawnSync(
+    "uv",
+    [
+      "run",
+      "--with",
+      "pyyaml",
+      "python3",
+      "scripts/bind_agent.py",
+      "--mark-failed",
+      "--root",
+      path.dirname(record.compose_file),
+      "--agent-id",
+      record.agent_id,
+      "--reason",
+      reason,
+    ],
+    { cwd: repoRoot, encoding: "utf8" },
+  );
+  if (result.status !== 0) {
+    process.stderr.write(result.stderr || "failed to mark bind.json\n");
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Keep the page reachable until the operator stops the process or the hold
+ * window ends.
+ *
+ * @param {{server: import("node:http").Server} | undefined} page
+ * @param {number} milliseconds
+ * @returns {Promise<void>}
+ */
+function holdPage(page, milliseconds) {
+  if (!page) {
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    let done = false;
+    let timer;
+    const finish = () => {
+      if (done) {
+        return;
+      }
+      done = true;
+      clearTimeout(timer);
+      process.off("SIGINT", finish);
+      process.off("SIGTERM", finish);
+      resolve();
+    };
+    timer = setTimeout(finish, milliseconds);
+    process.once("SIGINT", finish);
+    process.once("SIGTERM", finish);
+  });
+}
+
+/** Close the page server if it is still listening. */
+async function closePage(page) {
+  if (!page || !page.server || !page.server.listening) {
+    return;
+  }
+  await new Promise((resolve) => page.server.close(() => resolve()));
 }
 
 /**
@@ -276,8 +474,8 @@ function applyCredential(request) {
  * @param {string} url Verification URL.
  * @returns {Promise<void>} Resolves after the server has closed.
  */
-async function serveCheck(url) {
-  const { server, pageUrl } = await listen(url, LOOPBACK_HOST, 0);
+async function serveCheck(url, port = 0) {
+  const { server, pageUrl } = await listen(url, LOOPBACK_HOST, port);
   try {
     const response = await fetch(pageUrl);
     process.stdout.write(Buffer.from(await response.arrayBuffer()));
@@ -287,7 +485,8 @@ async function serveCheck(url) {
 }
 
 /**
- * Run registerApp, write the agent home, and start its container.
+ * Run registerApp, write the agent home, start its container, and wait until
+ * the Feishu websocket is up.
  *
  * Stdout receives the public launch record. The app secret stays on the
  * stdin of the materialize process and is never written to the page or stderr.
@@ -298,10 +497,19 @@ async function scan() {
   const require = createRequire(path.join(packageRoot, "package.json"));
   const lark = require("@larksuiteoapi/node-sdk");
   const options = loadOptions();
+  const controller = new AbortController();
   let page;
+
+  const failPage = (error) => {
+    process.stderr.write(`${describeListenError(error, BIND_PORT)}\n`);
+    controller.abort();
+    process.exit(1);
+  };
+
   try {
     const result = await lark.registerApp({
       ...options,
+      signal: controller.signal,
       onQRCodeReady(info) {
         listen(info.url, LOOPBACK_HOST, BIND_PORT)
           .then((bound) => {
@@ -311,9 +519,7 @@ async function scan() {
               spawn("open", [bound.pageUrl], { stdio: "ignore", detached: true }).unref();
             }
           })
-          .catch((error) => {
-            process.stderr.write(`${error.message}\n`);
-          });
+          .catch(failPage);
       },
     });
     const user = result.user_info || {};
@@ -328,9 +534,24 @@ async function scan() {
         tenant_brand: user.tenant_brand || "feishu",
       },
     });
+
+    const connection = await waitForConnection(record.container_name);
+    if (!connection.ok) {
+      const stopped = stopContainer(record);
+      if (!stopped.ok) {
+        process.stderr.write(stopped.text || "failed to stop the container\n");
+      }
+      markFailed(record, connection.reason);
+      if (page) {
+        page.setHtml(renderFailurePage(connection.reason));
+        await holdPage(page, FAILURE_HOLD_MS);
+      }
+      process.exitCode = 1;
+      return;
+    }
+
     if (page) {
       page.setHtml(renderReadyPage());
-      await new Promise((resolve) => setTimeout(resolve, 3000));
     }
     process.stdout.write(
       `${JSON.stringify({
@@ -338,12 +559,14 @@ async function scan() {
         container_name: record.container_name,
         compose_file: record.compose_file,
         created: record.created,
+        connected: true,
       })}\n`,
     );
-  } finally {
     if (page) {
-      await new Promise((resolve) => page.server.close(resolve));
+      await holdPage(page, READY_HOLD_MS);
     }
+  } finally {
+    await closePage(page);
   }
 }
 
@@ -406,8 +629,28 @@ if (process.argv.includes("--print-options")) {
   } catch (error) {
     fail(error);
   }
+} else if (argValue("--wait-connection")) {
+  const container = argValue("--wait-connection");
+  const timeoutMs = Number(argValue("--timeout-ms") || CONNECT_TIMEOUT_MS);
+  const intervalMs = Number(argValue("--interval-ms") || CONNECT_POLL_MS);
+  waitForConnection(container, { timeoutMs, intervalMs }).then(
+    (result) => {
+      process.stdout.write(
+        `${JSON.stringify({ ok: result.ok, reason: result.reason })}\n`,
+      );
+      process.exit(result.ok ? 0 : 3);
+    },
+    fail,
+  );
 } else if (argValue("--serve-check")) {
-  serveCheck(argValue("--serve-check")).catch(fail);
+  const port = Number(argValue("--port") || 0);
+  serveCheck(argValue("--serve-check"), port).catch((error) => {
+    if (error && error.code === "EADDRINUSE") {
+      process.stderr.write(`${describeListenError(error, port)}\n`);
+      process.exit(1);
+    }
+    fail(error);
+  });
 } else {
   scan().catch(fail);
 }

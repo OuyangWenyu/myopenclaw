@@ -454,7 +454,7 @@ def test_apply_credential_plans_compose_up_without_starting_it(tmp_path: Path) -
         text=True,
     )
     assert ready.returncode == 0, ready.stderr
-    assert "已启动，可以私聊" in ready.stdout
+    assert "已连上，可以私聊" in ready.stdout
     assert "client_secret" not in ready.stdout
     assert "secret-value" not in ready.stdout
 
