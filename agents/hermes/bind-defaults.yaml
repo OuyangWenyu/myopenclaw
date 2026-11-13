@@ -1,0 +1,55 @@
+# Default capability for an agent created by a Feishu QR scan.
+# The bind service reads this file. It is not part of agents/hermes/order,
+# and it is not rendered into docker-compose.yml.
+
+feishu:
+  create_only: true
+  preset: false
+  name: "{user}的助手"
+  scopes:
+    - im:message.p2p_msg:readonly
+    - im:message.group_at_msg:readonly
+    - im:message:send_as_bot
+    - im:resource
+  events:
+    - im.message.receive_v1
+  user_scopes: []
+  callbacks: []
+
+container:
+  image: myopenclaw/hermes:latest
+  memory: 2G
+  cpus: "1.0"
+  network: myopenclaw-net
+  network_name: myopenclaw_myopenclaw-net
+  profile: owner
+  command: gateway run --profile owner
+  env_keys:
+    - DEEPSEEK_API_KEY
+    - GLM_API_KEY
+    - FEISHU_APP_ID
+    - FEISHU_APP_SECRET
+    - FEISHU_DOMAIN
+    - FEISHU_CONNECTION_MODE
+    - FEISHU_GROUP_POLICY
+    - FEISHU_ALLOWED_USERS
+    - FEISHU_MARKDOWN_CARD
+    - FEISHU_LATEX_IMAGE
+    - FEISHU_LATEX_INLINE_IMAGE
+    - HERMES_PROFILE
+    - HERMES_KANBAN_DISPATCH_IN_GATEWAY
+    - TZ
+  fixed_env:
+    FEISHU_DOMAIN: feishu
+    FEISHU_CONNECTION_MODE: websocket
+    FEISHU_GROUP_POLICY: allowlist
+    FEISHU_MARKDOWN_CARD: "1"
+    FEISHU_LATEX_IMAGE: "1"
+    FEISHU_LATEX_INLINE_IMAGE: "0"
+    HERMES_PROFILE: owner
+    HERMES_KANBAN_DISPATCH_IN_GATEWAY: "0"
+    TZ: Asia/Shanghai
+  mounts:
+    - data
+    - email-config-none
+    - email-tokens-none

@@ -490,6 +490,7 @@ services:
     restart: unless-stopped
     volumes:
       - ${HOME}/.hermes:/root/.hermes:ro
+      - ${HOME}/.hermes-agents:/root/.hermes-agents:ro
       - ${HOME}/.openclaw:/root/.openclaw:ro
       - ${HOME}/.claude:/root/.claude:ro
       - ${HOME}/.cc-connect:/root/.cc-connect:ro

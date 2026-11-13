@@ -39,10 +39,11 @@ fi
 DEST="${BACKUP_ROOT}/hermes/${TIMESTAMP}"
 LATEST="${BACKUP_ROOT}/hermes/latest"
 
+AGENTS_DATA="${HOME}/.hermes-agents"
+
 if [[ ! -d "${HERMES_DATA}" ]]; then
-  echo "   ⚠️  ~/.hermes 不存在，跳过 hermes 备份"
-  exit 0
-fi
+  echo "   ⚠️  ~/.hermes 不存在，跳过个人 hermes 备份"
+else
 
 mkdir -p "${DEST}"
 
@@ -164,3 +165,54 @@ if [[ "${PRUNE_FAILED:-0}" -eq 1 ]]; then
 fi
 
 echo "   备份完成 (hermes)"
+
+fi
+
+# Scanned Feishu agents live outside ~/.hermes. Their .env holds the app
+# secret, so it is excluded from the snapshot. A missing personal home must
+# not skip this copy: the early return above used to exit before any later work.
+if [[ -d "${AGENTS_DATA}" ]]; then
+  agents_dest="${BACKUP_ROOT}/hermes-agents/${TIMESTAMP}"
+  agents_latest="${BACKUP_ROOT}/hermes-agents/latest"
+  mkdir -p "${agents_dest}"
+  echo "   📂 备份目标: ${agents_dest}"
+  rsync -a --exclude=".env" --exclude="secrets/" "${AGENTS_DATA}/" "${agents_dest}/"
+  echo "   ✅ 快照完成: ${agents_dest}"
+  sync_latest_retry "${agents_dest}" "${agents_latest}"
+  echo "   ✅ latest/ 已更新 (hermes-agents)"
+  # Same retention rule as the personal snapshot: directory name, not mtime.
+  # The entrypoint also writes model keys under secrets/; those are excluded above.
+  if [[ "${BACKUP_SKIP_PRUNE:-0}" == "1" ]]; then
+    echo "   ⏭  跳过 hermes-agents 旧快照清理（初始备份不执行保留策略）"
+  else
+    agents_cutoff="${CUTOFF:-}"
+    if [[ -z "${agents_cutoff}" ]]; then
+      _cut=$(( $(date +%s) - BACKUP_KEEP_DAYS * 86400 ))
+      agents_cutoff="$(date -d "@${_cut}" +%Y-%m-%d 2>/dev/null || true)"
+      if [[ -z "${agents_cutoff}" ]]; then
+        agents_cutoff="$(date -r "${_cut}" +%Y-%m-%d 2>/dev/null || true)"
+      fi
+    fi
+    if [[ -z "${agents_cutoff}" ]]; then
+      echo "   ⚠️  无法计算保留截止日期，跳过 hermes-agents 旧快照清理" >&2
+    else
+      for d in "${BACKUP_ROOT}/hermes-agents"/*/; do
+        [[ -d "${d}" ]] || continue
+        name="$(basename "${d}")"
+        case "${name}" in
+          latest | "${TIMESTAMP}") continue ;;
+          [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]_*) ;;
+          *) continue ;;
+        esac
+        if [[ "${name%%_*}" < "${agents_cutoff}" ]]; then
+          echo "   🗑  删除旧快照: ${d%/}"
+          prune_old_snapshot "${d}" || PRUNE_FAILED=1
+        fi
+      done
+      if [[ "${PRUNE_FAILED:-0}" -eq 1 ]]; then
+        echo "   ⚠️  有旧快照未能删除：本次新快照与 latest/ 均完整，仅保留策略未生效" >&2
+        exit 1
+      fi
+    fi
+  fi
+fi
