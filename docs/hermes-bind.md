@@ -6,14 +6,20 @@
 
 ## 扫一次
 
-依赖装一次。SDK 由 `services/agent-bind` 的 lockfile 锁定，不要装到全局 Node：
+先确认这台机器上有三样东西（都不是本功能新引入的依赖）：
+
+- Node.js ≥ 18（页面用了 `fetch`）
+- `uv`（脚本内部用它跑 Python）
+- 仓库根 `.env` 里的 `DEEPSEEK_API_KEY`（必需；`GLM_API_KEY` 可选，只是兜底模型）
+
+SDK 装一次，版本由 `services/agent-bind` 的 lockfile 锁定，不要装到全局 Node：
 
 ```bash
 npm ci --prefix services/agent-bind
 node scripts/feishu_register_app.mjs
 ```
 
-浏览器打开 `http://127.0.0.1:8766/`。页面只听本机回环，二维码大约 10 分钟、只能用一次。用飞书扫它，确认页只有「新建应用」。
+浏览器打开 `http://127.0.0.1:8766/`。页面只听本机回环，二维码大约 10 分钟、只能用一次。用飞书扫它，确认页只有「新建应用」。扫码的飞书账号要能新建企业自建应用（管理员或被授权），否则确认页会被拒绝。
 
 扫成功后，同一个进程做两件事：
 
@@ -25,6 +31,8 @@ node scripts/feishu_register_app.mjs
 不要用 `scripts/start.sh` 拉这个助手，也不要在仓库目录里裸跑 `docker compose up`。那两步管的是主栈。
 
 同一个应用编号再扫一次，不会再建第二份目录，只会保证对应容器在跑。飞书没有返回 `open_id` 时，目录不会创建。
+
+默认权限只到聊天：收发私聊、群里被 @ 时回答、读群名与被引用消息。更早创建的助手只申请了收消息与发消息，日志里会持续出现 `99991672`（缺 `im:chat:readonly` / `im:message:readonly`）；到开发者后台补这两条即可，不用重建容器。
 
 ## 它能做什么
 
