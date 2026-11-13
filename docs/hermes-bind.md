@@ -26,11 +26,23 @@ node scripts/feishu_register_app.mjs
 1. 把这个助手写到 `~/.hermes-agents/<id>/`。
 2. 执行 `docker compose -f ~/.hermes-agents/compose.yml -p hermes-bind up -d`，只拉这一个容器。
 
-页面变成「已启动，可以私聊」时，容器已经创建。飞书长连接还要再等几十秒，等容器自己连上。应用密钥只进该目录权限 600 的 `.env`，页面和终端日志都不出现。
+页面变成「已连上，可以私聊」时，脚本已经在容器日志里看到飞书长连接。成功页保留 10 分钟，终端 Ctrl-C 可提前结束。应用密钥只进该目录权限 600 的 `.env`，页面和终端日志都不出现。
 
 不要用 `scripts/start.sh` 拉这个助手，也不要在仓库目录里裸跑 `docker compose up`。那两步管的是主栈。
 
 同一个应用编号再扫一次，不会再建第二份目录，只会保证对应容器在跑。飞书没有返回 `open_id` 时，目录不会创建。
+
+## 连不上怎么办
+
+`up -d` 之后脚本会轮询容器日志，最多 90 秒，看到 `connected to wss://` 才算成功。超时或容器起不来时：
+
+1. 停掉这次启动的容器；
+2. 把 `~/.hermes-agents/<id>/bind.json` 的 `status` 写成 `failed`，并记下 `failure_reason`；
+3. 页面显示失败原因，进程退出码 1。
+
+排查用 `docker logs hermes-bind-<id>`，修好后重新扫码即可（同一应用不会建第二份目录，容器也会被重新拉起）。
+
+端口 `8766` 被占用时脚本直接退出，不再进入扫码流程；占用进程用 `lsof -nP -iTCP:8766 -sTCP:LISTEN` 查。
 
 默认权限只到聊天：收发私聊、群里被 @ 时回答、读群名与被引用消息。更早创建的助手只申请了收消息与发消息，日志里会持续出现 `99991672`（缺 `im:chat:readonly` / `im:message:readonly`）；到开发者后台补这两条即可，不用重建容器。
 
