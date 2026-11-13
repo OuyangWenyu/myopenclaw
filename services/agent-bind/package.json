@@ -1,0 +1,9 @@
+{
+  "name": "agent-bind",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@larksuiteoapi/node-sdk": "1.72.0",
+    "qrcode": "1.5.4"
+  }
+}

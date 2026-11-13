@@ -44,6 +44,16 @@ jobs:
             exit 1
           fi
 
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: services/agent-bind/package-lock.json
+
+      - name: Install the Feishu bind tool
+        run: npm ci --prefix services/agent-bind
+
       - name: Run tests
         run: uv run --with pytest --with pyyaml --with pylatexenc pytest tests/ -q
 

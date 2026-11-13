@@ -20,6 +20,7 @@
 | 能力 | 实现方式 | 依赖仓库 |
 |------|----------|----------|
 | 多 Agent 协作 | Hermes ×4（爱玛士 / 爱码士 / 道元 / finance）+ Claude Code + OpenClaw ×3（虾酱 / 知汛 / 天一） | — |
+| 扫码新增 Hermes | 独立 compose 项目 `hermes-bind`，数据在 `~/.hermes-agents`，不进四个 profile。见 [扫码新增 Hermes](docs/hermes-bind.md) | — |
 | 跨 Agent 长期记忆 | TDAI Memory L0→L3 分层管线，4 agent（爱玛士 / 爱码士 / 道元 / finance）+ CC飞总 共享 | — |
 | Zotero 文献系统 | zotero-mcp 12 tools（mylibrary 提供）+ paper pipeline（爱码士写入，道元只读） | [mylibrary](https://github.com/OuyangWenyu/mylibrary) |
 | 飞书直连 | cc-connect（CC飞总）+ lark-cli（Hermes CLI）+ 道元 bot + zhixun 知汛 bot + tianyi 天一 bot | — |
@@ -73,6 +74,7 @@ myopenclaw/  (本仓库)     ← Docker 编排 + 执行层 + 兼容层
 
 - **两类配合关系**：① **构建/部署依赖**（前六个仓库：源码进 build context、volume mount 或本机 MCP 服务；其中 `zhixun-agent` 是**团队服务**——水文 MCP、知汛背后的能力，服务器侧随知汛栈一起部署）；② **运行时消费**（`server-monitoring`：团队维护的服务端，本仓只做客户端接入——爱玛士/爱码士/天一通过 HTTPS + Bearer 调其只读 MCP（校园域名入口走公网证书，内网直连用自签 CA），13 个只读工具覆盖服务器/GFS/CI 状态；爱玛士每日 08:30 推飞书私聊、爱码士推预报系统群，天一保留按需查询）。**服务端不在本仓管理**，详见 [服务器监控 MCP](docs/server-monitoring-mcp.md)
 - **一个容器一个网关**：四个 hermes 容器各跑自己 profile 的网关（`hermes`→default/爱玛士、`hermes-coder`→coder/爱码士、`hermes-finance`→finance/贝小爷、`hermes-daoyuan`→daoyuan/道元），飞书 app 也各用各的。这层隔离不是结构保证 —— 基础镜像会给**每个**容器都建四个网关服务，靠 entrypoint 的后台清扫只留本 profile 的。机制、两类故障现场与处置口诀见 [Hermes 拓扑](docs/hermes-topology.md)
+- **扫码新增的助手不在这四个里面**：compose 项目 `hermes-bind`，文件是 `~/.hermes-agents/compose.yml`，不是主栈的第五个服务。见 [扫码新增 Hermes](docs/hermes-bind.md)
 - **模型与兜底**：四个 profile 主模型统一 `deepseek-flash`，兜底 `zai/glm-5.3-flash`（国内端点 `open.bigmodel.cn`，由 compose 注入 `GLM_API_KEY`）。超过视觉尺寸上限的长截图会自动缩到最长边 8000px 重试一次，不再整轮失败 —— 细节见 [Hermes 渠道](docs/hermes-channels.md)
 - **所有数据落 `~/.myagentdata/`** — 备份管线自动覆盖
 - **每个仓库独立克隆** — 放在 `~/code/<repo>`，Docker 通过 volume mount 访问（`server-monitoring` 无需克隆，仅需入口 URL 与 token；内网直连再加 CA）

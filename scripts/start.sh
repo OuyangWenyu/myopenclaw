@@ -326,45 +326,55 @@ else
   echo "   ⚠️  ${HERMES_DEFAULT_CONFIG} 不存在，跳过 zotero-mcp 注入"
 fi
 
-# ── server-monitoring MCP（爱玛士 + 爱码士，各自独立）────────────
-# 两个 profile 都不继承彼此的 mcp_servers，必须分别写入。URL/token 来自
-# .env；URL 为空 = 移除受管条目（与天一「URL 非空 = 开关」一致）。
-# 配置写的是 ${VAR} 占位符，真实域名/token 只在容器环境里展开。
-DEFAULT_MCP_STATUS=""
-CODER_MCP_STATUS=""
-if [[ -f "${HERMES_DEFAULT_CONFIG}" ]]; then
-  if DEFAULT_MCP_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_server_monitoring.py" \
-      "${HERMES_DEFAULT_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
-    echo "   🛰️  爱玛士 server-monitoring MCP: ${DEFAULT_MCP_STATUS}"
-  else
-    echo "   ⚠️  爱玛士 server-monitoring MCP 注册失败: ${DEFAULT_MCP_STATUS}"
-    DEFAULT_MCP_STATUS="failed"
+# ── Hermes MCP 注册（对照表 agents/hermes/mcp.tsv）────────────────
+# 表由清单渲染，不在这里手写谁接哪一项。改 agents/hermes/ 后运行：
+#   uv run --with pyyaml scripts/render_agents.py
+# early 在 paper-queue token 生成之前；late 在那之后、docker compose up 之前。
+# 状态变量名（DEFAULT_MCP_STATUS 等）写在表里，后面的重启和日报照旧读它们。
+# 单个注册失败只把该状态写成 failed，不中断启动。
+apply_hermes_mcp() {
+  local phase="$1"
+  local table="${REPO_ROOT}/agents/hermes/mcp.tsv"
+  local row_phase service config_var script status_var server
+  local config status
+  if [[ ! -f "${table}" ]]; then
+    echo "   ⚠️  MCP 对照表不存在: ${table}" >&2
+    return 1
   fi
-fi
-if [[ -f "${CODER_CONFIG}" ]]; then
-  if CODER_MCP_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_server_monitoring.py" \
-      "${CODER_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
-    echo "   🛰️  爱码士 server-monitoring MCP: ${CODER_MCP_STATUS}"
-  else
-    echo "   ⚠️  爱码士 server-monitoring MCP 注册失败: ${CODER_MCP_STATUS}"
-    CODER_MCP_STATUS="failed"
-  fi
-fi
+  while IFS=$'\t' read -r row_phase service config_var script status_var server; do
+    if [[ -z "${row_phase}" || "${row_phase}" == \#* || "${row_phase}" == "phase" ]]; then
+      continue
+    fi
+    if [[ "${row_phase}" != "${phase}" ]]; then
+      continue
+    fi
+    if [[ -z "${config_var}" || -z "${!config_var+x}" ]]; then
+      echo "   ⚠️  MCP 对照表引用了 start.sh 里没有的配置变量: ${config_var:-<empty>}" >&2
+      return 1
+    fi
+    printf -v "${status_var}" '%s' ""
+    config="${!config_var}"
+    if [[ ! -f "${config}" ]]; then
+      continue
+    fi
+    if status="$(python3 "${REPO_ROOT}/scripts/${script}" \
+        "${config}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
+      printf -v "${status_var}" '%s' "${status}"
+      echo "   ${server} (${service}): ${status}"
+      if [[ "${status}" == *:no-token ]]; then
+        echo "   ⚠️  PAPER_QUEUE_DAOYUAN_TOKEN 为空，道元 paper-queue 已停用"
+      fi
+    else
+      echo "   ⚠️  ${server} (${service}) 注册失败: ${status}"
+      printf -v "${status_var}" '%s' "failed"
+    fi
+  done < "${table}"
+}
+apply_hermes_mcp early
 
-# ── dailyinfo 只读 MCP（道元 + 虾酱）─────────────────────────────
-# dailyinfo 是独立 compose 栈（FreshRSS + scheduler + MCP），本仓只注册
-# MCP 客户端条目：道元 = Hermes daoyuan profile，虾酱 = OpenClaw 主网关。
-# 配置写 ${VAR} 占位符，真实 URL/key 只在容器环境里展开；两者为空 = 移除条目。
-DAOYUAN_DAILYINFO_STATUS=""
-if [[ -f "${DAOYUAN_CONFIG}" ]]; then
-  if DAOYUAN_DAILYINFO_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_dailyinfo.py" \
-      "${DAOYUAN_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
-    echo "   📚 道元 dailyinfo MCP: ${DAOYUAN_DAILYINFO_STATUS}"
-  else
-    echo "   ⚠️  道元 dailyinfo MCP 注册失败: ${DAOYUAN_DAILYINFO_STATUS}"
-    DAOYUAN_DAILYINFO_STATUS="failed"
-  fi
-fi
+# ── dailyinfo 只读 MCP（道元走上面的对照表，这里只剩虾酱）────────
+# dailyinfo 是独立 compose 栈（FreshRSS + scheduler + MCP）。
+# 配置写 ${VAR} 占位符，真实 URL/key 只在容器环境里展开；为空 = 移除条目。
 OPENCLAW_DAILYINFO_STATUS=""
 if [[ -f "${OPENCLAW_CONFIG}" ]]; then
   if OPENCLAW_DAILYINFO_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_openclaw_dailyinfo.py" \
@@ -573,19 +583,7 @@ fi
 
 # ── 道元 paper-queue MCP（Bearer token → 服务端固定归属 Owen）──────
 # 必须在 token/URL 生成之后、docker compose up 之前运行，否则首跑会因缺 token 移除条目。
-DAOYUAN_PAPER_QUEUE_STATUS=""
-if [[ -f "${DAOYUAN_CONFIG}" ]]; then
-  if DAOYUAN_PAPER_QUEUE_STATUS="$(python3 "${REPO_ROOT}/scripts/ensure_hermes_paper_queue.py" \
-      "${DAOYUAN_CONFIG}" --env-file "${REPO_ROOT}/.env" 2>&1)"; then
-    echo "   📄 道元 paper-queue MCP: ${DAOYUAN_PAPER_QUEUE_STATUS}"
-    if [[ "${DAOYUAN_PAPER_QUEUE_STATUS}" == *:no-token ]]; then
-      echo "   ⚠️  PAPER_QUEUE_DAOYUAN_TOKEN 为空，道元 paper-queue 已停用"
-    fi
-  else
-    echo "   ⚠️  道元 paper-queue MCP 注册失败: ${DAOYUAN_PAPER_QUEUE_STATUS}"
-    DAOYUAN_PAPER_QUEUE_STATUS="failed"
-  fi
-fi
+apply_hermes_mcp late
 
 # ── 虾酱侧 paper-queue 已下架：清理 live 配置与安装副本 ────────────
 # 代码（插件 / ensure 脚本）保留在仓库，作为未来道元多用户身份插件的参考实现。

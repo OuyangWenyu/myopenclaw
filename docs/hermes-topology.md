@@ -1,6 +1,6 @@
 # Hermes 拓扑：容器 × profile × `.env`
 
-这张机器上跑着 **5 个容器、4 个身份、1 块看板**。三者分别是什么、谁决定什么，是排查问题的第一块地基。
+这张机器的**个人栈**跑着 **5 个容器、4 个身份、1 块看板**。三者分别是什么、谁决定什么，是排查问题的第一块地基。扫码新建的助手不在这组数字里，见文末。
 
 ## 一句话
 
@@ -159,8 +159,33 @@ ls ~/.hermes/.env ~/.hermes/profiles/*/.env 2>/dev/null
 
 注意：`/opt/data` 是共享卷，`/opt/data/*/logs/gateway.log` 这种通配会**读到别人的日志**。查某个 profile 必须指到它自己的路径。
 
+## 服务定义从哪来
+
+四个 hermes 服务的 compose 段不是手写的。来源是 `agents/hermes/`：
+
+- `base.yaml`：四个服务相同的字段、环境变量、挂载目录，以及被多个 agent 共用的变量组
+- `<agent>.yaml`：端口、`profile`、飞书应用前缀、要启用的变量组、`mcp` 列表、自己独有的环境变量、挂载。`HERMES_PROFILE` 和 `FEISHU_APP_ID` / `FEISHU_APP_SECRET` 由前两项推导，不手写
+- `mcp` 列表同时决定容器环境变量，和 `start.sh` 读的 `agents/hermes/mcp.tsv`。paper-queue 在表里是 `late`：token 写入 `.env` 之后才注册
+- 环境变量的输出顺序由渲染器固定：公共变量、所选变量组、所选 MCP、推导出的变量、agent 自己的变量。这个顺序不进入配置哈希
+- 挂载按清单顺序输出，顺序变了会重建容器
+
+改完清单后重新生成，不要改 `docker-compose.yml` 里 `>>> GENERATED` 和 `<<< GENERATED` 之间的内容，也不要手改 `mcp.tsv`：
+
+```bash
+uv run --with pyyaml scripts/render_agents.py          # 写回 compose 和 mcp.tsv
+uv run --with pyyaml scripts/render_agents.py --check  # 只检查有没有人改过生成结果
+```
+
+加一个 hermes agent：新增一个清单文件，把它的名字加进 `base.yaml` 的 `order`，再跑上面的命令。挂载顺序会进入 Docker 的配置哈希，顺序变了就会重建容器。
+
+`hermes-dashboard` 不在这套清单里，仍然手写。
+
 ## 已知的历史包袱
 
 - `~/.hermes/profiles/default/` 只有一个空的 `pairing/` —— **废弃空壳**。root profile 的 home 是 `~/.hermes` 本身，Hermes 启动时会 warn 并跳过这个目录
 - 2026-11-11 清理过一个手工拉起的 `gateway-coder` 残留（双写 `gateway_state.json`）。别再在 `hermes` 容器里用 `s6-svc -u /run/service/gateway-<profile>` 去"补一个网关" —— 想补之前先读上一节的「网关隔离」
 - `CLAUDE.md` 曾说 coder 的 Zotero 查询走共享 zotero-mcp，实际 `hermes -p coder mcp list` 只有 `server-monitoring`（coder 是拿 `ZOTERO_API_KEY` 走 API/pipeline，不是 MCP）
+
+## 扫码新增的助手
+
+扫码创建的 Hermes 不是 `~/.hermes/profiles/` 里的第五个身份，也不进上面这张表。每个助手有自己的目录 `~/.hermes-agents/<id>/`，容器由另一份 compose 项目 `hermes-bind` 拉起。操作步骤、默认能力和停用方式见 [扫码新增 Hermes](hermes-bind.md)。

@@ -150,7 +150,8 @@ class TestBoundaryWiring:
             assert "DAILYINFO_MCP_KEY=${DAILYINFO_MCP_KEY:-}" in block
 
     def test_start_sh_calls_both_ensure_scripts(self):
-        assert "ensure_hermes_dailyinfo.py" in START_SH
+        table = (REPO_ROOT / "agents" / "hermes" / "mcp.tsv").read_text(encoding="utf-8")
+        assert "ensure_hermes_dailyinfo.py" in table
         assert "ensure_openclaw_dailyinfo.py" in START_SH
 
     def test_start_sh_soft_starts_the_dailyinfo_stack(self):

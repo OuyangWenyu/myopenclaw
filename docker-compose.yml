@@ -1,5 +1,5 @@
 services:
-  # ── Hermes gateway（自定义镜像：含 opencode + gh CLI + lark-cli）──
+  # >>> GENERATED: hermes agents. Source: agents/hermes/. Regenerate: uv run --with pyyaml scripts/render_agents.py
   hermes:
     build:
       context: ./docker/hermes
@@ -28,30 +28,42 @@ services:
       - ./skills/server-monitoring-digest:/opt/hermes-skills/server-monitoring-digest:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
       - /var/run/docker.sock:/var/run/docker.sock:ro
-
     environment:
-      # ── Kanban：总管的容器不跑派发循环 ──────────────────────────────────
-      # 爱玛士（default）是总管：拆活、建卡、指派、验收 —— 它照旧是这条路的上游。
-      # 但"派发执行器"（60s 扫板 + spawn worker）不能放在这里：worker 是 dispatcher
-      # 的 subprocess，会继承**本容器**的挂载（真邮箱配置、OneDrive token），
-      # 于是一个 coder worker 就能读到爱玛士的邮件凭据。
-      # 派发执行器放在 hermes-coder（见该服务），worker 落在那边的车间。
-      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
-      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
+      - GH_TOKEN=${GH_TOKEN:-}
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
-      - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
-      # Blocked by Hermes env blacklist, materialized to secrets files by entrypoint
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
-      # 备份模型凭据：主模型 deepseek-flash 失败时切 zai/glm-5.3-flash。Hermes 认
-      # GLM_API_KEY / ZAI_API_KEY / Z_AI_API_KEY 三者，这里复用 .env 的 GLM_API_KEY
-      # （此前四个 profile 都写了 fallback_model 却没有钥匙 ⇒ 备份是空转的）
       - GLM_API_KEY=${GLM_API_KEY:-}
-      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo — 主模型已切 deepseek-flash，此注入当前无消费方（待清理）
-      # Outlook OAuth（非机密配置，repo .env 单一来源；token 由 ortie 管理，不经环境传递）
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
+      - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
+      - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
+      - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
+      - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
+      - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
+      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
+      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
+      - FEISHU_DOMAIN=feishu
+      - FEISHU_CONNECTION_MODE=websocket
+      - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
+      - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
+      - FEISHU_LATEX_INLINE_IMAGE=${FEISHU_LATEX_INLINE_IMAGE:-0}
+      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
+      - GITCODE_TOKEN=${GITCODE_TOKEN:-}
+      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}
+      - ZOT_DATA_DIR=/opt/zotero-data
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      - SERVER_MONITORING_MCP_URL=${SERVER_MONITORING_MCP_URL:-}
+      - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
+      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
       - EMAIL_OUTLOOK_ADDRESS=${EMAIL_OUTLOOK_ADDRESS:-}
       - EMAIL_OUTLOOK_ACCOUNT_NAME=${EMAIL_OUTLOOK_ACCOUNT_NAME:-}
       - EMAIL_OUTLOOK_DISPLAY_NAME=${EMAIL_OUTLOOK_DISPLAY_NAME:-}
@@ -61,38 +73,7 @@ services:
       - EMAIL_OUTLOOK_IMAP_PORT=${EMAIL_OUTLOOK_IMAP_PORT:-}
       - EMAIL_OUTLOOK_SMTP_HOST=${EMAIL_OUTLOOK_SMTP_HOST:-}
       - EMAIL_OUTLOOK_SMTP_PORT=${EMAIL_OUTLOOK_SMTP_PORT:-}
-      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
-      - LARK_CLI_APP_SECRET=${LARK_CLI_APP_SECRET:-}
-      - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
-      - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
-      - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
-      # OneDrive 只读 — 仅默认 profile（爱玛士）。独立配置文件（gdrive + onedrive）
-      # 挂在本容器独有的 /opt/onedrive；其他 hermes profile 仍用共享 rclone.conf。
       - RCLONE_CONFIG=/opt/onedrive/rclone.conf
-      - ZOT_DATA_DIR=/opt/zotero-data
-      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
-      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
-      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
-      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
-      # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
-      # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
-      # ~/.hermes/.env 里的同名变量不参与 MCP 客户端展开。
-      - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
-      # 团队 server-monitoring MCP（爱玛士按需查询 + 每日日报）：
-      # URL 为空 = 停用；真实地址/token 只在 .env（gitignored）。
-      - SERVER_MONITORING_MCP_URL=${SERVER_MONITORING_MCP_URL:-}
-      - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
-      - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
-      - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      - FEISHU_APP_ID=${FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
-      - FEISHU_DOMAIN=feishu
-      - FEISHU_CONNECTION_MODE=websocket
-      - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
-      - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
-      - FEISHU_LATEX_INLINE_IMAGE=${FEISHU_LATEX_INLINE_IMAGE:-0}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     shm_size: "1g"
@@ -104,7 +85,6 @@ services:
     networks:
       - myopenclaw-net
 
-  # ── Hermes coder gateway（编程助手，GLM-5.1）──────────────────
   hermes-coder:
     image: myopenclaw/hermes:latest
     container_name: hermes-coder
@@ -127,31 +107,17 @@ services:
       - ./skills/yuque-daily-digest:/opt/hermes-skills/yuque-daily-digest:ro
       - ./skills/server-monitoring-digest:/opt/hermes-skills/server-monitoring-digest:ro
       - ${HOME}/.myagentdata:/opt/myagentdata:ro
-      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
       - email-config-none:/opt/data/.config/himalaya
       - email-tokens-none:/opt/data/.config/ortie
-
     environment:
-      # ── Kanban 派发执行器（"工头"）在本容器 ─────────────────────────────
-      # 总管是 default（爱玛士）：它拆活、建卡、指派、验收。这里只跑那个 60s 的
-      # 机械循环（扫板 → 抢占 → spawn `hermes -p <assignee> … chat -q work
-      # kanban task t_x`），不做任何判断。
-      # 为什么工头在这儿：worker 是它的子进程，只能继承本容器的挂载/凭据；
-      # 而 coder 需要的 /opt/gitcode-config、/opt/myagentdata、aisecretary skills
-      # 只挂在这里，同时本容器**没有**爱玛士的真邮箱配置与 OneDrive token。
-      # 刻意不设 HERMES_KANBAN_DISPATCH_IN_GATEWAY（默认 true）；其余三个
-      # hermes 容器都显式设成 0 —— 否则它们会抢同一把全局派发锁。
-      # 守卫：tests/test_hermes_kanban_wiring.py
-      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
+      - GH_TOKEN=${GH_TOKEN:-}
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
-      - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
       - GLM_API_KEY=${GLM_API_KEY:-}
-      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo — 主模型已切 deepseek-flash，此注入当前无消费方（待清理）
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - LARK_CLI_APP_ID=${LARK_CLI_APP_ID:-}
@@ -159,40 +125,32 @@ services:
       - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
-      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
-      - HERMES_PROFILE=coder
-      # Discord (爱码士 coder)
-      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
-      - DISCORD_ALLOWED_USERS=${DISCORD_ALLOWED_USERS:-}
-      - DISCORD_REQUIRE_MENTION=true
-      # Paper pipeline
-      - PAPER_FETCH_DIR=/opt/data/skills/paper-fetch
-      - ZOTERO_CONFIG_PATH=/opt/data/.config/zot/config.toml
-      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
-      - ZOT_DATA_DIR=/opt/zotero-data
-      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
-      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
-      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
-      # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
-      # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
       - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
-      # 团队 server-monitoring MCP（爱码士按需查询 + 预报系统群日报）：
-      # URL 为空 = 停用；真实地址/token 只在 .env（gitignored）。
-      - SERVER_MONITORING_MCP_URL=${SERVER_MONITORING_MCP_URL:-}
-      - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      # coder 的飞书 = 它自己的独立应用（爱码士 bot，凭据 = .env 的 CODER_FEISHU_*）。
-      # 绝不许改回默认 app（爱玛士）的 ${FEISHU_APP_ID…} —— 2026-10-12 事故（第二
-      # 爱玛士抢 DM）；也别摘除本映射 —— 摘了他就从飞书消失（2026-10-13 接线）。
-      # 守卫 tests/test_coder_feishu_app.py。
-      - FEISHU_APP_ID=${CODER_FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${CODER_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
       - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
       - FEISHU_LATEX_INLINE_IMAGE=${FEISHU_LATEX_INLINE_IMAGE:-0}
+      - GITCODE_TOKEN=${GITCODE_TOKEN:-}
+      - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}
+      - ZOT_DATA_DIR=/opt/zotero-data
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      - SERVER_MONITORING_MCP_URL=${SERVER_MONITORING_MCP_URL:-}
+      - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
+      - HERMES_PROFILE=coder
+      - FEISHU_APP_ID=${CODER_FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${CODER_FEISHU_APP_SECRET:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - DISCORD_ALLOWED_USERS=${DISCORD_ALLOWED_USERS:-}
+      - DISCORD_REQUIRE_MENTION=true
+      - PAPER_FETCH_DIR=/opt/data/skills/paper-fetch
+      - ZOTERO_CONFIG_PATH=/opt/data/.config/zot/config.toml
     shm_size: "1g"
     deploy:
       resources:
@@ -202,7 +160,6 @@ services:
     networks:
       - myopenclaw-net
 
-  # ── Hermes finance gateway（产业财经咨询）────────────────────
   hermes-finance:
     image: myopenclaw/hermes:latest
     container_name: hermes-finance
@@ -216,14 +173,10 @@ services:
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
-      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
       - email-config-none:/opt/data/.config/himalaya
       - email-tokens-none:/opt/data/.config/ortie
-
     environment:
-      # Kanban 派发关闭：全机唯一的 dispatcher 是 hermes-coder（见该服务注释）。
-      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
-      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
+      - GH_TOKEN=${GH_TOKEN:-}
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
@@ -238,26 +191,24 @@ services:
       - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
-      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
-      - HERMES_PROFILE=finance
-      - ZOT_DATA_DIR=/opt/zotero-data
-      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
-      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
-      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
-      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
-      # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
-      # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
-      # ~/.hermes/.env 里的同名变量不参与 MCP 客户端展开。
       - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
       - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
       - FEISHU_LATEX_INLINE_IMAGE=${FEISHU_LATEX_INLINE_IMAGE:-0}
+      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
+      - ZOT_DATA_DIR=/opt/zotero-data
+      - ZOTERO_API_KEY=${ZOTERO_API_KEY:-}
+      - ZOTERO_LIBRARY_ID=${ZOTERO_LIBRARY_ID:-}
+      - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
+      - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
+      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      - HERMES_PROFILE=finance
+      - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}
       - FEISHU_GROUP_POLICY=open
       - GATEWAY_ALLOW_ALL_USERS=true
     shm_size: "1g"
@@ -269,7 +220,6 @@ services:
     networks:
       - myopenclaw-net
 
-  # ── Hermes daoyuan gateway（道元·文献学者）─────────────────────
   hermes-daoyuan:
     image: myopenclaw/hermes:latest
     container_name: hermes-daoyuan
@@ -283,16 +233,11 @@ services:
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
-      # 论文清单 skill（与未来 OpenClaw 链路共用同一份源码；start.sh link 进 profile）
       - ./skills/paper-queue:/opt/hermes-skills/paper-queue:ro
-      # 邮箱仅授权爱玛士（默认 profile）：空卷遮蔽共享卷上的邮箱配置与 token
       - email-config-none:/opt/data/.config/himalaya
       - email-tokens-none:/opt/data/.config/ortie
-
     environment:
-      # Kanban 派发关闭：全机唯一的 dispatcher 是 hermes-coder（见该服务注释）。
-      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
-      - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
+      - GH_TOKEN=${GH_TOKEN:-}
       - GITHUB_TOKEN=${GH_TOKEN:-}
       - HERMES_REPO_SCANNER_KEY=${HERMES_REPO_SCANNER_KEY:-}
       - OPENCODE_API_KEY=${OPENCODE_API_KEY:-}
@@ -307,32 +252,23 @@ services:
       - LARK_USER_OPEN_ID=${LARK_USER_OPEN_ID:-}
       - LARK_CLI_IDM_APP_ID=${LARK_CLI_IDM_APP_ID:-}
       - LARK_CLI_IDM_APP_SECRET=${LARK_CLI_IDM_APP_SECRET:-}
-      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
-      - HERMES_PROFILE=daoyuan
-      # 语雀 MCP 访问 key：Hermes MCP 客户端按 ${VAR} 展开 config.yaml 的
-      # Authorization Bearer header；不注入容器环境则展开为空 → 401 连接失败。
       - MCP_YUQUE_MCP_API_KEY=${MCP_YUQUE_MCP_API_KEY:-}
-      # dailyinfo 只读 MCP（独立栈；URL/key 在容器内由 Hermes 展开）
-      - DAILYINFO_MCP_URL=${DAILYINFO_MCP_URL:-}
-      - DAILYINFO_MCP_KEY=${DAILYINFO_MCP_KEY:-}
-      # 论文清单 MCP：Bearer token 由服务端绑定到固定 actor Owen；URL 为空 = 停用
-      - PAPER_QUEUE_MCP_URL=${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}
-      - PAPER_QUEUE_DAOYUAN_TOKEN=${PAPER_QUEUE_DAOYUAN_TOKEN:-}
-      # 道元共享 TDAI 记忆（2026-11-11 起）：飞书已收紧为仅 owner，讨论不再
-      # 面向公共用户，因此与其他 profile 共用同一 Gateway（同一份 SQLite）。
-      # 配置侧 `memory.provider: memory_tencentdb` 由 entrypoint 幂等注入；
-      # 这里必须给 Gateway 地址，否则 provider 退回 127.0.0.1:8420 连不上。
       - MEMORY_TENCENTDB_GATEWAY_HOST=tdai-memory
       - MEMORY_TENCENTDB_GATEWAY_PORT=8420
-      # Feishu (道元·文献学者 — 仅指定用户可用；群聊仅 @ 回复)
-      - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}
-      - FEISHU_APP_SECRET=${DAOYUAN_FEISHU_APP_SECRET:-}
       - FEISHU_DOMAIN=feishu
       - FEISHU_CONNECTION_MODE=websocket
       - FEISHU_MARKDOWN_CARD=${FEISHU_MARKDOWN_CARD:-1}
       - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
       - FEISHU_LATEX_INLINE_IMAGE=${FEISHU_LATEX_INLINE_IMAGE:-0}
-      # 群聊：allowlist = 仅 FEISHU_ALLOWED_USERS（名单内用户）@ 时响应；open/disabled 可切换
+      - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
+      - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      - DAILYINFO_MCP_URL=${DAILYINFO_MCP_URL:-}
+      - DAILYINFO_MCP_KEY=${DAILYINFO_MCP_KEY:-}
+      - PAPER_QUEUE_MCP_URL=${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}
+      - PAPER_QUEUE_DAOYUAN_TOKEN=${PAPER_QUEUE_DAOYUAN_TOKEN:-}
+      - HERMES_PROFILE=daoyuan
+      - FEISHU_APP_ID=${DAOYUAN_FEISHU_APP_ID:-}
+      - FEISHU_APP_SECRET=${DAOYUAN_FEISHU_APP_SECRET:-}
       - FEISHU_GROUP_POLICY=${DAOYUAN_FEISHU_GROUP_POLICY:-allowlist}
       - FEISHU_ALLOWED_USERS=${DAOYUAN_FEISHU_ALLOWED_USERS:-}
     shm_size: "1g"
@@ -343,6 +279,7 @@ services:
           cpus: "2.0"
     networks:
       - myopenclaw-net
+  # <<< GENERATED
 
   # ── Hermes dashboard（可选，只读，与 gateway 同网络）─────────
   hermes-dashboard:
@@ -553,6 +490,7 @@ services:
     restart: unless-stopped
     volumes:
       - ${HOME}/.hermes:/root/.hermes:ro
+      - ${HOME}/.hermes-agents:/root/.hermes-agents:ro
       - ${HOME}/.openclaw:/root/.openclaw:ro
       - ${HOME}/.claude:/root/.claude:ro
       - ${HOME}/.cc-connect:/root/.cc-connect:ro

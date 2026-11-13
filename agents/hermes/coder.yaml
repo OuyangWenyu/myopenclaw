@@ -1,0 +1,40 @@
+# Coder profile (爱码士). This container is the only kanban dispatcher: a 60s
+# loop that claims ready cards and spawns workers. It does not decide anything.
+# Workers inherit this container's mounts (gitcode config, myagentdata,
+# aisecretary skills) and not the default profile's mail config or OneDrive
+# token. HERMES_KANBAN_DISPATCH_IN_GATEWAY is left unset, so Hermes's default
+# (true) applies. The other three containers set it to 0.
+# Guard: tests/test_hermes_kanban_wiring.py
+
+service: hermes-coder
+profile: coder
+# This bot's own Feishu app. Pointing it at the default app made this
+# container a second 爱玛士 and stole DMs (2026-10-12). Removing the mapping
+# drops the bot off Feishu (wired 2026-10-13).
+# Guard: tests/test_coder_feishu_app.py
+feishu_env_prefix: CODER_FEISHU
+command_extra: "--replace"
+port: "${HERMES_CODER_PORT:-8643}:8642"
+bundles:
+  - gitcode
+  - xiaomi
+  - zotero
+  - shared-rclone
+mcp:
+  - server-monitoring
+env:
+  DISCORD_BOT_TOKEN: "${DISCORD_BOT_TOKEN:-}"
+  DISCORD_ALLOWED_USERS: "${DISCORD_ALLOWED_USERS:-}"
+  DISCORD_REQUIRE_MENTION: "true"
+  PAPER_FETCH_DIR: /opt/data/skills/paper-fetch
+  ZOTERO_CONFIG_PATH: /opt/data/.config/zot/config.toml
+mounts:
+  - data
+  - gh
+  - opencode
+  - lark
+  - gitcode
+  - zotero-data
+  - team-skills
+  - myagentdata
+  - email-mask

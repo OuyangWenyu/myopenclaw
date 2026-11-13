@@ -1,0 +1,6 @@
+# Generated from agents/hermes/. Regenerate: uv run --with pyyaml scripts/render_agents.py
+phase	service	config_var	script	status_var	server
+early	hermes	HERMES_DEFAULT_CONFIG	ensure_hermes_server_monitoring.py	DEFAULT_MCP_STATUS	server-monitoring
+early	hermes-coder	CODER_CONFIG	ensure_hermes_server_monitoring.py	CODER_MCP_STATUS	server-monitoring
+early	hermes-daoyuan	DAOYUAN_CONFIG	ensure_hermes_dailyinfo.py	DAOYUAN_DAILYINFO_STATUS	dailyinfo
+late	hermes-daoyuan	DAOYUAN_CONFIG	ensure_hermes_paper_queue.py	DAOYUAN_PAPER_QUEUE_STATUS	paper-queue
