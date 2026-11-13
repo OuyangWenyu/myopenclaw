@@ -34,9 +34,11 @@ __pycache__/
 .pytest_cache/
 .venv/
 
+# ── Claude Code 本地开发目录（plans / prds / skills / settings 不随项目走）──
+.claude/
+
 # Node
 node_modules/
-.claude/worktrees/
 
 # ── Build context temporary files ──────────────────────────────────
 docker/hermes/.mylibrary-src/
