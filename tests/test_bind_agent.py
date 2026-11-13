@@ -35,8 +35,10 @@ FORBIDDEN_ENV_KEYS = frozenset(
 CHAT_SCOPES = [
     "im:message.p2p_msg:readonly",
     "im:message.group_at_msg:readonly",
+    "im:message:readonly",
     "im:message:send_as_bot",
     "im:resource",
+    "im:chat:readonly",
 ]
 
 
@@ -123,6 +125,64 @@ def test_materialize_refuses_a_missing_open_id(tmp_path: Path) -> None:
             model_env={"DEEPSEEK_API_KEY": "sk-test", "GLM_API_KEY": "glm-test"},
         )
     assert list(tmp_path.iterdir()) == []
+
+
+def test_materialize_refuses_when_the_model_key_is_missing(tmp_path: Path) -> None:
+    """An agent without the primary model key would connect and then fail every turn."""
+    bind_agent = _load()
+    with pytest.raises(bind_agent.BindError):
+        bind_agent.materialize(
+            tmp_path,
+            _credential(),
+            model_env={"GLM_API_KEY": "glm-test"},
+        )
+    assert not (tmp_path / "compose.yml").exists()
+    assert [path for path in tmp_path.iterdir() if path.is_dir()] == []
+
+
+def test_rescan_of_an_existing_app_needs_no_model_key(tmp_path: Path) -> None:
+    """The home already holds the key; re-scanning the same app must still work."""
+    bind_agent = _load()
+    first = bind_agent.materialize(
+        tmp_path,
+        _credential(),
+        model_env={"DEEPSEEK_API_KEY": "sk-test", "GLM_API_KEY": "glm-test"},
+    )
+    again = bind_agent.materialize(tmp_path, _credential(), model_env={})
+    assert again.created is False
+    assert again.home == first.home
+
+
+def test_cli_reports_a_missing_model_key_without_a_traceback(tmp_path: Path) -> None:
+    """The scan wrapper prints stderr verbatim; a traceback would bury the reason."""
+    env_file = tmp_path / "model.env"
+    env_file.write_text("GLM_API_KEY=glm-test\n", encoding="utf-8")
+    completed = subprocess.run(
+        [
+            sys.executable,
+            "scripts/bind_agent.py",
+            "--materialize-stdin",
+            "--root",
+            str(tmp_path / "agents"),
+            "--env-file",
+            str(env_file),
+        ],
+        cwd=REPO_ROOT,
+        input=json.dumps(
+            {
+                "client_id": "cli_test",
+                "client_secret": "secret-value",
+                "open_id": "ou_scanner",
+            }
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert completed.returncode == 1
+    assert "DEEPSEEK_API_KEY" in completed.stderr
+    assert "Traceback" not in completed.stderr
+    assert "secret-value" not in completed.stdout + completed.stderr
 
 
 def test_materialize_does_not_create_a_second_home_for_the_same_app(

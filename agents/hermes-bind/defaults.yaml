@@ -9,8 +9,12 @@ feishu:
   scopes:
     - im:message.p2p_msg:readonly
     - im:message.group_at_msg:readonly
+    - im:message:readonly
     - im:message:send_as_bot
     - im:resource
+    # Hermes asks for the chat name and for the message a reply quotes; without
+    # these two it logs 99991672 on every group turn. Both stay read-only.
+    - im:chat:readonly
   events:
     - im.message.receive_v1
   user_scopes: []

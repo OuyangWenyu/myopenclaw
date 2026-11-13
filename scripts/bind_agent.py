@@ -115,7 +115,8 @@ def materialize(
         The home and the compose document for every agent under ``root``.
 
     Raises:
-        BindError: ``open_id`` is empty. Nothing is created in that case.
+        BindError: ``open_id`` is empty, or the primary model key is missing.
+            Nothing is created in either case.
     """
     open_id = credential.open_id.strip()
     if not open_id:
@@ -132,6 +133,11 @@ def materialize(
         )
 
     defaults = load_defaults()
+    source = os.environ if model_env is None else model_env
+    if not str(source.get("DEEPSEEK_API_KEY", "")).strip():
+        raise BindError(
+            "DEEPSEEK_API_KEY is required to create an agent; set it in the repo .env"
+        )
     agent_id = _new_agent_id(root)
     staging = root / f".{agent_id}.tmp"
     home = root / agent_id
@@ -454,17 +460,21 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--root", help="Agents root for --materialize-stdin")
     parser.add_argument("--env-file", help="Dotenv file with the two model keys")
     args = parser.parse_args(argv)
-    if args.print_register_options:
-        print(json.dumps(register_options(load_defaults())))
-        return 0
-    if args.materialize_stdin:
-        if not args.root or not args.env_file:
-            parser.error("--materialize-stdin requires --root and --env-file")
-        payload = json.load(sys.stdin)
-        record = materialize_stdin(Path(args.root), payload, Path(args.env_file))
-        json.dump(record, sys.stdout)
-        sys.stdout.write("\n")
-        return 0
+    try:
+        if args.print_register_options:
+            print(json.dumps(register_options(load_defaults())))
+            return 0
+        if args.materialize_stdin:
+            if not args.root or not args.env_file:
+                parser.error("--materialize-stdin requires --root and --env-file")
+            payload = json.load(sys.stdin)
+            record = materialize_stdin(Path(args.root), payload, Path(args.env_file))
+            json.dump(record, sys.stdout)
+            sys.stdout.write("\n")
+            return 0
+    except BindError as error:
+        print(f"bind_agent.py: {error}", file=sys.stderr)
+        return 1
     parser.error("nothing to do")
     return 2
 
