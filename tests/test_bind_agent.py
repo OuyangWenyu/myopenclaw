@@ -19,7 +19,7 @@ import pytest
 import yaml
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-DEFAULTS_PATH = REPO_ROOT / "agents" / "hermes" / "bind-defaults.yaml"
+DEFAULTS_PATH = REPO_ROOT / "agents" / "hermes-bind" / "defaults.yaml"
 
 FORBIDDEN_ENV_KEYS = frozenset(
     {

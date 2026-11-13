@@ -1,6 +1,6 @@
 # Default capability for an agent created by a Feishu QR scan.
-# The bind service reads this file. It is not part of agents/hermes/order,
-# and it is not rendered into docker-compose.yml.
+# The bind service reads this file. It lives outside agents/hermes/ on purpose:
+# everything in that directory must be a renderer input listed in base.order.
 
 feishu:
   create_only: true
