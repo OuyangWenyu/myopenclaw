@@ -102,6 +102,14 @@ DAOYUAN_FEISHU_DM_CHAT_ID=oc_...   # 用 hermes -p daoyuan send --list feishu �
   Hermes 把失败告警投到同一私聊
 - 已知误报：`CONTENT_CHANGED` 偶发而内容其实没变（2026-11-10 papers 一次：读取窗口内
   宿主全树无任何写入，重读即恢复）。根因未证实，不要据此推断数据损坏
+  - **2026-11-15 定位并修复**：`dailyinfo-mcp` 的 `ReadOnlyQueries._signature()` 把
+    `st_ino` 算进签名，而 Docker Desktop 的 virtiofs 绑定挂载在容器内 `stat` 同一文件
+    会返回**不同 inode**（宿主机侧稳定，容器侧不稳定）⇒ 两次签名必然不同，
+    `CONTENT_CHANGED` 稳定复现，重试无效。日志证据：容器内连续三次 `os.stat` 同一
+    `/data/publications/...json` 得到三个不同 `st_ino`。已在 dailyinfo 侧去掉
+    `st_ino`（保留 mtime+size）并重建 `dailyinfo-mcp` 镜像，当天道元 5 类正文已补发。
+    本仓自检脚本会提示该根因，但**不会**自动改 dailyinfo 代码；若它再次出现，说明
+    镜像回退到了旧代码。
 - 脚本每次 `./scripts/start.sh` 覆盖安装（仓库是唯一版本源，不要手改 profile 里的副本）
 - `cron.wrap_response: false` 由 `scripts/ensure_hermes_cron_config.py` 幂等写入，
   否则消息会带 `Cronjob Response: …` 头尾样板
@@ -123,6 +131,46 @@ docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan \
 docker compose exec -T hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan \
   cron remove dailyinfo-digest
 ```
+
+## 每日推送自检（07:45）
+
+三路推送的完成时间：Discord 05:30–07:00、道元 07:30、网页 07:40。**07:45** 由宿主
+launchd 跑一次确定性自检，失败的通道做**一次幂等补救**并复检；同一时刻 DSH 还会跑一条
+agent 定时任务做根因诊断（见下）。
+
+```text
+launchd ai.myopenclaw.dailyinfo-push-check（07:45）
+  → python3 scripts/check_dailyinfo_push.py --fix
+      Discord: deliveries/discord/<cat>-<date>.json 必须 success → 否则重跑 scheduler job
+      网页:    deliveries/web/<cat>-<date>.json（等 07:40 的 publish 跑完）→ 否则 launchctl start
+      道元:    daoyuan cron executions.db 当天最后一条必须 completed → 否则 hermes cron run
+  → logs/dailyinfo-push-check.log（人读）+ logs/dailyinfo-push-check.json（状态）
+```
+
+- **预期分类**由当天的 canonical publication 决定（`publications/briefings/<Y>/<M>/<D>/<cat>/briefing.json`）；
+  某类当天没有内容（例如 arxiv 为空）就**不检查**，不会误报
+- **修复动作**：Discord → `python -m scripts.scheduler run-job push_early|push_papers|push_arxiv`
+  （同时把 scheduler 的失败状态记成成功）；网页 → `launchctl start ai.dailyinfo.web-publish`；
+  道元 → `hermes -p daoyuan cron run <job_id>`
+- **不重试已知确定性失败**：自检会先在容器里无投递地跑一遍 digest 采集并展开
+  `ExceptionGroup`，拿到真实错误码；`CONTENT_CHANGED` 这类重试无意义的错误只报告根因，
+  不再触发一次会往飞书私聊发失败告警的重跑
+- 退出码：`0` 三路都成功 / `1` 仍有失败 / `2` 配置错误；`--json` 供机器消费，
+  `--no-wait` 跳过等待进行中的 web/digest
+- 安装 / 手动触发：
+
+```bash
+./scripts/launchd/install-dailyinfo-push-check.sh   # 已含在 install-all-schedulers.sh 里
+launchctl start ai.myopenclaw.dailyinfo-push-check
+python3 scripts/check_dailyinfo_push.py             # 只检查
+python3 scripts/check_dailyinfo_push.py --fix       # 检查 + 补救 + 复检
+tail -f logs/dailyinfo-push-check.log
+```
+
+**DSH agent 任务**（同上 07:45，跨天连续会话）：读 `--json` 结果；三路都成功就只回一行
+结论；有失败则按根因排查（容器网络 / MCP 错误码 / 发布进程 / Hermes 投递），能修则修、
+修不了给出结论与下一步。它和 launchd 共用 `logs/.dailyinfo-push-check.lock`，后来者等
+前者跑完再复检，不会重复投递。
 
 ## 验证
 

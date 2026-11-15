@@ -120,6 +120,10 @@ docker compose logs -f hermes-daoyuan                                           
 # cd ~/code/dailyinfo && docker compose ps
 # cd ~/code/dailyinfo && docker compose exec scheduler python -m scripts.scheduler status
 # 本仓只注册 MCP 客户端：道元（Hermes daoyuan）+ 虾酱（OpenClaw 主网关）
+# 三路推送自检（每天 07:45 launchd；DSH 同一时刻做根因诊断）
+python3 scripts/check_dailyinfo_push.py          # 只检查：0=三路 ok / 1=有失败 / 2=配置错误
+python3 scripts/check_dailyinfo_push.py --fix    # 检查 + 幂等补救（重跑 job / 发布 / digest）+ 复检
+tail -f logs/dailyinfo-push-check.log            # 状态另存 logs/dailyinfo-push-check.json
 
 # Morning triage — Hermes cron skill (morning-triage-v2)
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list | grep "Daily Command"  # 查看 cron 状态
