@@ -76,6 +76,7 @@ nav:
       - OpenClaw 渠道: openclaw-channels.md
       - Hermes Skill 机制: hermes-skills.md
       - Hermes 看板 (kanban): kanban.md
+      - Hermes 语音（TTS/STT）: voice.md
       - 容器 / profile / .env 三层: hermes-topology.md
       - 扫码新增 Hermes: hermes-bind.md
       - 飞书 CLI (lark-cli): lark-cli.md

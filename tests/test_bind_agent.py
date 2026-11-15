@@ -103,6 +103,13 @@ def test_materialize_writes_local_memory_and_hides_the_secret(tmp_path: Path) ->
     assert config["memory"]["memory_enabled"] is True
     assert config["model"]["default"] == "deepseek-flash"
 
+    # New agents are born with the DeepSeek voice capability.
+    assert config["tts"]["provider"] == "deepseek"
+    assert config["stt"]["provider"] == "deepseek"
+    assert config["voice"]["auto_tts"] is True
+    assert config["tts"]["providers"]["deepseek"]["env_passthrough"] == ["DEEPSEEK_API_KEY"]
+    assert config["stt"]["providers"]["deepseek"]["env_passthrough"] == ["DEEPSEEK_API_KEY"]
+
     env_path = result.home / ".env"
     env_text = env_path.read_text(encoding="utf-8")
     assert "FEISHU_APP_SECRET=secret-value" in env_text

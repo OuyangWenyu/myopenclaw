@@ -181,6 +181,22 @@ COPY patch-image-limit.py /tmp/
 RUN /opt/hermes/.venv/bin/python3 /tmp/patch-image-limit.py && \
     rm -f /tmp/patch-image-limit.py
 
+# Auto-TTS writes its temp audio to /tmp/hermes_voice (gateway/platforms/base.py).
+# The upstream image pins HERMES_WRITE_SAFE_ROOT=/opt/data, so the TTS tool
+# rejects that path as "protected credential or system path" and the gateway
+# silently falls back to a text-only reply.  Add only the auto-TTS temp dir.
+ENV HERMES_WRITE_SAFE_ROOT=/opt/data:/tmp/hermes_voice
+
+# ── DeepSeek voice capability (TTS/ASR command providers) ────
+# Shipped in the image so every Hermes profile and every bind agent gets the
+# same runtime; config injection happens at provisioning time
+# (scripts/start.sh + scripts/bind_agent.py).  Stdlib-only; ffmpeg is already
+# present from the base image.
+COPY voice/ /opt/hermes-voice/
+RUN chmod 755 /opt/hermes-voice/ds_voice.py && \
+    chmod 644 /opt/hermes-voice/voice_config.py && \
+    rm -rf /opt/hermes-voice/__pycache__
+
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the
