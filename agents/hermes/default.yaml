@@ -22,6 +22,17 @@ bundles:
 mcp:
   - server-monitoring
 env:
+  # 钉钉 CLI 的配置/token 目录（宿主机 ~/.dws-cli，只挂给本 profile）。
+  # 不设这个变量 dws 会退回容器内 $HOME/.dws，而 $HOME=/opt/data 是四个
+  # profile 共享的数据卷 —— 那等于把个人钉钉 token 交给 coder/道元/finance。
+  # 只在这里设，其余 profile 的 compose 定义里没有这两行。
+  # DWS_KEYCHAIN_DIR 是**真正的 token 落点**：dws 把凭据放进
+  # `$DWS_KEYCHAIN_DIR/dws-cli/`（默认 `$HOME/.local/share/dws-cli`，即
+  # /root 里 —— 容器重建就丢）。DWS_CONFIG_DIR 只管 app.json / identity /
+  # logs / cache。两个都要指到挂载卷上，缺一个就会出现「登录过了但重建即失效」
+  # 或「token 落在 /root」。守卫: tests/test_dws_cli_wiring.py
+  DWS_CONFIG_DIR: /opt/dws-config
+  DWS_KEYCHAIN_DIR: /opt/dws-config/keychain
   # Non-secret Outlook settings. The repo .env is the single source.
   # ortie holds the OAuth token; it is not passed through the environment.
   EMAIL_OUTLOOK_ADDRESS: "${EMAIL_OUTLOOK_ADDRESS:-}"
@@ -40,6 +51,8 @@ env:
 mounts:
   - data
   - onedrive
+  - dws
+  - dws-skill
   - gh
   - opencode
   - lark

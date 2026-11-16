@@ -75,6 +75,14 @@ bundles:
     GDRIVE_PAPERS_LOCAL_PATH: "${GDRIVE_PAPERS_LOCAL_PATH:-}"
   shared-rclone:
     RCLONE_CONFIG: /opt/data/rclone/rclone.conf
+  # 钉钉 CLI 只给默认 profile（default.yaml 自己设 DWS_CONFIG_DIR/DWS_KEYCHAIN_DIR）。
+  # 其余三个 profile 也拿到 dws 二进制（与 gh 一致），但把它的配置/凭据目录钉到
+  # 容器内 /tmp：它们的 $HOME=/opt/data 是四个容器**共享**的数据卷，而且进云备份 ——
+  # 随手跑一次 dws 就会往那里写 dek/cache（2026-11-16 实测残留过一个 dek）。
+  # 指到 /tmp 后即使有人误跑 `dws auth login`，token 也只活在该容器内、不跨 profile。
+  dws-off:
+    DWS_CONFIG_DIR: /tmp/dws/config
+    DWS_KEYCHAIN_DIR: /tmp/dws/keychain
 
 mounts:
   data: "${HOME}/.hermes:/opt/data"
@@ -82,6 +90,11 @@ mounts:
   gh: "${HOME}/.config/gh:/opt/gh-config"
   opencode: "${HOME}/.config/opencode:/opt/opencode-config"
   lark: "${HOME}/.lark-cli:/opt/lark-config"
+  # 钉钉 CLI 的用户 token 目录 + 官方 skill 源码。两者都只在 default.yaml 里
+  # 被列出来 —— 其余 profile 不挂，等于没有钉钉能力（用户 2026-11-16 明确要求
+  # 只有爱玛士这一个 agent 有）。DWS_CONFIG_DIR 也只在 default.yaml 里设。
+  dws: "${HOME}/.dws-cli:/opt/dws-config"
+  dws-skill: ./skills/dws:/opt/hermes-skills/dws:ro
   zotero-data: "${HOME}/Zotero:/opt/zotero-data:ro"
   gitcode: "${HOME}/.gitcode:/opt/gitcode-config"
   aisecretary-skills: "${HOME}/code/aisecretary/skills:/opt/data/code/aisecretary/skills:ro"

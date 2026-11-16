@@ -197,6 +197,33 @@ RUN chmod 755 /opt/hermes-voice/ds_voice.py && \
     chmod 644 /opt/hermes-voice/voice_config.py && \
     rm -rf /opt/hermes-voice/__pycache__
 
+# ── 钉钉 Workspace CLI (dws) ──────────────────────────────────
+# 官方 CLI（npm 包，内含 darwin/linux/win 五平台预编译 Go 二进制 + 官方 skill），
+# 覆盖 AI表格/日历/通讯录/群聊/待办/审批/日志/文档/云盘/AI听记/邮箱/知识库等
+# 17 个钉钉产品。**只有默认 profile（爱玛士）可用**：二进制全 profile 可见
+# （与 gh / himalaya 一致），但 token 目录只挂给 hermes（agents/hermes/
+# default.yaml），其余 profile 既没有 DWS_CONFIG_DIR 也没有 token，调不通。
+# 认证是**用户身份** OAuth（`dws auth login --device`，一次性）。凭据落点有两处：
+# `DWS_CONFIG_DIR`（app.json / identity / logs / cache）与 `DWS_KEYCHAIN_DIR`
+# （**真正的 token**：`$DWS_KEYCHAIN_DIR/dws-cli/auth-token.enc` + `dek`，
+# 默认 `$HOME/.local/share/dws-cli` = 容器内 /root，重建即丢）。两个都只在
+# default.yaml 里指到挂载卷 /opt/dws-config —— 只设前者会出现「登录过但重建即失效」。
+# 与 lark-cli 的 bot 身份不同，这里不能靠 .env 里的 AppKey 免登录。
+# 守卫: tests/test_dws_cli_wiring.py
+# 注意：postinstall 会把官方 skill 复制进 $HOME/.hermes/skills 等 agent 目录，
+# 构建期 HOME 是 /root —— 那是纯垃圾，仓库里另存一份 skills/dws 由 start.sh
+# 链进默认 profile。HOME/cache 指到 /tmp 就是为了避开这个副作用。
+# unzip 是 postinstall 解 dws-skills.zip 的硬依赖（基础镜像没带；tar 有），
+# 装完即卸 —— 运行期不需要。
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends unzip && \
+    HOME=/tmp/dws-npm-home npm_config_cache=/tmp/dws-npm-cache \
+      npm install -g dingtalk-workspace-cli@1.0.26 && \
+    rm -rf /tmp/dws-npm-home /tmp/dws-npm-cache && \
+    apt-get purge -y unzip && apt-get autoremove -y && rm -rf /var/lib/apt/lists/* && \
+    mkdir -p /opt/dws-config && chown hermes:hermes /opt/dws-config && \
+    HOME=/tmp/dws-verify dws --version && rm -rf /tmp/dws-verify
+
 # ── Entrypoint wrapper ──────────────────────────────────────
 # gh expects config at $HOME/.config/gh/ (= /opt/data/.config/gh/)
 # because hermes user home is /opt/data. We symlink it to the

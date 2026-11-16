@@ -20,6 +20,7 @@ bundles:
   - xiaomi
   - zotero
   - shared-rclone
+  - dws-off
 mcp:
   - server-monitoring
 env:

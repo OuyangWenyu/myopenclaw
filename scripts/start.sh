@@ -156,7 +156,10 @@ if [[ ! -f "${GC_BIN}" ]]; then
 fi
 
 # ── 确保工具配置目录存在（volume mount 需要）──────────────────
-mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode" "${HOME}/.lark-cli"
+# 钉钉 CLI 的 token 目录只挂给默认 profile（爱玛士），宿主机目录必须先存在，
+# 否则 Docker 以 root 建它，容器里的 hermes 用户随后写不进 token。
+mkdir -p "${HOME}/.config/gh" "${HOME}/.config/opencode" "${HOME}/.lark-cli" \
+  "${HOME}/.dws-cli"
 mkdir -p "${HOME}/.myagentdata/aisecretary"
 mkdir -p "${HOME}/.myagentdata/tdai-memory"
 mkdir -p "${HOME}/.myagentdata/agentops"
@@ -455,6 +458,11 @@ ensure_skill_symlink "${HOME}/.hermes/skills/server-monitoring-digest" \
   "/opt/hermes-skills/server-monitoring-digest" "server-monitoring-digest"
 ensure_skill_symlink "${HOME}/.hermes/profiles/coder/skills/server-monitoring-digest" \
   "/opt/hermes-skills/server-monitoring-digest" "server-monitoring-digest"
+
+# 钉钉 CLI（dws）：token 目录 /opt/dws-config 只挂给默认 profile，所以 skill 也只
+# 链进 ~/.hermes/skills（默认 profile 的 skills 目录）。coder/道元/finance 即使
+# 看得见 /opt/hermes-skills/dws 也不会加载 —— 它们的 skills 目录里没有这条链接。
+ensure_skill_symlink "${HOME}/.hermes/skills/dws" "/opt/hermes-skills/dws" "dws"
 
 # 论文清单 skill：唯一一份源码在 skills/paper-queue，道元通过 symlink 复用。
 _PQ_SKILL_LINK="${HOME}/.hermes/profiles/daoyuan/skills/paper-queue"

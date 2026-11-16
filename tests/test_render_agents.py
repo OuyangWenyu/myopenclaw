@@ -221,6 +221,7 @@ def test_real_manifests_list_the_four_services_once() -> None:
         "xiaomi",
         "zotero",
         "shared-rclone",
+        "dws-off",
     ]
     assert "GDRIVE_PAPERS_LOCAL_PATH" in base["bundles"]["zotero"]
     assert "fragments" not in base
