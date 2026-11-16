@@ -42,14 +42,15 @@ DEFAULT_PATH = "/opt/hermes/agent/error_classifier.py"
 SENTINEL = "[myopenclaw] deepseek unsupported-image = size limit"
 PATTERN = "uploaded an unsupported image"
 
-# 上游 tuple 的末尾两项：最后一条 pattern + 收尾括号。**必须带上括号** ——
-# "patches after processing" 在紧邻的注释里也出现过一次（grep -c = 2），
-# 只锚那一行会二次命中。
-ANCHOR_OLD = '''    "patches after processing",
+# 上游 tuple 的末行 + 收尾括号。**必须带上括号** —— "patches after processing"
+# 在紧邻的注释里也出现过一次（grep -c = 2），只锚那一行会二次命中。
+# 2026-11-15 上游把最后三条 pattern 并到了一行（v0.23.0 起），锚点随之更新；
+# 之前是单独一行 "patches after processing", —— 那次漂移让 build 直接失败。
+ANCHOR_OLD = '''    "patches after processing", "make sure your payload is below", "streamreadconstraints.getmaxstringlength",
 )
 '''
 
-ANCHOR_NEW = f'''    "patches after processing",
+ANCHOR_NEW = f'''    "patches after processing", "make sure your payload is below", "streamreadconstraints.getmaxstringlength",
     # {SENTINEL}
     # DeepSeek 把「尺寸超限」说成 "unsupported image"（实测 1220×24948 的长截图；
     # 缩到最长边 8000px 即通过），措辞里没有任何尺寸词汇 ⇒ 上游判成 format_error

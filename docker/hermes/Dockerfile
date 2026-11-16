@@ -18,7 +18,12 @@ RUN cargo install --git https://github.com/pimalaya/cardamum.git --rev 771879c1d
 RUN cargo install himalaya --version 1.2.0 --locked --features oauth2
 
 # ── Stage 2: Hermes custom image ──────────────────────────────
-FROM nousresearch/hermes-agent:latest
+# 上游 base **钉版本**（原来是 :latest，不钉）。原因：v0.23.1（2026-11-10）把
+# feishu adapter 的 send() 重构成 _send_one + send_chunks，patch-feishu.py 的 A3
+# 锚点只对得上 v0.23.0 及更早；不钉版本时每次 build 都可能拉到新上游，锚点随机失配。
+# 升级 base 之前，先用目标版本的文件重跑一遍 patch-feishu.py / patch-image-limit.py
+# 的锚点校验（两个脚本失配都是硬失败）。
+FROM nousresearch/hermes-agent:v0.23.0
 
 # Base image runs as root initially (entrypoint does gosu drop),
 # but Dockerfile USER may be set to hermes — switch to root for installs.
@@ -96,6 +101,16 @@ RUN npm install -g @tencentdb-agent-memory/memory-tencentdb@0.3.6
 # Copy the static binary from the official uv image — no pip/python3-pip needed.
 # https://docs.astral.sh/uv/guides/integration/docker/
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
+
+# ── Feishu 平台 SDK（platform 插件的运行时依赖）──────────────────
+# v0.23 的 base image 不再预装 [feishu] extra；plugin.yaml 的 requires_env 只校验
+# 凭据，SDK 缺失时网关启动会报 "requirements not met" 并跳过飞书平台
+# （日志：Failed to download lark-oapi==1.7.5）。版本与上游 hermes-agent[feishu]
+# 声明的保持一致。构建时可换源（国内网络 PyPI 常超时）：
+#   docker compose build --build-arg PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple hermes
+ARG PIP_INDEX_URL=https://pypi.org/simple
+RUN uv pip install --index-url "${PIP_INDEX_URL}" \
+        --python /opt/hermes/.venv/bin/python3 lark-oapi==1.7.5
 
 # ── Install mylibrary (hydrolitagent) — local source preferred, git fallback ──
 # start.sh rsyncs ~/code/mylibrary into .mylibrary-src/ before build when available.
