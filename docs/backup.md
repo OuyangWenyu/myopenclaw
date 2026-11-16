@@ -65,6 +65,16 @@ backup-all-docker.sh
 > ② 带 `-cmd .timeout 5000` 拿锁，撞上写事务提交不硬失败；③ 源库旁边若躺着**真的**
 > hot journal（上次写崩留下的），只读热备会响亮拒绝 —— fail-loud，别改成静默跳过。
 > 0 字节的 `*.lock` 与 4KB 空库（generation-writer）是占位文件，裸 rsync 即忠实还原。
+>
+> **生产 vs 测试的 sqlite3 不是同一个**（2026-11-16 排查「macOS 专属红」时确认）：
+> 生产热备跑在 `backup-cron`（Alpine，`sqlite3 3.45.3`）；而 `tests/test_ops_defaults.py`
+> 里的行为用例是**在宿主机直接 `bash hermes/scripts/backup.sh`**，用的是 PATH 上的
+> `sqlite3` —— macOS 是 Apple 的 `/usr/bin/sqlite3`（3.54.0），CI 是 `ubuntu-latest`
+> 自带的 3.45.x。两者的**偶然行为**不同（例：普通读写打开 WAL 库后关闭时，Apple 版
+> 会留下 0 字节 `-wal` + `-shm`，Ubuntu 版会清理），所以行为断言不能依赖这种副作用
+> —— 读快照副本一律走 `file:<path>?immutable=1`。另注：`hermes` 镜像里**没有**
+> `sqlite3` 二进制（只有 python 的 libsqlite3），热备脚本只该在 `backup-cron`
+> 或宿主机手动跑（缺 sqlite3 时脚本 fail-loud，不做 `cp` 兜底）。
 
 ## 不备份的内容
 
