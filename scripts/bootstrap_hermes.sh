@@ -469,7 +469,7 @@ else:
     install_skill_files()
     action(f"configured Hermes MCP server '{server_name}'")
     action(f"url: {url}")
-    action("transport: sse")
+    action("transport: streamable-http（http(s) URL 默认；不再写 sse）")
     action("timeout: 900")
     action(f"Bearer key stored in {env_path} as {ENV_NAME}")
 PY
