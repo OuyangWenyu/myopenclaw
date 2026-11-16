@@ -43,19 +43,21 @@ if ! grep -q '^GH_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
   echo "   在 .env 中设置 GH_TOKEN（OuyangWenyu 个人 GitHub 令牌）"
 fi
 
-# ── 检查 YUQUE_TOKEN 是否设置（本机语雀 MCP 服务端用）────────
-# 缺 token 时 yuque-mcp 容器照常 Up，但每夜快照与全部语雀工具静默失败 ——
-# 这里大声警告（不阻断：其余服务不受影响）。
-if ! grep -q '^YUQUE_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
-  echo "   ⚠️  YUQUE_TOKEN 未设置 — 语雀 MCP 快照/查询将失败"
-  echo "   语雀后台创建只读 token（repo:read + doc:read）后写入 .env"
-fi
+# ── 检查语雀自建模式的前置（仅 --profile embedded-yuque / YUQUE_EMBEDDED=1）──
+# 默认是外部接入（团队服务器 /mcp），既不需要 YUQUE_TOKEN，也不起本地容器（#102）。
+if [[ "${YUQUE_EMBEDDED:-0}" == "1" || "${COMPOSE_PROFILES:-}" == *embedded-yuque* ]]; then
+  # 缺 token 时 yuque-mcp 容器照常 Up，但每夜快照与全部语雀工具静默失败 ——
+  # 这里大声警告（不阻断：其余服务不受影响）。
+  if ! grep -q '^YUQUE_TOKEN=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+    echo "   ⚠️  YUQUE_TOKEN 未设置 — 语雀 MCP 快照/查询将失败"
+    echo "   语雀后台创建只读 token（repo:read + doc:read）后写入 .env"
+  fi
 
-# ── 检查 MCP_YUQUE_MCP_API_KEY 是否设置（yuque-mcp 服务端 Bearer key）──
-# 缺 key 时上游行为是**无认证直通**：myopenclaw-net 上任意容器（含可被提示
-# 注入的 agent）都能免鉴权读团队文档。监控只接受 401 探针兜底，这里先警告。
-if ! grep -q '^MCP_YUQUE_MCP_API_KEY=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
-  echo "   ⚠️  MCP_YUQUE_MCP_API_KEY 未设置 — yuque-mcp 将无认证直通（网内容器可直读团队文档）"
+  # 缺 key 时上游行为是**无认证直通**：myopenclaw-net 上任意容器（含可被提示
+  # 注入的 agent）都能免鉴权读团队文档。监控只接受 401 探针兜底，这里先警告。
+  if ! grep -q '^MCP_YUQUE_MCP_API_KEY=.\+' "${REPO_ROOT}/.env" 2>/dev/null; then
+    echo "   ⚠️  MCP_YUQUE_MCP_API_KEY 未设置 — yuque-mcp 将无认证直通（网内容器可直读团队文档）"
+  fi
 fi
 
 # Read GDRIVE_PAPERS_LOCAL_PATH from .env (can't source directly — cron expressions break bash)

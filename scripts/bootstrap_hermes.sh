@@ -14,8 +14,8 @@
 #   HERMES_HOME=$HOME/.hermes
 #
 # Usage:
-#   YUQUE_MCP_URL=http://yuque-mcp:18001/sse MCP_API_KEY=xxx ./scripts/bootstrap_hermes.sh
-#   ./scripts/bootstrap_hermes.sh --url http://yuque-mcp:18001/sse --api-key xxx
+#   YUQUE_MCP_URL=https://jupyterhub.waterism.com:18001/mcp MCP_API_KEY=xxx ./scripts/bootstrap_hermes.sh
+#   ./scripts/bootstrap_hermes.sh --url https://jupyterhub.waterism.com:18001/mcp --api-key xxx
 #   ./scripts/bootstrap_hermes.sh --dry-run
 #   ./scripts/bootstrap_hermes.sh --disable
 
@@ -39,8 +39,8 @@ Usage:
   bootstrap_hermes.sh [options]
 
 Options:
-  --url URL              Yuque MCP SSE URL, e.g. http://yuque-mcp:18001/sse
-                         (default: the local compose service; see docs/yuque-mcp-hermes.md)
+  --url URL              Yuque MCP endpoint, e.g. https://jupyterhub.waterism.com:18001/mcp
+                         (default: $YUQUE_MCP_URL; see docs/yuque-mcp-hermes.md)
   --api-key KEY          MCP API key for Bearer auth. Not printed by the script.
   --hermes-home PATH     Hermes home directory. Default: auto-detect ~/.hermes first,
                          then $HERMES_HOME if it contains config.yaml.
@@ -337,7 +337,8 @@ def configure_server(config: dict) -> bool:
 
     servers[server_name] = {
         "url": url,
-        "transport": "sse",
+        # 不写 transport：Hermes 对 http(s) URL 默认走 Streamable HTTP（/mcp）。
+        # 旧值 "sse" 会让客户端强制 SSE，而团队服务（上游 383552a 起）已移除 /sse。
         "timeout": 900,
         "headers": {"Authorization": f"Bearer ${{{ENV_NAME}}}"},
         "enabled": True,

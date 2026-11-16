@@ -1,6 +1,8 @@
 # 语雀 MCP 接入（Hermes）
 
-> 最后更新：2026-10-09（本机服务端化，issue #79）
+> 最后更新：2026-11-16（#102：默认改为外部客户端接入，自建降级为 opt-in）
+
+> **拓扑变更（2026-11-16，#102）**：团队服务器已部署语雀 MCP，且已升级到 **Streamable HTTP**（`/mcp`，旧的 `/sse` 已移除）。本仓默认**不再启动**本机 `yuque-mcp` 容器，只做客户端接入；自建模式保留为 opt-in：`docker compose --profile embedded-yuque up -d yuque-mcp`。下文"本机化"相关段落只在该模式下适用。
 
 本机通过**本机 docker 服务** `yuque-mcp`（`yuque_mcp_server` 的 `RUN_MODE=cloud`/SSE 部署）接入语雀知识库：读取、搜索、备份知识库并查询服务端生成的变更报告。服务端自持语雀只读 token、与消费方同在 `myopenclaw-net`，**不依赖 UniVPN**；校内服务器 `<CAMPUS_HOST>` 那套继续给团队成员走 UniVPN，两边互不影响。
 
@@ -22,17 +24,19 @@
 仓库根 `.env`（gitignored）中：
 
 ```env
-# 客户端 URL（hermes bootstrap 与天一使用；容器名直连，不经宿主）
-YUQUE_MCP_URL=http://yuque-mcp:18001/sse
-# 服务端与客户端共享的访问 key —— 单一来源：compose 同时喂两边（不一致 ⇒ 每次 401）
+# 客户端 URL：默认连团队服务器（Streamable HTTP，路径 /mcp）
+YUQUE_MCP_URL=https://jupyterhub.waterism.com:18001/mcp
+# 内网直连（需 UniVPN）：http://<MCP_HOST>:18001/mcp
+# Bearer key（向管理员申请；与天一的第二份拷贝必须同值）
 MCP_YUQUE_MCP_API_KEY=xxxxx
-# 语雀只读 token（服务端消费；语雀后台创建：repo:read + doc:read）
-YUQUE_TOKEN=your_yuque_token_here
-# 监控知识库（JSON 数组，name/namespace；见架构边界一节）
-YUQUE_CHANGE_REPOS_JSON=[{"name":"技术交流","namespace":"kgo8gd/tnld77"},{"name":"建设方案","namespace":"kgo8gd/xnedwc"},{"name":"基础学习","namespace":"kgo8gd/owoc3p"}]
+
+# ── 仅自建模式（docker compose --profile embedded-yuque）─────────────
+# YUQUE_MCP_URL=http://yuque-mcp:18001/mcp     # 注意：同样是 /mcp，/sse 已移除
+# YUQUE_TOKEN=your_yuque_token_here            # 语雀后台：repo:read + doc:read
+# YUQUE_CHANGE_REPOS_JSON=[{"name":"技术交流","namespace":"kgo8gd/tnld77"},{"name":"建设方案","namespace":"kgo8gd/xnedwc"},{"name":"基础学习","namespace":"kgo8gd/owoc3p"}]
 ```
 
-`.env.tianyi-bot` 中：`TIANYI_BOT_YUQUE_MCP_URL=http://yuque-mcp:18001/sse`，`TIANYI_BOT_MCP_YUQUE_MCP_API_KEY` 与上面 key **同值**。
+`.env.tianyi-bot` 中：`TIANYI_BOT_YUQUE_MCP_URL=https://jupyterhub.waterism.com:18001/mcp`（自建时改 `http://yuque-mcp:18001/mcp`），`TIANYI_BOT_MCP_YUQUE_MCP_API_KEY` 与上面 key **同值**。
 
 ## 注册 MCP 服务
 

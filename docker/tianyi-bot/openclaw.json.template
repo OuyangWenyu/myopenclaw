@@ -105,7 +105,7 @@
       },
       "yuque-mcp": {
         "url": "__YUQUE_MCP_URL__",
-        "transport": "sse",
+        "transport": "streamable-http",
         "headers": {
           "authorization": "Bearer ${MCP_YUQUE_MCP_API_KEY}"
         },

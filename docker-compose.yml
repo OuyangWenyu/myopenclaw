@@ -692,6 +692,10 @@ services:
       dockerfile: Dockerfile
     image: myopenclaw/yuque-mcp:latest
     container_name: yuque-mcp
+    # 默认**不启动**：团队已在服务器部署语雀 MCP，本仓默认只做客户端接入（#102）。
+    # 需要独立数据/离线自建时显式启用：
+    #   docker compose --profile embedded-yuque up -d yuque-mcp
+    profiles: ["embedded-yuque"]
     restart: unless-stopped
     user: root
     volumes:
