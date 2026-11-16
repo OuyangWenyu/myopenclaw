@@ -459,10 +459,27 @@ class TestHermesCronDbHotCopy:
         for rel in ("cron/executions.db", "cron/notepad.db"):
             copy = snap / rel
             assert copy.stat().st_size > 0, f"{rel} 热备产物是 0 字节"
-            rows = subprocess.run(["sqlite3", str(copy), "SELECT count(*) FROM t;"],
-                                  capture_output=True, text=True, check=True)
+            # ⚠️ 必须用 immutable=1 读副本。`.backup` 出来的副本继承源库的
+            # journal_mode=wal，普通读写打开它会在**快照目录里**生出 -wal/-shm；
+            # 关闭时清不清理取决于读取器构建 —— Apple 的 /usr/bin/sqlite3（3.54.0）
+            # 保留，Ubuntu 24.04 的 3.45.1 与 python 的 libsqlite3 3.53.4 会清理。
+            # 2026-11-16 排查：这条断言因此长期「macOS 假红 / CI 假绿」，它测的是
+            # 读取器的副作用，不是备份脚本。（-readonly 也不行：WAL 库缺 -shm 时
+            # 只读打开直接 CANTOPEN。）
+            rows = subprocess.run(
+                ["sqlite3", f"file:{copy}?immutable=1", "SELECT count(*) FROM t;"],
+                capture_output=True, text=True, check=True)
             assert rows.stdout.strip() == "1", f"{rel} 的热备副本读不出数据"
-        assert not (snap / "cron" / "executions.db-wal").exists(), "sidecar 不该进快照"
+        # 快照里只许有副本本身：不许 -wal/-shm，也不许热备的中间产物（.tmp / .tmp-wal）。
+        for rel in ("cron/executions.db", "cron/notepad.db"):
+            for sidecar in ("", "-wal", "-shm"):
+                assert (snap / f"{rel}{sidecar}").exists() == (sidecar == ""), (
+                    f"快照里不该出现 {rel}{sidecar}"
+                )
+            for leftover in (".tmp", ".tmp-wal", ".tmp-shm"):
+                assert not (snap / f"{rel}{leftover}").exists(), (
+                    f"快照里残留热备中间产物 {rel}{leftover}"
+                )
 
 
 @pytest.mark.skipif(shutil.which("sqlite3") is None,
