@@ -75,6 +75,13 @@ backup-all-docker.sh
 > —— 读快照副本一律走 `file:<path>?immutable=1`。另注：`hermes` 镜像里**没有**
 > `sqlite3` 二进制（只有 python 的 libsqlite3），热备脚本只该在 `backup-cron`
 > 或宿主机手动跑（缺 sqlite3 时脚本 fail-loud，不做 `cp` 兜底）。
+>
+> **热备的行为契约在生产镜像里验**：`tests/test_ops_defaults.py` 有两条互补用例 ——
+> `TestHermesCronDbHotCopy`（宿主快速预检）与 `TestHermesCronDbHotCopyInContainer`
+> （把同一场景塞进 `backup-cron` 镜像跑，种子库与副本校验都用镜像自带的 sqlite）。
+> 后者是契约、前者只是快检；镜像缺失时后者 skip，CI 会先
+> `docker build -t myopenclaw-backup-cron:ci ./docker/backup-cron` 再跑。
+> 新加的行为用例请照这个形状写：**不要断言宿主工具链的偶然副作用**。
 
 ## 不备份的内容
 

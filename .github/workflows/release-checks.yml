@@ -54,7 +54,16 @@ jobs:
       - name: Install the Feishu bind tool
         run: npm ci --prefix services/agent-bind
 
+      - name: Build backup-cron image
+        # 容器内热备用例（tests/test_ops_defaults.py::TestHermesCronDbHotCopyInContainer）
+        # 要跑在**生产镜像**里：Alpine + sqlite 3.45.x。宿主的 sqlite（macOS Apple
+        # 3.54 / Ubuntu runner 3.45.x）行为不同，2026-11-16 因此出过「本机红 / CI 绿」。
+        run: docker build --tag myopenclaw-backup-cron:ci ./docker/backup-cron
+
       - name: Run tests
+        env:
+          # 让容器内热备用例用上面这个镜像；不设则回退默认名，缺失即 skip
+          BACKUP_CRON_IMAGE: myopenclaw-backup-cron:ci
         run: uv run --with pytest --with pyyaml --with pylatexenc pytest tests/ -q
 
       - name: Build docs strictly
