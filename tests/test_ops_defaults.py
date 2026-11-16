@@ -495,12 +495,26 @@ _BACKUP_CRON_IMAGE = os.environ.get("BACKUP_CRON_IMAGE", "myopenclaw-backup-cron
 
 
 def _backup_cron_image() -> str | None:
-    """返回可用的 backup-cron 镜像名；宿主没有 docker 或镜像不存在时返回 None。"""
+    """返回可用的 backup-cron 镜像名；不可用时按「是否显式指定」区分 skip / fail。
+
+    - `BACKUP_CRON_IMAGE` 未设（默认名也找不到）：本机没 build 过镜像 → **skip**，
+      不把「没建镜像」变成红灯；
+    - `BACKUP_CRON_IMAGE` 已设（CI 的 workflow 就是这么传的）：说明镜像**应该**在，
+      找不到即 **fail** —— 否则 build 步骤坏掉会被 skip 静默吞掉，契约悄悄失效。
+    """
+    explicit = os.environ.get("BACKUP_CRON_IMAGE")
     if shutil.which("docker") is None:
+        if explicit:
+            pytest.fail("BACKUP_CRON_IMAGE 已设置，但宿主机没有 docker CLI")
         return None
     probe = subprocess.run(["docker", "image", "inspect", _BACKUP_CRON_IMAGE],
                            capture_output=True)
-    return _BACKUP_CRON_IMAGE if probe.returncode == 0 else None
+    if probe.returncode != 0:
+        if explicit:
+            pytest.fail(f"BACKUP_CRON_IMAGE={_BACKUP_CRON_IMAGE} 不存在"
+                        "（CI 应先用 docker build 建出来）")
+        return None
+    return _BACKUP_CRON_IMAGE
 
 
 class TestHermesCronDbHotCopyInContainer:
