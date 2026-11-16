@@ -30,7 +30,7 @@
 | 论文清单 | 道元（飞书）只记不下 → paper-queue MCP（固定归属 Owen）；下载由 mylibrary 离线完成；每日 07:20 自动清理已入库 Zotero 的条目 | [mylibrary](https://github.com/OuyangWenyu/mylibrary) |
 | 🌐 研发日报 | repo-scanner MCP 采集 35 仓库 → Hermes skill → 飞书推送；天一 bot 复用同源读能力（团队服务，服务器部署见 [server-deploy](docs/server-deploy.md)） | [git-contribution-stats](https://gitcode.com/dlut-water/git-contribution-stats) |
 | 🌐 水文智能问答 | zhixun 知汛助手 — OpenClaw → **远程水文 MCP（Bearer）** → 飞书 bot（**团队公共 bot**；背后的 zhixun-agent 水文 MCP 即**团队服务**；独立栈；本机 MCP 容器仅 `--with-local-mcp` 调试；服务器侧部署清单待补，见 [server-deploy](docs/server-deploy.md)） | [zhixun-agent](https://gitcode.com/dlut-water/zhixun-agent) |
-| 论文管线 | paper-fetch 下载 → Google Drive 上传 → Zotero 入库 | — |
+| 论文管线 | mylibrary 的 `run-paper-pipeline.sh`（下载 → Google Drive 上传 → Zotero 入库）；原 paper-fetch skill 已停用（[#95](https://github.com/OuyangWenyu/myopenclaw/issues/95)） | — |
 | 事务追踪 | aisecretary MCP 服务 → SQLite 持久化 | [aisecretary](https://github.com/iHeadWater/aisecretary) |
 | 邮件 | himalaya CLI 邮件客户端（IMAP/SMTP 多账户；Outlook 走 ortie OAuth；仅爱玛士可用，其余 agent 拒绝访问） | — |
 | 联系人 | cardamum CLI 联系人管理（vdir 后端，vCard） | — |

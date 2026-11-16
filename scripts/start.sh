@@ -467,30 +467,12 @@ print('done')
   fi
 fi
 
-# ── 确保 skills 目录存在并安装 paper-fetch ───────────────────────
-install_paper_fetch() {
-  local skills_dir="$1"
-  local label="$2"
-  mkdir -p "${skills_dir}"
-  # Check idempotently: .git exists AND SKILL.md at root (not monorepo subdir)
-  if [[ -d "${skills_dir}/paper-fetch/.git" && -f "${skills_dir}/paper-fetch/SKILL.md" ]]; then
-    echo "   ✅ paper-fetch skill 已存在于 ${label}，跳过安装"
-    return
-  fi
-  echo "   📥 安装 paper-fetch skill 到 ${label}（公开论文 PDF 下载器）..."
-  if [[ -d "${skills_dir}/paper-fetch" ]]; then
-    rm -rf "${skills_dir}/paper-fetch"
-  fi
-  git clone https://github.com/Agents365-ai/paper-fetch.git "${skills_dir}/paper-fetch"
-  # Repo is a monorepo; move inner skill to root if needed
-  if [[ -d "${skills_dir}/paper-fetch/skills/paper-fetch" ]]; then
-    cp -r "${skills_dir}/paper-fetch/skills/paper-fetch/"* "${skills_dir}/paper-fetch/"
-    rm -rf "${skills_dir}/paper-fetch/skills"
-  fi
-  echo "   ✅ paper-fetch 已安装到 ${skills_dir}/paper-fetch"
-}
-install_paper_fetch "${HOME}/.openclaw/skills" "~/.openclaw/skills"
-install_paper_fetch "${HOME}/.hermes/skills" "~/.hermes/skills"
+# ── skills 目录（paper-fetch 已停止安装，见 #95）──────────────────
+# 上游 https://github.com/Agents365-ai/paper-fetch 已不可用：匿名
+# `git ls-remote` 返回 Repository not found，网页 404；而这个 skill 已不再使用。
+# 原先的 install_paper_fetch（函数 + 两处调用）整段删除，只保留目录创建 ——
+# Hermes / OpenClaw 都会往 skills/ 里放东西，先建好省得由容器里的 root 身份创建。
+mkdir -p "${HOME}/.openclaw/skills" "${HOME}/.hermes/skills"
 
 
 # ── 保留论文清单的旧归属签名密钥 ───────────────────────────────────
