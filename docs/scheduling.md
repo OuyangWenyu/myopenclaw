@@ -16,6 +16,8 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（健康采集
 | 07:30 | Docker | Hermes cron（**道元 profile**） | **dailyinfo 全量简报镜像**（5 类正文 → 道元飞书私聊；`DAOYUAN_FEISHU_DM_CHAT_ID` 门控，`--no-agent` 不经过 LLM） | `start.sh` 幂等注册（`dailyinfo-digest`） |
 | 07:45 | Docker | repo-scanner-mcp 调度器 | **git-contribution-stats 每日全量采集**（容器内 daily sync，唯一写者） | 容器内置（服务强制 `REPO_SCANNER_WATCH_OWNS_ISSUES=1`） |
 | 07:45 | 宿主机 | launchd | **AgentOps 健康信号采集** | `install-all-schedulers.sh` |
+| 07:45 | 宿主机 | launchd | **dailyinfo 三路推送自检**（Discord / 网页 / 道元；`--fix` 一次幂等补救，日志 `logs/dailyinfo-push-check.log`） | `install-dailyinfo-push-check.sh`（含在 `install-all-schedulers.sh`） |
+| 07:45 | 宿主机 | **DSH 定时任务** | **dailyinfo 推送根因诊断**（读自检 JSON，失败时排查容器网络 / MCP / 发布进程 / Hermes 投递） | DSH `schedule_create`（跨天连续会话） |
 | 07:50 | Docker | Hermes cron | **Daily Command Center**（TDAI 记忆 + 健康 + 场景） | `start.sh` 自动注册 |
 | 07:55 | Docker | Hermes cron | **daily-dev-report**（研发贡献日报） | `start.sh` 自动注册 |
 | 08:10 | Docker | Hermes cron | **yuque-daily-digest**（语雀知识库变更日报，需配置 `YUQUE_DAILY_PUSH_REPOS` + `YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY`） | `start.sh` 自动注册 |
@@ -29,6 +31,7 @@ myopenclaw 的定时任务分布在两层：**宿主机 launchd**（健康采集
 07:30           工作日晨间简报（周一至周六）— 事务 + 邮件汇总
 07:30 ──────── dailyinfo-digest ← dailyinfo MCP（5 类全量正文 → 道元飞书私聊）
 07:45 ──────── repo-scanner-mcp daily sync（容器内）+ AgentOps 采集（宿主）← 并行
+07:45 ──────── dailyinfo 推送自检 ← Discord(≤07:00) / 网页(07:40) / 道元(07:30) 都已到期
 07:50 ──────── Daily Command Center ← 读 inbox.md + TDAI 记忆
 07:55 ──────── daily-dev-report ← 读 repo-scanner MCP (SQLite)
 08:10 ──────── yuque-daily-digest ← 读本机 yuque-mcp 容器（07:00 已生成变更报告）
@@ -83,6 +86,11 @@ docker compose exec backup-cron crontab -l
 # 3. 检查 Hermes cron（默认 profile / coder / daoyuan）
 docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list
 docker compose exec hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan cron list
+
+# 4. 检查 dailyinfo 推送自检（07:45，三路：Discord / 网页 / 道元）
+launchctl list | grep dailyinfo-push-check
+python3 scripts/check_dailyinfo_push.py             # 只检查，退出码 0/1/2
+tail -20 logs/dailyinfo-push-check.log
 ```
 
 ## 新机器检查清单
@@ -91,6 +99,7 @@ docker compose exec hermes-daoyuan /opt/hermes/.venv/bin/hermes -p daoyuan cron 
 
 - [ ] `./scripts/launchd/install-all-schedulers.sh` 已执行，无报错
 - [ ] `launchctl list | grep ai.` 输出包含全部已安装任务
+- [ ] `launchctl list | grep dailyinfo-push-check` 有输出，且 `python3 scripts/check_dailyinfo_push.py` 能跑通（当天还没到 07:45 时三路可能是 pending，退出码 1 属正常）
 - [ ] `docker compose ps` 所有服务 Up
 - [ ] `docker compose exec hermes /opt/hermes/.venv/bin/hermes cron list` 包含 "Daily Command Center"
 - [ ] 若 `.env` 里 `YUQUE_DAILY_PUSH_REPOS` + `YUQUE_MCP_URL` + `MCP_YUQUE_MCP_API_KEY` 三者都已配置，cron list 还应包含 "yuque-daily-digest"

@@ -106,6 +106,13 @@ def test_materialize_writes_builtin_memory_and_hides_the_secret(tmp_path: Path) 
     assert config["gateway"]["standalone"] is True
     assert config["_config_version"] == 52
 
+    # New agents are born with the DeepSeek voice capability.
+    assert config["tts"]["provider"] == "deepseek"
+    assert config["stt"]["provider"] == "deepseek"
+    assert config["voice"]["auto_tts"] is True
+    assert config["tts"]["providers"]["deepseek"]["env_passthrough"] == ["DEEPSEEK_API_KEY"]
+    assert config["stt"]["providers"]["deepseek"]["env_passthrough"] == ["DEEPSEEK_API_KEY"]
+
     # 平台凭据落在 profile 级 .env：容器级 env 会被 root 网关读到并抢同一条连接
     root_env = (result.home / ".env").read_text(encoding="utf-8")
     assert "FEISHU_APP_SECRET" not in root_env

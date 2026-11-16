@@ -229,10 +229,33 @@ def _new_agent_id(root: Path) -> str:
             return agent_id
 
 
+VOICE_DIR = REPO_ROOT / "docker" / "hermes" / "voice"
+
+
+def _install_voice_capability(config: Path) -> None:
+    """Give a newly created agent the DeepSeek voice capability by default.
+
+    The capability module lives in the Hermes image build context and is
+    stdlib-only, so this runs under the host ``uv run`` interpreter without
+    pulling PyYAML.  A missing/broken module fails the bind instead of
+    silently creating a voiceless agent.
+    """
+    try:
+        if str(VOICE_DIR) not in sys.path:
+            sys.path.insert(0, str(VOICE_DIR))
+        from voice_config import ensure_voice_config
+    except Exception as exc:  # noqa: BLE001 - surfaced as a bind failure
+        raise BindError(f"voice capability module is missing: {exc}") from exc
+    status = ensure_voice_config(config, activate=True, auto_tts="true", voice="stella")
+    if status.startswith("error:"):
+        raise BindError(f"voice capability injection failed: {status}")
+
+
 def _write_profile(home: Path) -> None:
     config = home / "profiles" / "owner" / "config.yaml"
     config.parent.mkdir(parents=True)
     config.write_text(PROFILE_CONFIG, encoding="utf-8")
+    _install_voice_capability(config)
 
 
 def _write_env(

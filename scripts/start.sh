@@ -298,6 +298,24 @@ for _cfg in \
   echo "   🎛️  ${_cfg/#${HOME}/\~} → ${_st##*→ }"
 done
 
+# ── Hermes 语音能力（DeepSeek TTS/STT，幂等）──────────────────
+# 运行时随 myopenclaw/hermes 镜像发布：/opt/hermes-voice/ds_voice.py。
+# 这里只把 provider 写进每份 config；glob 覆盖默认 profile、所有
+# profiles/*、以及扫码新增 agent 的 profiles/*，不写死 profile 名。
+# 没有 DEEPSEEK_API_KEY 时只装 provider、不切 active provider。
+VOICE_TOOL="${REPO_ROOT}/docker/hermes/voice/voice_config.py"
+_voice_activate="--no-activate"
+grep -q '^DEEPSEEK_API_KEY=.\+' "${REPO_ROOT}/.env" 2>/dev/null && _voice_activate="--activate"
+_voice_configs=("${HOME}/.hermes/config.yaml")
+for _f in "${HOME}"/.hermes/profiles/*/config.yaml \
+          "${HOME}"/.hermes-agents/*/profiles/*/config.yaml; do
+  [[ -f "${_f}" ]] && _voice_configs+=("${_f}")
+done
+for _cfg in "${_voice_configs[@]}"; do
+  _st="$(python3 "${VOICE_TOOL}" --ensure "${_cfg}" "${_voice_activate}" --auto-tts true 2>&1 || true)"
+  echo "   🗣️  ${_cfg/#${HOME}/\~} → ${_st}"
+done
+
 # ── 确保 zotero-mcp 在默认配置的 mcp_servers 中 ─────────────────
 # Hermes profile 不支持覆盖 mcp_servers，必须在默认配置中注入。
 HERMES_DEFAULT_CONFIG="${HOME}/.hermes/config.yaml"
