@@ -53,7 +53,7 @@ node scripts/feishu_register_app.mjs
 | 有 | 没有 |
 |---|---|
 | 自己的目录，挂到容器 `/opt/data` | `~/.hermes`、`~/.myagentdata` |
-| `memory.provider: local` | 共享长期记忆 |
+| `memory.provider: builtin`（v0.23 的内置实现；`local` 不再合法） | 共享长期记忆 |
 | 扫码人是唯一白名单；群里要 @ 才回答 | 空白名单（那是配对模式，谁都能说话） |
 | 模型 `deepseek-flash`，兜底 `zai/glm-5.3-flash` | 邮箱、GitHub、GitCode、飞书 CLI |
 | 2G 内存、1 个 CPU，加入 `myopenclaw-net` | 看板派发、论文、事务库，以及个人栈里那些团队能力客户端 |
@@ -61,9 +61,15 @@ node scripts/feishu_register_app.mjs
 
 两把模型钥匙只从仓库根 `.env` 读取：`DEEPSEEK_API_KEY`、`GLM_API_KEY`。
 
-## 两个网关
+## 两个 profile 与网关
 
-镜像启动时会先再起一个 default 网关，然后 owner 网关占住这个飞书应用。隔离逻辑要等四个网关槽都出现，才收掉多余的那个。扫码容器里通常只有 default 和 owner 两个，所以多余进程还会留一阵。占住飞书长连接的是 owner。同一个应用只能有一条长连接。
+扫码助手的数据目录里有两个 profile：**根 profile**（`config.yaml`，镜像首次启动时生成）和 **owner**（`profiles/owner/`）。容器只给 owner 起独立网关：
+
+- `profiles/owner/config.yaml` 里写 `gateway.standalone: true` —— v0.23 要求 per-profile 网关显式 opt-in，否则 `gateway run --profile owner` 会以 `exit 78` 拒绝启动（配置还必须有 `_config_version`，缺了同样 `exit 78`）
+- 飞书凭据（`FEISHU_APP_ID` / `FEISHU_APP_SECRET` / `FEISHU_ALLOWED_USERS` 等）写在 **`profiles/owner/.env`**，不写容器级 `.env` —— 容器级 env 对根 profile 的网关同样可见，它会拿同一个 app_id 去连，把 owner 挤掉（`feishu_app_lock`）
+- 所以占住飞书长连接的是 owner；根 profile 的网关仍在跑，但拿不到凭据，也就不会去连接
+
+同一个应用只能有一条长连接。隔离清扫原本按主栈的四个网关槽设计（要等满 4 个槽才动手），扫码容器只有 `gateway-default` + `gateway-owner` 两个，因此日志里会出现「等满 900s 只见到 2 个」的告警，约 15 分钟后 root 槽才会被收掉——这不影响聊天，只是多一个空转进程。
 
 ## 停和删
 

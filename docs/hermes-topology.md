@@ -107,6 +107,8 @@ docker compose exec hermes sh -lc 'v=某变量名; \
 `s6-svc -dk`（kill + disable；刻意不碰共享的 state 文件，那属于别的容器的活网关）→ 每 20s
 重扫一轮（防 hydra 复活）→ 终检，最后对本 profile 补一次 `s6-svc -u`。
 
+⚠️ **槽位路径**：v0.23 起 s6 把 `gateway-*` 放在 `/run/hermes-service`，`/run/service` 只剩静态服务。清扫原先把 `GW_SVC_ROOT` 写死成 `/run/service`，于是 `found` 恒为 0、清扫从未执行过——2026-11-16 实测：主容器与扫码容器都只打印「等满 900s 只见到 0 个 gateway 服务目录」，两个槽可存活 17 小时（pid 与启动时间一致）。现在 `GW_SVC_ROOT` 留空时自动探测 `/run/hermes-service`（等最多 30s 让槽位出现），探测不到才回退旧路径。
+
 为什么这么在意：**飞书 app 凭据看容器 env，不看 profile**。容器里那个 `gateway-finance`
 游荡，会拿**本容器**的 `FEISHU_APP_ID` 去连飞书 —— 于是两个网关抢同一个 app 的长连接。
 

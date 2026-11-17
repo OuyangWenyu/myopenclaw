@@ -673,16 +673,34 @@ fi
 #   3) 终检：仍有多余服务在跑 → 大声告警（不静默）。
 # 可覆写变量供测试注入：S6_SVC / GW_SVC_ROOT / GW_SWEEP_PASSES /
 # GW_SWEEP_INTERVAL / GW_SWEEP_WAIT（tests/test_entrypoint_gateway_isolation.py）。
+# GW_SVC_ROOT 留空时在清扫子壳里自动探测（v0.23 起槽在 /run/hermes-service）。
 HERMES_PROFILE="${HERMES_PROFILE:-default}"
 S6_SVC="${S6_SVC:-/package/admin/s6-2.15.0.0/command/s6-svc}"
-GW_SVC_ROOT="${GW_SVC_ROOT:-/run/service}"
+GW_SVC_ROOT="${GW_SVC_ROOT:-}"
 GW_SWEEP_PASSES="${GW_SWEEP_PASSES:-8}"
 GW_SWEEP_INTERVAL="${GW_SWEEP_INTERVAL:-20}"
 GW_SWEEP_WAIT="${GW_SWEEP_WAIT:-900}"
 if [ -x "${S6_SVC}" ]; then
   (
     S6_SVSTAT="${S6_SVC%/*}/s6-svstat"
-    echo "   🧭 gateway 隔离开始（本容器 profile=${HERMES_PROFILE}）"
+    # 槽根自动探测：v0.23 起 s6 把 gateway-* 放在 /run/hermes-service，/run/service
+    # 只剩静态服务。写死 /run/service 会让 found 恒为 0 —— 2026-11-16 实测主容器与
+    # 扫码容器都只打印"等满 900s 只见到 0 个"，清扫从未真正执行过。
+    # 等最多 30s 让槽位出现；仍没有时回退旧路径（旧镜像布局）。
+    if [ -z "${GW_SVC_ROOT}" ]; then
+      for _ in 1 2 3 4 5 6; do
+        if compgen -G "/run/hermes-service/gateway-*" >/dev/null 2>&1; then
+          break
+        fi
+        sleep 5
+      done
+      if [ -d /run/hermes-service ]; then
+        GW_SVC_ROOT=/run/hermes-service
+      else
+        GW_SVC_ROOT=/run/service
+      fi
+    fi
+    echo "   🧭 gateway 隔离开始（本容器 profile=${HERMES_PROFILE}，槽根=${GW_SVC_ROOT}）"
     # 1) 等待四个 gateway 服务树出现（有界；扫不全也要进入清扫）
     waited=0
     while [ "${waited}" -lt "${GW_SWEEP_WAIT}" ]; do

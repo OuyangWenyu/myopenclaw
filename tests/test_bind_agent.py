@@ -87,8 +87,8 @@ def _credential(**overrides: str):
     return bind_agent.Credential(**values)
 
 
-def test_materialize_writes_local_memory_and_hides_the_secret(tmp_path: Path) -> None:
-    """The agent home keeps local memory, and the secret stays out of bind.json."""
+def test_materialize_writes_builtin_memory_and_hides_the_secret(tmp_path: Path) -> None:
+    """The agent home keeps built-in memory, and the secret stays out of bind.json."""
     bind_agent = _load()
     result = bind_agent.materialize(
         tmp_path,
@@ -99,9 +99,12 @@ def test_materialize_writes_local_memory_and_hides_the_secret(tmp_path: Path) ->
     config = yaml.safe_load(
         (result.home / "profiles" / "owner" / "config.yaml").read_text(encoding="utf-8")
     )
-    assert config["memory"]["provider"] == "local"
+    assert config["memory"]["provider"] == "builtin"
     assert config["memory"]["memory_enabled"] is True
     assert config["model"]["default"] == "deepseek-flash"
+    # v0.23 要求 per-profile 网关显式 opt-in，配置版本也要带上（见 #96）
+    assert config["gateway"]["standalone"] is True
+    assert config["_config_version"] == 52
 
     # New agents are born with the DeepSeek voice capability.
     assert config["tts"]["provider"] == "deepseek"
@@ -110,11 +113,16 @@ def test_materialize_writes_local_memory_and_hides_the_secret(tmp_path: Path) ->
     assert config["tts"]["providers"]["deepseek"]["env_passthrough"] == ["DEEPSEEK_API_KEY"]
     assert config["stt"]["providers"]["deepseek"]["env_passthrough"] == ["DEEPSEEK_API_KEY"]
 
-    env_path = result.home / ".env"
-    env_text = env_path.read_text(encoding="utf-8")
-    assert "FEISHU_APP_SECRET=secret-value" in env_text
-    assert "FEISHU_ALLOWED_USERS=ou_scanner" in env_text
-    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600
+    # 平台凭据落在 profile 级 .env：容器级 env 会被 root 网关读到并抢同一条连接
+    root_env = (result.home / ".env").read_text(encoding="utf-8")
+    assert "FEISHU_APP_SECRET" not in root_env
+    assert "DEEPSEEK_API_KEY=sk-test" in root_env
+
+    profile_env_path = result.home / "profiles" / "owner" / ".env"
+    profile_env = profile_env_path.read_text(encoding="utf-8")
+    assert "FEISHU_APP_SECRET=secret-value" in profile_env
+    assert "FEISHU_ALLOWED_USERS=ou_scanner" in profile_env
+    assert stat.S_IMODE(profile_env_path.stat().st_mode) == 0o600
 
     bind_text = (result.home / "bind.json").read_text(encoding="utf-8")
     assert "secret-value" not in bind_text
@@ -429,12 +437,17 @@ def test_apply_credential_plans_compose_up_without_starting_it(tmp_path: Path) -
     config = yaml.safe_load(
         (home / "profiles" / "owner" / "config.yaml").read_text(encoding="utf-8")
     )
-    assert config["memory"]["provider"] == "local"
-    env_path = home / ".env"
-    assert stat.S_IMODE(env_path.stat().st_mode) == 0o600
-    env_text = env_path.read_text(encoding="utf-8")
-    assert "FEISHU_APP_SECRET=secret-value" in env_text
-    assert "GH_TOKEN" not in env_text
+    assert config["memory"]["provider"] == "builtin"
+    assert config["gateway"]["standalone"] is True
+    root_env_path = home / ".env"
+    assert stat.S_IMODE(root_env_path.stat().st_mode) == 0o600
+    root_env_text = root_env_path.read_text(encoding="utf-8")
+    assert "FEISHU_APP_SECRET" not in root_env_text
+    assert "GH_TOKEN" not in root_env_text
+
+    profile_env_path = home / "profiles" / "owner" / ".env"
+    assert stat.S_IMODE(profile_env_path.stat().st_mode) == 0o600
+    assert "FEISHU_APP_SECRET=secret-value" in profile_env_path.read_text(encoding="utf-8")
     assert record["container_name"] == f"hermes-bind-{record['agent_id']}"
     assert record["up_command"] == [
         "docker",
