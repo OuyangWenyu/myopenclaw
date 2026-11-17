@@ -65,7 +65,7 @@ ZOTERO_LIBRARY_TYPE=user
 
 - **查询路径不区分 agent**：`zotero-mcp` 是共享服务，用它**自己容器里的** `ZOTERO_API_KEY` 访问文献库，且 12 个工具**全部是只读查询**——MCP 上不存在写操作，也没有 per-agent 的权限差别（`hermes-daoyuan` 实测连同一个服务、同样 12 个工具）。
 - **写入路径才分权限**：写入靠容器内注入的 `ZOTERO_API_KEY`（paper pipeline 用 pyzotero 直连 Web API）。默认 profile / 爱码士 / finance 注入了该 key；**道元未注入**，因此道元无法创建/修改条目。
-- **爱码士**独享论文注入管线（paper-fetch → rclone → paper-to-zotero），代码来自 mylibrary
+- **爱码士**独享论文注入管线（mylibrary 的 `run-paper-pipeline.sh` → rclone → paper-to-zotero）；原 paper-fetch skill 已停用（上游仓库 404，见 [#95](https://github.com/OuyangWenyu/myopenclaw/issues/95)）
 - 道元使用 mylibrary 提供的 `zotero-query` skill 进行 MCP 文献查询
 - ⚠️ 本文档旧版本提到的 `DAOYUAN_ZOTERO_API_KEY` 目前**没有接线**：该变量只存在于 `.env`，`docker-compose.yml`、`scripts/`、entrypoint 均未引用它。道元的只读实际是靠「不给它注入 `ZOTERO_API_KEY`」实现的。
 
@@ -73,7 +73,7 @@ ZOTERO_LIBRARY_TYPE=user
 
 完整工作流由 mylibrary 提供，爱码士通过 `run-paper-pipeline.sh` 执行：
 
-1. paper-fetch 搜索并下载 PDF
+1. 下载 PDF（由 mylibrary 流程负责；原 paper-fetch skill 已停用，见 [#95](https://github.com/OuyangWenyu/myopenclaw/issues/95)）
 2. rclone 上传到 Google Drive
 3. `paper-to-zotero.py` 创建 Zotero 条目（linked_file 附件）
 
