@@ -9,13 +9,19 @@ Hermes 投递失败告警。
   - 论文清单的活跃行（`cancelled_at IS NULL`；带道元 token 时只含 Owen 自己的行）
   - 按标题在 Zotero 库中查询：归一化后完全相等，或一方完整包含另一方且
     较短者覆盖较长者 >= 90%
+  - 主查询用整条标题。Zotero 的 `q`（`titleCreatorYear`）是**子串**匹配，整串里
+    只要有一个字符的 Unicode 变体不同（U+2010 连字符、en dash、弯引号）就查不到
+    —— 归一化后其实完全相等。所以查不到时退化成「标点无关的连续词串」再查
+    （2026-11-17：183/184/185 三篇因此在库里躺了两周没被清理）
+  - DOI 逐字相等也算命中（行有 `doi`，或用 arXiv 号推出的 `10.48550/arXiv.<id>`）：
+    DOI 比标题更权威，且不和「标题前缀」规则冲突
   - arXiv 行额外用 arXiv 号查询（PDF 附件名 `arXiv.<id>.pdf` 会命中），
     解析附件父条目后比对其标题
   - **任一查询失败 → 本次不撤销任何条目**（fail closed）
 
 「清理」= 调 `paper_queue_cancel`（撤销，不物理删行）：保留历史、可重新入队。
-DOI 在当前 `zotero_search`（Zotero quick search，titleCreatorYear）下搜不到，
-只作为返回字段展示，不参与匹配。
+DOI 在当前 `zotero_search`（Zotero quick search，titleCreatorYear）下**搜不到**，
+只作为返回字段参与比对，不参与检索。
 
 用法:
     python3 paper_queue_sync.py --dry-run   # 只打印将清理的条目，不撤销
@@ -217,6 +223,69 @@ def _query_for(title: str) -> str:
     return _WS_RE.sub(" ", title).strip()[:QUERY_MAX_CHARS]
 
 
+# Zotero 的 q（titleCreatorYear）是子串匹配，对**标点原样**敏感：库里存的是
+# `Physics‐Informed`（U+2010）而清单里是 `Physics-Informed`（ASCII 连字符），
+# 整串查询就 0 结果 —— 归一化之后两者明明相等。所以主查询落空后退化成
+# 「标点无关的**连续**词串」（连续才能保证是库内标题的子串），判定仍走
+# titles_match（检索放宽、判定不放宽）。
+_PLAIN_WORD_RE = re.compile(r"[0-9A-Za-z]+\Z")
+_MIN_RUN_WORDS = 3      # 太短的词串会把目标挤到 20 条之外，白花请求
+_MAX_NEEDLES = 2
+
+
+def _search_needles(title: str) -> list[str]:
+    """整条标题查不到时的备用检索词：标点无关的**连续**词串（长串优先）。
+
+    只取连续词串、不取散词：Zotero 的 q 是子串匹配，散词拼起来不在库内标题里。
+    """
+    words = _WS_RE.sub(" ", title or "").strip().split(" ")
+    if not words or words == [""]:
+        return []
+
+    runs: list[str] = []
+    current: list[str] = []
+    for word in words:
+        if _PLAIN_WORD_RE.match(word):
+            current.append(word)
+        else:
+            if len(current) >= _MIN_RUN_WORDS:
+                runs.append(" ".join(current))
+            current = []
+    if len(current) >= _MIN_RUN_WORDS:
+        runs.append(" ".join(current))
+    # 长词串更特异，命中率最高
+    runs.sort(key=len, reverse=True)
+
+    primary = _query_for(title)
+    needles: list[str] = []
+    for run in runs:
+        needle = run.strip()[:QUERY_MAX_CHARS]
+        if needle and needle != primary and needle not in needles:
+            needles.append(needle)
+        if len(needles) >= _MAX_NEEDLES:
+            break
+    return needles
+
+
+def _row_doi(row: dict[str, Any]) -> str:
+    """行的 DOI；arXiv 行用其注册 DOI 兜底。只做逐字比较，不做前缀/模糊。"""
+    doi = str(row.get("doi") or "").strip()
+    if doi:
+        return doi.lower()
+    arxiv_id = _arxiv_query(str(row.get("arxiv_id") or ""))
+    return f"10.48550/arxiv.{arxiv_id}".lower() if arxiv_id else ""
+
+
+def _doi_matches(row: dict[str, Any] | None, item: dict[str, Any]) -> bool:
+    if row is None:
+        return False
+    wanted = _row_doi(row)
+    if not wanted:
+        return False
+    found = str(item.get("DOI") or item.get("doi") or "").strip().lower()
+    return bool(found) and found == wanted
+
+
 def _is_child(item: dict[str, Any]) -> bool:
     return str(item.get("itemType") or "").lower() in CHILD_ITEM_TYPES
 
@@ -290,26 +359,36 @@ async def _parent_item(call_zotero: ToolCall, item: dict[str, Any]) -> dict[str,
     }
 
 
-def _matching_item(title: str, items: list[dict[str, Any]]) -> dict[str, Any] | None:
+def _matches(title: str, item: dict[str, Any], row: dict[str, Any] | None) -> bool:
+    """条目是否可认定为目标论文：学术类型 +（标题匹配 或 DOI 逐字相等）。"""
+    if not _is_academic(item):
+        return False
+    if titles_match(title, str(item.get("title") or "")):
+        return True
+    return _doi_matches(row, item)
+
+
+def _matching_item(
+    title: str, items: list[dict[str, Any]], row: dict[str, Any] | None = None
+) -> dict[str, Any] | None:
     for item in items:
-        if not _is_academic(item):
-            continue
-        if titles_match(title, str(item.get("title") or "")):
+        if _matches(title, item, row):
             return item
     return None
 
 
 async def _matching_via_children(
-    title: str, items: list[dict[str, Any]], call_zotero: ToolCall
+    title: str,
+    items: list[dict[str, Any]],
+    call_zotero: ToolCall,
+    row: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     for item in items:
         if _is_child(item):
             parent = await _parent_item(call_zotero, item)
-            if parent is not None and _is_academic(parent) and titles_match(
-                title, str(parent.get("title") or "")
-            ):
+            if parent is not None and _matches(title, parent, row):
                 return parent
-        elif _is_academic(item) and titles_match(title, str(item.get("title") or "")):
+        elif _matches(title, item, row):
             return item
     return None
 
@@ -328,12 +407,24 @@ async def find_matches(
             warnings.append(f"跳过缺少标题/request_key 的行 id={row.get('id')}")
             continue
 
-        hit = _matching_item(title, await _search_zotero(call_zotero, _query_for(title)))
+        primary = _query_for(title)
+        hit = _matching_item(title, await _search_zotero(call_zotero, primary), row)
+        # 主查询是子串匹配、对标点原样敏感：整串查不到时用标点无关的词串再查，
+        # 判定仍旧走 titles_match / DOI（搜索放宽、判定不放宽）。
+        if hit is None:
+            for needle in _search_needles(title):
+                if needle == primary:
+                    continue
+                hit = _matching_item(
+                    title, await _search_zotero(call_zotero, needle), row
+                )
+                if hit is not None:
+                    break
 
         arxiv_id = str(row.get("arxiv_id") or "").strip()
         if hit is None and arxiv_id:
             candidates = await _search_zotero(call_zotero, _arxiv_query(arxiv_id))
-            hit = await _matching_via_children(title, candidates, call_zotero)
+            hit = await _matching_via_children(title, candidates, call_zotero, row)
 
         if hit is not None:
             matches.append(

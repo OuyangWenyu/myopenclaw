@@ -43,15 +43,27 @@ def _json(payload):
 
 
 class Recorder:
-    def __init__(self, responses):
+    """按序返回预设响应；队列耗尽后默认**重复最后一个响应**。
+
+    主查询落空后 `find_matches` 会追加「标点无关词串」检索（2026-11-17 的修复），
+    所以「查不到」的用例会多发几次 `zotero_search`。默认重复最后一个响应，避免
+    每个用例都要列一串空响应；要精确断言调用序列的用例传 `repeat_last=False`。
+    """
+
+    def __init__(self, responses, *, repeat_last=True):
         self.responses = list(responses)
         self.calls = []
+        self.repeat_last = repeat_last
+        self._last = None
 
     async def __call__(self, name, arguments):
         self.calls.append((name, arguments))
         if not self.responses:
+            if self.repeat_last and self._last is not None:
+                return self._last
             raise AssertionError(f"unexpected call: {name}")
-        return self.responses.pop(0)
+        self._last = self.responses.pop(0)
+        return self._last
 
 
 def _row(**over):
@@ -245,6 +257,7 @@ class TestFindMatches:
                    arxiv_id="arXiv:2610.15267v2")
         recorder = Recorder([
             _search([]),  # 标题搜不到
+            _search([]),  # 备用词串也搜不到（"LeHami:" 里的冒号把整串拆开）
             _search([_item("arXiv.2610.15267.pdf", item_type="attachment", key="ATT1")]),
             _json({"key": "ATT1", "data": {"key": "ATT1", "itemType": "attachment",
                                            "parentItem": "PAR1"}}),
@@ -256,14 +269,17 @@ class TestFindMatches:
         assert len(matches) == 1
         assert matches[0].zotero_key == "PAR1"
         assert [call[0] for call in recorder.calls] == [
-            "zotero_search", "zotero_search", "zotero_get_item", "zotero_get_item"]
-        assert recorder.calls[1][1]["query"] == "2610.15267"
+            "zotero_search", "zotero_search", "zotero_search",
+            "zotero_get_item", "zotero_get_item"]
+        assert recorder.calls[1][1]["query"] == "Symplectic Latent Dynamics for World Models"
+        assert recorder.calls[2][1]["query"] == "2610.15267"
 
     def test_arxiv_parent_with_different_title_does_not_match(self):
         row = _row(title="LeHami: Symplectic Latent Dynamics for World Models",
                    arxiv_id="2610.15267")
         recorder = Recorder([
             _search([]),
+            _search([]),  # 备用词串也搜不到
             _search([_item("arXiv.2610.15267.pdf", item_type="attachment", key="ATT1")]),
             _json({"key": "ATT1", "data": {"key": "ATT1", "itemType": "attachment",
                                            "parentItem": "PAR1"}}),
@@ -427,3 +443,122 @@ class TestMain:
         monkeypatch.setattr(sync, "_run", boom)
         assert sync.main([]) == 1
         assert "connection refused" in capsys.readouterr().err
+
+
+class TestSearchNeedles:
+    """整条标题查不到时的备用检索词（2026-11-17 的真实事故取证）。
+
+    Zotero 的 q 是子串匹配、对标点原样敏感：库里存 `Physics‐Informed`（U+2010）
+    而清单里是 `Physics-Informed`（ASCII），整串就 0 结果。备用词串必须
+    **标点无关且连续**（连续才可能是库内标题的子串）。
+    """
+
+    Q183 = ("Physics-Informed Neural Networks as Differentiable Surrogates "
+            "for 4D-Variational Data Assimilation")
+    Q184 = ("Theoretical connections between the Nash-Sutcliffe efficiency and the "
+            "Kling-Gupta Efficiency for environmental model evaluation")
+    Q185 = ("Hydrological implications of satellite-based water budget in the source "
+            "area of China's South-to-North water transfer middle route project")
+
+    def test_needles_have_no_punctuation_and_are_contiguous(self):
+        for title in (self.Q183, self.Q184, self.Q185):
+            needles = sync._search_needles(title)
+            assert needles, title
+            for needle in needles:
+                assert " " in needle, f"单 token 不该当检索词: {needle!r}"
+                assert all(w.isalnum() for w in needle.split()), needle
+                assert needle in title, f"词串必须原样连续出现: {needle!r}"
+
+    def test_needle_escapes_the_punctuation_that_broke_the_query(self):
+        # 183 的整串开头就带 ASCII 连字符；备用词串要从它后面开始
+        assert sync._search_needles(self.Q183)[0].startswith("Neural Networks as")
+        # 184 的差异在 Nash–Sutcliffe（en dash）；备用词串取最长的标点无关段
+        needles = sync._search_needles(self.Q184)
+        assert any(n.startswith("Efficiency for environmental") for n in needles)
+        assert any(n == "Theoretical connections between the" for n in needles)
+        # 185 的差异在 China’s 的弯引号；备用词串要绕开它
+        needles185 = sync._search_needles(self.Q185)
+        assert any(n.endswith("source area of") for n in needles185), needles185
+        assert all("China" not in n for n in needles185)
+
+    def test_longest_run_first_and_capped(self):
+        needles = sync._search_needles(self.Q184)
+        assert len(needles) <= sync._MAX_NEEDLES
+        assert needles == sorted(needles, key=len, reverse=True)
+
+    def test_primary_query_is_not_repeated(self):
+        # 没有标点的短标题：唯一的词串就是主查询本身 → 没有备用检索
+        assert sync._search_needles("A Short Paper Title") == []
+        assert sync._search_needles("") == []
+
+
+class TestDoiMatch:
+    """DOI 逐字相等也算命中：arXiv 预印本的标题常带缩写（PU vs Positive-Unlabeled）。"""
+
+    def test_plain_doi_is_case_folded(self):
+        row = _row(doi="10.1016/J.JHYDROL.2026.136754")
+        assert sync._row_doi(row) == "10.1016/j.jhydrol.2026.136754"
+
+    def test_arxiv_row_uses_registered_doi(self):
+        row = _row(arxiv_id="arXiv:2510.01278v2")
+        assert sync._row_doi(row) == "10.48550/arxiv.2510.01278"
+
+    def test_doi_equality_is_exact_not_prefix(self):
+        row = _row(doi="10.48550/arXiv.2510.01278")
+        assert sync._doi_matches(row, _item("x", doi="10.48550/arxiv.2510.01278"))
+        assert not sync._doi_matches(row, _item("x", doi="10.48550/arxiv.2510.0127"))
+        assert not sync._doi_matches(row, _item("x", doi=""))
+
+    def test_rows_without_doi_or_arxiv_never_match_by_doi(self):
+        assert not sync._doi_matches(_row(), _item("x", doi="10.1/abc"))
+        assert not sync._doi_matches(None, _item("x", doi="10.1/abc"))
+
+
+class TestFindMatchesSearchFallback:
+    ZOTERO_TITLE = ("Physics‐Informed Neural Networks as Differentiable Surrogates "
+                    "for 4D‐Variational Data Assimilation")   # 库里是 U+2010 连字符
+
+    def test_unicode_hyphen_variant_is_found_via_needle(self):
+        row = _row(title=TestSearchNeedles.Q183)
+        recorder = Recorder([
+            _search([]),                         # 整串（ASCII 连字符）查不到
+            _search([_item(self.ZOTERO_TITLE)]),  # 备用词串命中
+        ])
+        matches, warnings = asyncio.run(sync.find_matches([row], recorder))
+        assert [m.zotero_key for m in matches] == ["ITEM1"]
+        assert warnings == []
+        assert recorder.calls[0][1]["query"] == sync._query_for(TestSearchNeedles.Q183)
+        assert recorder.calls[1][1]["query"] == sync._search_needles(
+            TestSearchNeedles.Q183)[0]
+
+    def test_primary_hit_does_not_spend_a_second_search(self):
+        recorder = Recorder([_search([_item("LeHami: Symplectic Latent Dynamics for World Models")])])
+        matches, _ = asyncio.run(sync.find_matches(
+            [_row(title="LeHami: Symplectic Latent Dynamics for World Models")], recorder))
+        assert len(matches) == 1
+        assert len(recorder.calls) == 1
+
+    def test_arxiv_abbreviation_is_recovered_by_doi(self):
+        # 真实案例 225：清单写 "PU Learning"，库里是 "Positive-Unlabeled Learning"
+        row = _row(title="Noisy-Pair Robust Representation Alignment for PU Learning",
+                   arxiv_id="2510.01278")
+        recorder = Recorder([
+            _search([]),  # 整串（含 PU）查不到
+            _search([_item("Noisy-Pair Robust Representation Alignment for "
+                           "Positive-Unlabeled Learning",
+                           doi="10.48550/arXiv.2510.01278")]),
+        ])
+        matches, _ = asyncio.run(sync.find_matches([row], recorder))
+        assert len(matches) == 1, "标题缩写不同，但 arXiv 注册 DOI 逐字相等 → 应判定已入库"
+
+    def test_doi_on_a_different_item_does_not_match(self):
+        row = _row(title="Noisy-Pair Robust Representation Alignment for PU Learning",
+                   arxiv_id="2510.01278")
+        recorder = Recorder([
+            _search([]),
+            _search([_item("Noisy-Pair Robust Representation Alignment for "
+                           "Positive-Unlabeled Learning",
+                           doi="10.48550/arXiv.2599.99999")]),
+        ])
+        matches, _ = asyncio.run(sync.find_matches([row], recorder))
+        assert matches == []

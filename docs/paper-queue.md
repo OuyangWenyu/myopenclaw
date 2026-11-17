@@ -240,16 +240,26 @@ python3 scripts/check_paper_queue.py --json     # JSON（cron/监控用）
 - 取清单里的**活跃行**（`cancelled_at IS NULL`；token 只返回 Owen 自己的行）
 - 逐行按**标题**在 Zotero 库中查询；arXiv 行额外用 arXiv 号查询
   （`arXiv.<id>.pdf` 附件会命中，解析父条目后比对标题）
-- 命中（归一化后完全相等，或一方完整包含另一方且覆盖 ≥ 90%）就调
-  `paper_queue_cancel` **撤销**该条目 —— **撤销 ≠ 删除**：行保留、可重新入队
+- 标题查询是**子串**匹配、对标点原样敏感：库里存 `Physics‐Informed`（U+2010 连字符）
+  而清单写 `Physics-Informed`（ASCII）、`China’s`（弯引号）vs `China's`，整串就 0 结果。
+  所以整串查不到时**退化成「标点无关的连续词串」再查**（长串优先，最多 2 条），
+  判定仍走下面的严格规则 —— **检索放宽、判定不放宽**
+- 命中条件：归一化后完全相等，或一方完整包含另一方且覆盖 ≥ 90%，**或 DOI 逐字
+  相等**（行带 `doi`，或用 arXiv 号推出的 `10.48550/arXiv.<id>`）。DOI 比标题权威，
+  专门救「标题缩写不同」的情形（如清单写 `PU Learning`、库里是 `Positive-Unlabeled
+  Learning`）
+- 命中就调 `paper_queue_cancel` **撤销**该条目 —— **撤销 ≠ 删除**：行保留、可重新入队
 - 没有命中 → 不投递任何消息（静默）；有清理 → 私聊收到一条简短清单
 - **任一查询失败 → 本次不撤销任何条目**，退出码 1，Hermes 把 watchdog 告警
   投到同一个私聊（响亮的失败，绝不静默）
 
 已知边界：
 
-- **只按标题匹配**。当前 `zotero_search` 是 Zotero quick search
-  （`titleCreatorYear`），**DOI 搜不到**，所以 DOI 只作为展示字段
+- **DOI 不作为检索词**。`zotero_search` 是 Zotero quick search
+  （`titleCreatorYear`），搜不到 DOI；DOI 只在**返回的候选条目**上做逐字比对，
+  用来确认「标题被缩写/改写」的同一篇论文
+- **标点变体的标题仍可能漏清**：备用词串要求 ≥ 3 个连续纯字母数字词；标题被
+  改写到一个共同词串都没有时仍会漏（宁可漏清、次日重试）
 - 用户复述/翻译过的标题不会命中（宁可漏清、次日重试；误清会静默丢掉真实的下载请求）
 - 只处理 Owen 自己的行；历史 zhao 行不动
 - `cancelled_by` 不区分人工撤销与自动清理；审计线索 = 每日清理消息 +
