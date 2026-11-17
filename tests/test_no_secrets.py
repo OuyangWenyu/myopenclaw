@@ -48,6 +48,14 @@ _ALLOWED_EMAILS = frozenset({
     "git@gitcode.com",
     "your@dlut.edu.cn",  # docs/email.md 示例行（占位 local part）
     "you@outlook.com",   # docs/email.md 示例行（占位 local part）
+    # 上游钉钉 CLI skill 自带的命令示例（skills/dws/references/products/mail.md）：
+    # 全是占位地址，不对应任何真人。刻意**不改上游文件** —— 那个目录要与 pin 的
+    # dingtalk-workspace-cli 版本保持逐字一致（升级时整目录覆盖），改了就下次丢。
+    "user@company.com",
+    "alice@company.com",
+    "bob@company.com",
+    "colleague@company.com",
+    "a@b.com",
 })
 _ALLOWED_EMAIL_DOMAINS = frozenset({"example.com", "example.org", "example.net"})
 

@@ -54,6 +54,8 @@ plugins:
 nav:
   - 首页: index.md
   - 版本说明:
+      - v0.2.9: releases/v0.2.9.md
+      - v0.2.8: releases/v0.2.8.md
       - v0.2.7: releases/v0.2.7.md
       - v0.2.6: releases/v0.2.6.md
       - v0.2.5: releases/v0.2.5.md
@@ -81,6 +83,7 @@ nav:
       - 容器 / profile / .env 三层: hermes-topology.md
       - 扫码新增 Hermes: hermes-bind.md
       - 飞书 CLI (lark-cli): lark-cli.md
+      - 钉钉 CLI (dws): dingtalk-cli.md
   - 能力服务:
       - TDAI 长期记忆: tdai-memory.md
       - 语雀知识库（本机）: yuque-mcp-hermes.md

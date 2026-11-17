@@ -15,6 +15,8 @@ services:
     volumes:
       - ${HOME}/.hermes:/opt/data
       - ${HOME}/.hermes-onedrive:/opt/onedrive:rw
+      - ${HOME}/.dws-cli:/opt/dws-config
+      - ./skills/dws:/opt/hermes-skills/dws:ro
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
@@ -64,6 +66,8 @@ services:
       - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
       - FEISHU_APP_ID=${FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FEISHU_APP_SECRET:-}
+      - DWS_CONFIG_DIR=/opt/dws-config
+      - DWS_KEYCHAIN_DIR=/opt/dws-config/keychain
       - EMAIL_OUTLOOK_ADDRESS=${EMAIL_OUTLOOK_ADDRESS:-}
       - EMAIL_OUTLOOK_ACCOUNT_NAME=${EMAIL_OUTLOOK_ACCOUNT_NAME:-}
       - EMAIL_OUTLOOK_DISPLAY_NAME=${EMAIL_OUTLOOK_DISPLAY_NAME:-}
@@ -141,6 +145,8 @@ services:
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      - DWS_CONFIG_DIR=/tmp/dws/config
+      - DWS_KEYCHAIN_DIR=/tmp/dws/keychain
       - SERVER_MONITORING_MCP_URL=${SERVER_MONITORING_MCP_URL:-}
       - SERVER_MONITORING_MCP_TOKEN=${SERVER_MONITORING_MCP_TOKEN:-}
       - HERMES_PROFILE=coder
@@ -206,6 +212,8 @@ services:
       - ZOTERO_LIBRARY_TYPE=${ZOTERO_LIBRARY_TYPE:-user}
       - GDRIVE_PAPERS_LOCAL_PATH=${GDRIVE_PAPERS_LOCAL_PATH:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      - DWS_CONFIG_DIR=/tmp/dws/config
+      - DWS_KEYCHAIN_DIR=/tmp/dws/keychain
       - HERMES_PROFILE=finance
       - FEISHU_APP_ID=${FINANCE_FEISHU_APP_ID:-}
       - FEISHU_APP_SECRET=${FINANCE_FEISHU_APP_SECRET:-}
@@ -262,6 +270,8 @@ services:
       - FEISHU_LATEX_INLINE_IMAGE=${FEISHU_LATEX_INLINE_IMAGE:-0}
       - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
+      - DWS_CONFIG_DIR=/tmp/dws/config
+      - DWS_KEYCHAIN_DIR=/tmp/dws/keychain
       - DAILYINFO_MCP_URL=${DAILYINFO_MCP_URL:-}
       - DAILYINFO_MCP_KEY=${DAILYINFO_MCP_KEY:-}
       - PAPER_QUEUE_MCP_URL=${PAPER_QUEUE_MCP_URL:-http://paper-queue-mcp:8003/mcp}

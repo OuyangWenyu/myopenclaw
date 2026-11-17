@@ -13,6 +13,7 @@ port: "${HERMES_DAOYUAN_PORT:-8645}:8642"
 bundles:
   - kanban-off
   - shared-rclone
+  - dws-off
 mcp:
   - dailyinfo
   - paper-queue

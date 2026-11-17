@@ -9,6 +9,7 @@ bundles:
   - kanban-off
   - zotero
   - shared-rclone
+  - dws-off
 env:
   FEISHU_GROUP_POLICY: open
   GATEWAY_ALLOW_ALL_USERS: "true"

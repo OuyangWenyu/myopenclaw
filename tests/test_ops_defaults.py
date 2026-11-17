@@ -459,10 +459,128 @@ class TestHermesCronDbHotCopy:
         for rel in ("cron/executions.db", "cron/notepad.db"):
             copy = snap / rel
             assert copy.stat().st_size > 0, f"{rel} 热备产物是 0 字节"
-            rows = subprocess.run(["sqlite3", str(copy), "SELECT count(*) FROM t;"],
-                                  capture_output=True, text=True, check=True)
+            # ⚠️ 必须用 immutable=1 读副本。`.backup` 出来的副本继承源库的
+            # journal_mode=wal，普通读写打开它会在**快照目录里**生出 -wal/-shm；
+            # 关闭时清不清理取决于读取器构建 —— Apple 的 /usr/bin/sqlite3（3.54.0）
+            # 保留，Ubuntu 24.04 的 3.45.1 与 python 的 libsqlite3 3.53.4 会清理。
+            # 2026-11-16 排查：这条断言因此长期「macOS 假红 / CI 假绿」，它测的是
+            # 读取器的副作用，不是备份脚本。（-readonly 也不行：WAL 库缺 -shm 时
+            # 只读打开直接 CANTOPEN。）
+            rows = subprocess.run(
+                ["sqlite3", f"file:{copy}?immutable=1", "SELECT count(*) FROM t;"],
+                capture_output=True, text=True, check=True)
             assert rows.stdout.strip() == "1", f"{rel} 的热备副本读不出数据"
-        assert not (snap / "cron" / "executions.db-wal").exists(), "sidecar 不该进快照"
+        # 快照里只许有副本本身：不许 -wal/-shm，也不许热备的中间产物（.tmp / .tmp-wal）。
+        for rel in ("cron/executions.db", "cron/notepad.db"):
+            for sidecar in ("", "-wal", "-shm"):
+                assert (snap / f"{rel}{sidecar}").exists() == (sidecar == ""), (
+                    f"快照里不该出现 {rel}{sidecar}"
+                )
+            for leftover in (".tmp", ".tmp-wal", ".tmp-shm"):
+                assert not (snap / f"{rel}{leftover}").exists(), (
+                    f"快照里残留热备中间产物 {rel}{leftover}"
+                )
+
+
+# ── 生产工具链复跑：同一热备场景放进 backup-cron 镜像里跑 ────────────────
+# 上面的宿主行为用例只是**快速预检**：它用 PATH 上的 sqlite3（macOS = Apple
+# /usr/bin/sqlite3 3.54.0，CI = Ubuntu 3.45.x），而生产热备跑在 backup-cron
+# （Alpine 3.20 + sqlite 3.45.3）。两边 sqlite 的**偶然行为**不同（例：普通读写
+# 打开 WAL 库后关闭，Apple 版留下 0 字节 -wal + -shm，Alpine 版清理）——
+# 2026-11-16 一条断言因此「macOS 假红 / CI 假绿」。
+# 契约以这里为准：快照产物 + 副本可读性都在生产镜像里验，宿主工具链不参与。
+# 镜像缺失时 skip（本机 `docker compose build backup-cron`；CI 由 workflow 预构建
+# 并通过 BACKUP_CRON_IMAGE 指过去）——不让「没建镜像」变成红灯。
+_BACKUP_CRON_IMAGE = os.environ.get("BACKUP_CRON_IMAGE", "myopenclaw-backup-cron:latest")
+
+
+def _backup_cron_image() -> str | None:
+    """返回可用的 backup-cron 镜像名；不可用时按「是否显式指定」区分 skip / fail。
+
+    - `BACKUP_CRON_IMAGE` 未设（默认名也找不到）：本机没 build 过镜像 → **skip**，
+      不把「没建镜像」变成红灯；
+    - `BACKUP_CRON_IMAGE` 已设（CI 的 workflow 就是这么传的）：说明镜像**应该**在，
+      找不到即 **fail** —— 否则 build 步骤坏掉会被 skip 静默吞掉，契约悄悄失效。
+    """
+    explicit = os.environ.get("BACKUP_CRON_IMAGE")
+    if shutil.which("docker") is None:
+        if explicit:
+            pytest.fail("BACKUP_CRON_IMAGE 已设置，但宿主机没有 docker CLI")
+        return None
+    probe = subprocess.run(["docker", "image", "inspect", _BACKUP_CRON_IMAGE],
+                           capture_output=True)
+    if probe.returncode != 0:
+        if explicit:
+            pytest.fail(f"BACKUP_CRON_IMAGE={_BACKUP_CRON_IMAGE} 不存在"
+                        "（CI 应先用 docker build 建出来）")
+        return None
+    return _BACKUP_CRON_IMAGE
+
+
+class TestHermesCronDbHotCopyInContainer:
+    """在生产镜像（Alpine + sqlite 3.45.3）里复跑 hermes cron 热备。
+
+    两条断言都用镜像自带的 sqlite 完成，宿主 sqlite3 完全不参与：
+    ① 快照 `cron/` 里**只有**两个副本 —— 没有 -wal/-shm，也没有 .tmp 残留；
+    ② 两个副本都能读出数据（`immutable=1` 读，不生成 sidecar）。
+    """
+
+    TIMESTAMP = "2026-09-21_120000"
+
+    def _run(self, work: Path, script: str) -> subprocess.CompletedProcess:
+        image = _backup_cron_image()
+        assert image is not None
+        return subprocess.run(
+            [
+                "docker", "run", "--rm",
+                "-v", f"{REPO_ROOT / 'hermes' / 'scripts'}:/hermes-scripts:ro",
+                "-v", f"{REPO_ROOT / 'scripts'}:/scripts:ro",
+                "-v", f"{work}:/work",
+                "-e", "HOME=/work",
+                "-e", "BACKUP_ROOT=/work/bk",
+                "-e", "BACKUP_SKIP_PRUNE=1",
+                "-e", "TZ=Asia/Shanghai",
+                "--entrypoint", "bash", image, "-c", script,
+            ],
+            capture_output=True, text=True, timeout=300,
+        )
+
+    def test_snapshot_is_clean_and_readable(self, tmp_path):
+        if _backup_cron_image() is None:
+            pytest.skip("没有 backup-cron 镜像：本机 docker compose build backup-cron；"
+                        "CI 由 workflow 预构建并用 BACKUP_CRON_IMAGE 指过去")
+        work = tmp_path.resolve()
+        (work / ".hermes" / "cron").mkdir(parents=True)
+
+        proc = self._run(work, (
+            "set -e\n"
+            # 种子库用镜像自带的 sqlite 造，与生产同一条工具链
+            'sqlite3 /work/.hermes/cron/executions.db '
+            '"PRAGMA journal_mode=WAL; CREATE TABLE t(x); INSERT INTO t VALUES (1);"\n'
+            'sqlite3 /work/.hermes/cron/notepad.db '
+            '"CREATE TABLE t(x); INSERT INTO t VALUES (1);"\n'
+            f"bash /hermes-scripts/backup.sh {self.TIMESTAMP}\n"
+        ))
+        assert proc.returncode == 0, proc.stderr[-4000:]
+
+        snap = work / "bk" / "hermes" / self.TIMESTAMP / "cron"
+        assert snap.is_dir(), f"快照目录不存在: {snap}"
+        assert sorted(p.name for p in snap.iterdir()) == ["executions.db", "notepad.db"], (
+            "快照 cron/ 里只该有两个副本（出现 -wal/-shm/.tmp 说明热备污染了快照）: "
+            f"{sorted(p.name for p in snap.iterdir())}"
+        )
+
+        proc = self._run(work, (
+            "set -e\n"
+            "for f in executions.db notepad.db; do\n"
+            f'  n="$(sqlite3 "file:/work/bk/hermes/{self.TIMESTAMP}/cron/$f?immutable=1" '
+            '"SELECT count(*) FROM t;")"\n'
+            '  printf "%s=%s\\n" "$f" "$n"\n'
+            "done\n"
+        ))
+        assert proc.returncode == 0, proc.stderr[-4000:]
+        assert "executions.db=1" in proc.stdout, proc.stdout
+        assert "notepad.db=1" in proc.stdout, proc.stdout
 
 
 @pytest.mark.skipif(shutil.which("sqlite3") is None,
