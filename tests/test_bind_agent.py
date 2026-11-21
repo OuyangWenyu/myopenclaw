@@ -37,6 +37,7 @@ CHAT_SCOPES = [
     "im:message.group_at_msg:readonly",
     "im:message:readonly",
     "im:message:send_as_bot",
+    "im:message.reactions:write_only",
     "im:resource",
     "im:chat:readonly",
 ]
