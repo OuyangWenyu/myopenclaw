@@ -176,7 +176,14 @@ if [[ -d "${AGENTS_DATA}" ]]; then
   agents_latest="${BACKUP_ROOT}/hermes-agents/latest"
   mkdir -p "${agents_dest}"
   echo "   📂 备份目标: ${agents_dest}"
-  rsync -a --exclude=".env" --exclude="secrets/" "${AGENTS_DATA}/" "${agents_dest}/"
+  # Sockets are runtime artifacts (gateway.sock, gateway.loop-tick.*.sock). rsync -a
+  # copies them as special files, and the destination is Google Drive via virtiofs,
+  # where setting mtime on a socket fails with EINVAL => rsync exit 23 => the whole
+  # hermes step is reported as failed even though every real file was copied
+  # (2026-11-16 onward: 8 sockets under two scanned agents made the heartbeat red
+  # every night). Excluding them keeps both the snapshot and the exit code clean.
+  rsync -a --exclude=".env" --exclude="secrets/" --exclude="*.sock" \
+    "${AGENTS_DATA}/" "${agents_dest}/"
   echo "   ✅ 快照完成: ${agents_dest}"
   sync_latest_retry "${agents_dest}" "${agents_latest}"
   echo "   ✅ latest/ 已更新 (hermes-agents)"
