@@ -540,22 +540,34 @@ services:
     build:
       context: ../aisecretary
       dockerfile: Dockerfile
-    image: myopenclaw/aisecretary:latest
+    image: myopenclaw/aisecretary:v0.2.3
     container_name: aisecretary
     restart: unless-stopped
     ports:
       - "8000:8000"
     environment:
       - DATABASE_PATH=/data/transactions.sqlite
+      # PPT：deck 只读、PNG 输出可写；路径必须与 hermes 容器内的一致
+      - PPT_ROOTS=/opt/data/tmp/xdsh
+      - PPT_OUT_DIR=/opt/data/tmp/pptpage
+      - PPT_DPI=150
+      - PPT_TIMEOUT=60
+      # 连续页合并渲染：省掉重复的 LO 启动，又限制峰值内存（8 页约 318MB）
+      - PPT_BATCH_MAX=8
+      - PPT_SLICE_ENABLED=1
     volumes:
       - ${HOME}/.myagentdata/aisecretary:/data
+      - ${HOME}/.hermes/tmp/xdsh:/opt/data/tmp/xdsh:ro
+      - ${HOME}/.hermes/tmp/pptpage:/opt/data/tmp/pptpage
     networks:
       - myopenclaw-net
     deploy:
       resources:
         limits:
-          memory: 256M
-          cpus: "0.5"
+          # 切片渲染后 LO 单页峰值约 236MB、8 页批量约 318MB；
+          # 留 1G 余量给 python-pptx 解析与短时抖动
+          memory: 1G
+          cpus: "2.0"
 
   # ── repo-scanner MCP — 每日研发贡献报告数据服务 ──────────────
   repo-scanner-mcp:
