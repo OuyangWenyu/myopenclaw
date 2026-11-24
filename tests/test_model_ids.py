@@ -9,8 +9,11 @@ DeepSeek 于 2026-09-10 发布 V4.1 Flash，canonical id 为 ``deepseek-flash``�
     deepseek-v4-flash-vision-exp     已下线，暂路由
     deepseek-v4-pro                  2026-09-14 12:00(北京) 起路由到 V4.1 Flash
 
-``deepseek-chat`` **不在**下线名单 —— 它是另一个模型（V3），TDAI 记忆层与 OpenClaw
-的 provider 列表仍在有意使用，批量替换时不要误伤（见 TestDeepseekChatUntouched）。
+``deepseek-chat`` 是**被服务端静默路由**的旧别名：2026-11-24 实测
+``POST /chat/completions {model: "deepseek-chat"}`` 返回 200，但响应里的 ``model``
+是 ``deepseek-flash``；``GET /models`` 只列 ``deepseek-flash`` 与 ``deepseek-v4-pro``。
+所以它既没 400 也没被下线，却已经**不是另一个模型**了 —— 继续依赖它等于把
+「哪天路由撤了」当运气。本仓配置不再引用它（见 TestRoutedAliasNotUsed）。
 
 另外守两条改造中容易误删的东西：虾酱的 TTS 仍走 xiaomi，而它的端点定义藏在
 ``models.providers.xiaomi`` 里（``tts.providers.xiaomi`` 块内没有 baseUrl；该块在
@@ -291,16 +294,39 @@ class TestLegacyModelMigration:
         assert new.index("default:") < new.index("provider:")
 
 
-class TestDeepseekChatUntouched:
-    """``deepseek-chat`` 不在下线名单，批量替换不应波及它。"""
+class TestRoutedAliasNotUsed:
+    """``deepseek-chat`` 仍能调通，但服务端把它静默路由到 ``deepseek-flash``。
 
-    def test_tdai_default_still_deepseek_chat(self):
-        assert "TDAI_LLM_MODEL:-deepseek-chat" in COMPOSE.read_text()
+    路由别名是最坏的一类依赖：不报错、不告警，元数据（上下文/模态/价格）还停在
+    旧模型上。我们的配置只写 canonical id，别让别名再渗回来。
+    """
 
-    def test_openclaw_keeps_deepseek_chat_option(self):
+    # 只查「我们的配置」；docker/*/.mylibrary-src 是上游快照，不归本仓管。
+    OUR_CONFIG_FILES = (
+        "docker-compose.yml",
+        "config/models.toml",
+        "openclaw/config/openclaw.json.example",
+        "docker/tdai-memory/entrypoint.sh",
+        ".env.example",
+    )
+
+    def test_tdai_uses_canonical_id(self):
+        assert "TDAI_LLM_MODEL:-deepseek-flash" in COMPOSE.read_text()
+
+    def test_openclaw_no_longer_advertises_the_alias(self):
         cfg = json.loads(OPENCLAW_EXAMPLE.read_text())
         ids = [m["id"] for m in cfg["models"]["providers"]["deepseek"]["models"]]
-        assert "deepseek-chat" in ids
+        assert "deepseek-chat" not in ids
+        assert "deepseek/deepseek-chat" not in cfg["agents"]["defaults"]["models"]
+
+    def test_no_config_depends_on_the_alias(self):
+        hits = []
+        for rel in self.OUR_CONFIG_FILES:
+            path = REPO_ROOT / rel
+            for lineno, line in enumerate(path.read_text().splitlines(), 1):
+                if "deepseek-chat" in line:
+                    hits.append(f"{rel}:{lineno}")
+        assert not hits, "以下配置仍在引用被路由的旧别名：\n" + "\n".join(hits)
 
 
 # Hermes 认这三个名字取 zai 的 key（实测报错原文：Set GLM_API_KEY, ZAI_API_KEY,

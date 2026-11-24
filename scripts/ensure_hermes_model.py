@@ -14,7 +14,11 @@ Hermes profile 配置是**宿主机手工文件**，``start.sh`` 只在文件不
 只改写「已知的历史取值」与「缺失/空转的备份配置」，绝不覆盖操作者的主动选择：
 
     mimo-v2.5 / mimo-v2.5-pro   小米 MiMo 时期的主模型
-    deepseek-v<数字>…           已下线的 DeepSeek V 系列 id
+    deepseek-v<数字>-…          已下线的 DeepSeek V 系列 id（带版本段的旧写法）
+
+⚠️ ``deepseek-v4.1-flash-1017`` **不在**迁移名单里：它是阿里云百炼侧的 canonical id
+（见 config/models.toml）。判据必须带连字符边界，否则每次 start.sh 都会把它
+改写成 ``deepseek-flash`` —— 端点还是百炼的，表现为 404 或"配置没生效"。
 
 其余任何值都原样保留（返回 ``unchanged:<value>``）；``fallback_model`` 若不是
 ``zai/glm-5.3-flash`` 也原样保留（返回 ``unchanged-fallback:<p>/<m>``），与
@@ -41,7 +45,7 @@ BASE_URL = "https://api.deepseek.com"
 
 # 已知的历史取值（应当被迁移走）
 _LEGACY_EXACT = {"mimo-v2.5", "mimo-v2.5-pro"}
-_LEGACY_DEEPSEEK_V = re.compile(r"^deepseek-v\d")
+_LEGACY_DEEPSEEK_V = re.compile(r"^deepseek-v\d+(-|$)")
 
 _MODEL_BLOCK_HEADER = re.compile(r"(?m)^model:\s*$")
 _KEY_LINE = "  {key}: {value}\n"

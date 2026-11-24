@@ -30,6 +30,10 @@ env:
   # Hermes blocks DEEPSEEK_API_KEY, OPENROUTER_API_KEY, and OPENAI_API_KEY.
   # The entrypoint writes them to secrets files before the process starts.
   DEEPSEEK_API_KEY: "${DEEPSEEK_API_KEY:-}"
+  # 阿里云百炼（主模型源）。Hermes 的 env 黑名单里没有 DASHSCOPE_*，所以它
+  # 直接进进程环境，由 provider 'alibaba-cn' 按 env_vars 取。端点与模型见
+  # config/models.toml；换源由 scripts/modelctl.py 渲染。
+  DASHSCOPE_API_KEY: "${DASHSCOPE_API_KEY:-}"
   # Fallback credential for zai/glm-5.3-flash when deepseek-flash fails.
   # Hermes accepts GLM_API_KEY, ZAI_API_KEY, or Z_AI_API_KEY. This reuses
   # GLM_API_KEY from .env. Without the key, a configured fallback is a no-op.

@@ -80,10 +80,32 @@ echo "--- CNAME 终端域是否被 RESOLVER_DOMAINS 覆盖 ---"
 resolver_list="$(awk '/^RESOLVER_DOMAINS=\(/,/^\)/' "${SCRIPT}" | sed -n 's/^  \([a-z0-9.-]*\)$/\1/p')"
 selected_ns="$(bash "${SCRIPT}" --dry-run 2>/dev/null | sed -n 's/.*选定 DNS: \([0-9.][0-9.]*\).*/\1/p' | head -1)"
 
+# 5b. 主模型源（阿里云百炼，见 config/models.toml）的域必须在清单里
+#     背景：2026-11-24 主源切到 alibaba-cn 后，业务空间端点
+#     llm-*.cn-beijing.maas.aliyuncs.com 只能靠 CNAME 落到 alibabadns.com 才拿到国内 IP；
+#     www.aliyun.com 的终端域 initaq.com 不钉就会落回默认 DNS 拿到 43.109.x（走 utun4）。
+for d in aliyun.com aliyuncs.com initaq.com; do
+    check "主模型源域 ${d} 在 RESOLVER_DOMAINS 里" \
+        "printf '%s\n' \"\${resolver_list}\" | grep -qx '${d}'"
+done
+
+# 5c. 文档里的手动 DOMAINS 必须和脚本清单一致
+#     背景：2026-11-24 之前文档写「26 个」、且缺 bilibili/bilicdn1，与实际差 4 个 ——
+#     照文档手工配的人会少配域，症状是静默回落默认 DNS（与 CNAME 终端域漏配同一后果）。
+doc_domains="$(grep -o 'DOMAINS="[^"]*"' "${REPO_ROOT}/docs/dns-setup.md" | sed 's/^DOMAINS="//; s/"$//')"
+if [[ -n "${doc_domains}" ]] && \
+   diff -q <(printf '%s\n' ${doc_domains} | sort) <(printf '%s\n' ${resolver_list} | sort) >/dev/null 2>&1; then
+    echo "  ✓ 文档 DOMAINS 与脚本 RESOLVER_DOMAINS 集合一致"
+    PASS=$((PASS + 1))
+else
+    echo "  ✗ FAIL: 文档 DOMAINS 与脚本清单不一致（同步 docs/dns-setup.md 的 DOMAINS 行）"
+    FAIL=$((FAIL + 1))
+fi
+
 if [[ -z "${selected_ns}" ]]; then
     check "能从 --dry-run 取到可用 DNS（CNAME 终端检查的前提）" "false"
 else
-    for host in accounts.feishu.cn www.feishu.cn help.feishu.cn open.feishu.cn drive.feishu.cn; do
+    for host in accounts.feishu.cn www.feishu.cn help.feishu.cn open.feishu.cn drive.feishu.cn www.aliyun.com; do
         chain="$(dig +short +time=3 "${host}" "@${selected_ns}" 2>/dev/null || true)"
         if [[ -z "${chain}" ]]; then
             echo "  - 跳过 ${host}（${selected_ns} 无应答，不计失败）"

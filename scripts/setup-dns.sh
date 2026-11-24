@@ -48,6 +48,20 @@ set -euo pipefail
 #      钉住后拿到 222.192.187.x（走 en1 直连）。守卫见 tests/test-setup-dns.sh。
 RESOLVER_DOMAINS=(
   alibabadns.com
+  # 阿里云（百炼 = 各 agent 主模型，见 config/models.toml）：
+  #   aliyun.com   — 主域。www.aliyun.com 的 CNAME 会分到日本边缘
+  #                  （www-jp-de-intl-adns.aliyun.com），默认 DNS 下拿到 155.102.x，
+  #                  被 Astrill 收进 utun4；百炼控制台 bailian.console.aliyun.com
+  #                  也在这个域下（当前靠 alibabadns 链偶然命中，没有兜底）
+  #   aliyuncs.com — API 域：dashscope.aliyuncs.com +
+  #                  {WorkspaceId}.*.maas.aliyuncs.com（业务空间端点）
+  aliyun.com
+  aliyuncs.com
+  #   initaq.com   — www.aliyun.com 的 CNAME 终端（www.aliyun.com.a2.initaq.com）。
+  #                  mDNSResponder 是**逐跳**按后缀选 resolver 的：aliyun.com 钉住只覆盖第一跳，
+  #                  终端这一跳会落回默认 DNS（1.1.1.3）拿到 43.109.129.x（海外，走 utun4）。
+  #                  2026-11-24 实测：AliDNS 给 222.192.186.163（教育网），1.1.1.3 给 43.109.129.227。
+  initaq.com
   aliyunddos1022.com
   bigmodel.cn
   bilibili.com
@@ -94,6 +108,8 @@ HOSTS_DOMAINS=(
 # 验证解析用的域名
 VERIFY_DOMAINS=(
   api.deepseek.com
+  dashscope.aliyuncs.com
+  bailian.console.aliyun.com
   open.bigmodel.cn
   api.dingtalk.com
   wss-open-connection.dingtalk.com
@@ -274,8 +290,15 @@ for domain in "${HOSTS_DOMAINS[@]}"; do
     continue
   fi
 
-  # 检查 /etc/hosts 中是否已有该域名的条目
-  existing_ip=$(grep -w "${domain}" /etc/hosts 2>/dev/null | awk '{print $1}' | head -1)
+  # 只认「第一列是 IPv4、末列正好是该域名」的行。
+  # 2026-11-24 实测：/etc/hosts 里两条 `-e 43.141.x workbuddy.cn` 脏行（某次 sed 写坏）
+  # 会让旧的 `awk '{print $1}' | head -1` 取到 "-e"，脚本据此判定「已有条目」，
+  # 于是既不更新（sed 匹配不到）也不追加 —— workbuddy 的兜底条目静默缺失。
+  existing_ip=$(awk -v d="${domain}" '$1 ~ /^[0-9]+(\.[0-9]+){3}$/ && $NF == d {print $1; exit}' /etc/hosts 2>/dev/null)
+  dirty_line=$(awk -v d="${domain}" 'index($0, d) && $NF == d && $1 !~ /^[0-9]+(\.[0-9]+){3}$/ {print NR": "$0; exit}' /etc/hosts 2>/dev/null)
+  if [[ -n "${dirty_line}" ]]; then
+    echo "   ⚠️  ${domain} — /etc/hosts 有脏行（${dirty_line}），已忽略；建议手工删除"
+  fi
 
   if [[ -n "${existing_ip}" && "${existing_ip}" == "${ip}" ]]; then
     echo "   ✅ ${domain} → ${ip} — 已是最新，跳过"

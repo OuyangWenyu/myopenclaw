@@ -6,12 +6,13 @@
 
 | 服务 | 域名 | 影响范围 |
 |------|------|----------|
-| DeepSeek API | api.deepseek.com | Hermes / OpenClaw 默认模型 |
+| 阿里云百炼（MaaS） | `*.maas.aliyuncs.com`, `bailian.console.aliyun.com` | 各 agent 主模型（modelctl 主源 `alibaba-cn`） |
+| DeepSeek API | api.deepseek.com | 备用模型源（跨厂商 fallback） |
 | 智谱 GLM API | open.bigmodel.cn | Hermes 各 profile 备用模型（zai / glm-5.3-flash） |
 | 钉钉 Stream | api.dingtalk.com, wss-open-connection.dingtalk.com | Hermes / OpenClaw 钉钉机器人 |
 | 飞书 WebSocket | open.feishu.cn, msg-frontier.feishu.cn | Hermes 飞书机器人 |
 | Moonshot API | api.moonshot.cn | OpenClaw 备用模型 |
-| 小米 MiMo API | api.xiaomimimo.com | 虾酱 TTS 语音回复（各 agent 主模型已切 `deepseek-flash`） |
+| 小米 MiMo API | api.xiaomimimo.com | 虾酱 TTS 语音回复 |
 | QQ 邮箱 | imap.qq.com, smtp.qq.com | himalaya 邮件客户端 |
 | WorkBuddy | workbuddy.cn | 外部服务依赖 |
 | GitCode | gitcode.com | 代码托管 |
@@ -44,7 +45,7 @@ macOS 支持 `/etc/resolver/` 机制，可以按域名指定 DNS 服务器。脚
 # /etc/resolver/ 下的每个文件对应一个域名及其子域名
 # 文件名 = 域名，内容 = nameserver 指令
 
-DOMAINS="alibabadns.com aliyunddos1022.com bigmodel.cn bytedns1.com cdnbuild.net cdngslb.com deepseek.com dingtalk.com eo.dnse1.com eo.dnse5.com feishu.cn gitcode.com gtm-a4b8.com kunluncan.com moonshot.cn open.bigmodel.cn qq.com queniuiq.com queniurc.com queniuyk.com queniuck.com xiaomimimo.com xiaomi.com workbuddy.cn yundunwaf3.com zhipu.ai"
+DOMAINS="alibabadns.com aliyun.com aliyuncs.com initaq.com aliyunddos1022.com bigmodel.cn bilibili.com bilicdn1.com bytedns1.com cdnbuild.net cdngslb.com deepseek.com dingtalk.com eo.dnse1.com eo.dnse5.com feishu.cn gitcode.com gtm-a4b8.com kunluncan.com moonshot.cn open.bigmodel.cn qq.com queniuiq.com queniurc.com queniuyk.com queniuck.com xiaomimimo.com xiaomi.com workbuddy.cn yundunwaf3.com zhipu.ai"
 
 # 先确认该 DNS 在当前网络可用（校园网/部分运营商会拦 53 端口）
 DNS=223.5.5.5          # 或路由器地址，如 192.168.3.1
@@ -60,10 +61,9 @@ sudo killall -HUP mDNSResponder
 ```
 
 > ⚠️ **脚本只增/改，不删**：`/etc/resolver/` 里可能残留脚本不再管理的域名（历史配置或手工加的），
-> 脚本每次只创建/更新上面这份名单（26 个），不会清理其它文件。2026-09-28 实测宿主机有 28 个，
-> 多出的 4 个是 `bilibili.com`、`bilicdn1.com`、`huaweicloudwaf.com`、`queniuyk.co`
-> —— 仓库里没有任何配置引用它们。其中 `queniuyk.co` 疑为 `queniuyk.com` 的笔误（两者同时存在，内容相同）。
-> 确认无用后手工清理：`sudo rm /etc/resolver/<域名>`。
+> 脚本每次只创建/更新上面这份名单（31 个），不会清理其它文件。历史遗留条目（例如 2026-09-28 见到的
+> `huaweicloudwaf.com`、`queniuyk.co` 笔误）会一直留在磁盘上，确认无用后手工清理：
+> `sudo rm /etc/resolver/<域名>`。
 >
 > 反向的坑更隐蔽：**磁盘上有、仓库里没有**的域，换机器时会静默丢失。`cdnbuild.net` 和
 > `kunluncan.com` 曾经就是这种状态（只存在于这台机器的 `/etc/resolver/`，飞书文件链接依赖它们），
@@ -78,6 +78,8 @@ sudo killall -HUP mDNSResponder
 | 服务 | CNAME 链经过的外域 | 说明 |
 |------|-------------------|------|
 | 钉钉 api.dingtalk.com | `gds.alibabadns.com` | 阿里云 GSLB |
+| 阿里云百炼 bailian.console.aliyun.com | `tyjr-v6-cn-zhangjiakou.aliyun.com` → `gds.alibabadns.com` | 控制台（2026-11-24 补配 `aliyun.com`） |
+| 阿里云官网 www.aliyun.com | `www-jp-de-intl-adns.aliyun.com` → `gds.alibabadns.com` → `www.aliyun.com.a2.initaq.com` | **终端域 `initaq.com` 必须单独钉**：mDNSResponder 逐跳按后缀选 resolver，只钉 `aliyun.com` 时终端这跳仍走默认 DNS，拿到 43.109.129.x 走 utun4（2026-11-24） |
 | DeepSeek api.deepseek.com | `eo.dnse1.com` | 火山引擎 CDN |
 | WorkBuddy workbuddy.cn | `eo.dnse5.com` | 腾讯 EdgeOne CDN（与 DeepSeek 的 dnse1 是两条独立链） |
 | 飞书 open.feishu.cn | `bytedns1.com` → `cdngslb.com` → `queniuyk.com` | 字节 CDN → GSLB → 金山云 CNAME 终端 |

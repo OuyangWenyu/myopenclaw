@@ -38,6 +38,7 @@ services:
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -121,6 +122,7 @@ services:
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -189,6 +191,7 @@ services:
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -254,6 +257,7 @@ services:
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - KIMI_CN_API_KEY=${MOONSHOT_API_KEY:-}
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - GLM_API_KEY=${GLM_API_KEY:-}
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -338,8 +342,10 @@ services:
       - ./docker/claude-code/capture-to-gateway.py:/opt/capture-to-gateway.py:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
       - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.deepseek.com/anthropic}
+      - CLAUDE_MODEL_KEY_ENV=${CLAUDE_MODEL_KEY_ENV:-DEEPSEEK_API_KEY}
       - CC_CONNECT_FEISHU_APP_ID=${CC_CONNECT_FEISHU_APP_ID:-}
       - CC_CONNECT_FEISHU_APP_SECRET=${CC_CONNECT_FEISHU_APP_SECRET:-}
       - GH_TOKEN=${GH_TOKEN:-}              # gh CLI natively reads this (不会被 Hermes 黑名单匹配)
@@ -441,6 +447,7 @@ services:
       - ./openclaw/scripts/fix-host-paths.sh:/fix-host-paths.sh:ro
     environment:
       - DEEPSEEK_API_KEY=${DEEPSEEK_API_KEY:-}
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY:-}
       - MOONSHOT_API_KEY=${MOONSHOT_API_KEY:-}
       - XIAOMI_API_KEY=${XIAOMI_API_KEY:-}       # Xiaomi MiMo — 虾酱 TTS 语音回复（mimo-v2.5-tts）
       - UNPAYWALL_EMAIL=${UNPAYWALL_EMAIL:-}
@@ -762,9 +769,9 @@ services:
     volumes:
       - ${HOME}/.myagentdata/tdai-memory:/opt/data/tdai-memory
     environment:
-      - TDAI_LLM_API_KEY=${DEEPSEEK_API_KEY:-}
+      - TDAI_LLM_API_KEY=${TDAI_LLM_API_KEY:-${DEEPSEEK_API_KEY:-}}
       - TDAI_LLM_BASE_URL=${TDAI_LLM_BASE_URL:-https://api.deepseek.com/v1}
-      - TDAI_LLM_MODEL=${TDAI_LLM_MODEL:-deepseek-chat}
+      - TDAI_LLM_MODEL=${TDAI_LLM_MODEL:-deepseek-flash}
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8420/health"]
       interval: 30s

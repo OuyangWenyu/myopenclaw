@@ -62,6 +62,23 @@ function replace(value) {
 const template = JSON.parse(fs.readFileSync(templatePath, "utf8"));
 const config = replace(template);
 
+// 能力元数据（数字字段，不能走上面的字符串替换）：模板里的 128000/8192 是
+// 参数化之前的默认值，由 scripts/modelctl.py 写进 .env 后在这里覆盖。
+// 写错的表现是上下文被静默截断（128K vs 1M），不会报错。
+{
+  const primaryRef = config.agents?.defaults?.model?.primary ?? "";
+  const [primaryProvider, primaryModelId] = primaryRef.split("/");
+  const entry = config.models?.providers?.[primaryProvider]?.models?.find(
+    (m) => m.id === primaryModelId,
+  );
+  if (entry) {
+    const ctx = Number((process.env.TIANYI_BOT_MODEL_CONTEXT_WINDOW ?? "").trim() || 128000);
+    const maxTok = Number((process.env.TIANYI_BOT_MODEL_MAX_TOKENS ?? "").trim() || 8192);
+    if (Number.isFinite(ctx) && ctx > 0) entry.contextWindow = ctx;
+    if (Number.isFinite(maxTok) && maxTok > 0) entry.maxTokens = maxTok;
+  }
+}
+
 // Apply streaming toggle
 const feishuStreaming =
   (process.env.TIANYI_BOT_FEISHU_STREAMING ?? "false").toLowerCase() === "true";

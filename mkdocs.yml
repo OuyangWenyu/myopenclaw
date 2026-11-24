@@ -81,6 +81,7 @@ nav:
       - Hermes 看板 (kanban): kanban.md
       - Hermes 语音（TTS/STT）: voice.md
       - 容器 / profile / .env 三层: hermes-topology.md
+      - 模型源切换（modelctl）: model-sources.md
       - 扫码新增 Hermes: hermes-bind.md
       - 飞书 CLI (lark-cli): lark-cli.md
       - 钉钉 CLI (dws): dingtalk-cli.md

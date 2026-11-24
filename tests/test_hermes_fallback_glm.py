@@ -1,8 +1,11 @@
 """Hermes 兜底模型与 zai 端点守卫。
 
-2026-10-15 定案（Owen）：三个有兜底的 profile 统一 ``zai / glm-5.3-flash``（GLM 性价比），
-弃用爱玛士的 kimi-k2.6（Moonshot kimi-k2.5 静默下线同款风险面，见
-memory: shrimp-kimi-fallback-fix-2026-10-15）。
+2026-11-24 起 live 兜底由 ``config/models.toml`` 决定（当前 = DeepSeek 官方
+``deepseek-flash``，跨**源**兜底）。本文件仍是 GLM 时代的守卫，但 live 断言不再
+硬编码 zai —— 它对比注册表，避免"注册表改了、守卫还在钉旧值"。
+
+历史（2026-10-15 定案）：三个有兜底的 profile 统一 ``zai / glm-5.3-flash``（GLM 性价比），
+弃用爱玛士的 kimi-k2.6（Moonshot kimi-k2.5 静默下线同款风险面）。
 
 三条断言各对应一个实测踩过的坑：
 
@@ -48,10 +51,31 @@ LIVE_AUTH_STORES = {
     "finance": HOME / ".hermes" / "profiles" / "finance" / "auth.json",
 }
 
+# start.sh 首建模板仍是 zai/glm（新机器跑一次 modelctl apply 才对齐注册表）；
+# live 断言不硬编码这两个值，见 TestLiveConfigs。
 EXPECTED_MODEL = "glm-5.3-flash"
 EXPECTED_PROVIDER = "zai"
 EXPECTED_EFFORT = "low"
 CN_BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+
+
+def _registry_fallback(profile: str) -> dict:
+    """注册表里该 profile 绑定的兜底模型（唯一事实来源）。"""
+    import importlib.util
+    import sys
+
+    spec = importlib.util.spec_from_file_location("modelctl", REPO_ROOT / "scripts" / "modelctl.py")
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["modelctl"] = mod
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    reg = mod.Registry.load()
+    resolved = reg.resolve(reg.bindings[f"hermes.{profile}"])
+    assert resolved.fallback is not None and resolved.fallback_provider is not None
+    return {
+        "provider": resolved.fallback_provider.hermes_provider,
+        "model": resolved.fallback.id,
+    }
 
 
 def _heredoc_yaml(var: str) -> dict:
@@ -104,7 +128,13 @@ class TestLiveConfigs:
         if not path.exists():
             pytest.skip(f"{path} 不存在（未部署 Hermes）")
         cfg = yaml.safe_load(path.read_text())
-        _assert_fallback_block(cfg, str(path))
+        expected = _registry_fallback(profile)
+        assert cfg.get("fallback_model") == expected, (
+            f"{path}: fallback_model 应与注册表一致（{expected}），实为 {cfg.get('fallback_model')}"
+        )
+        assert expected["provider"] in (cfg.get("fallback_providers") or []), (
+            f"{path}: fallback_providers 不含 {expected['provider']}"
+        )
         _assert_reasoning_override(cfg, str(path))
 
 

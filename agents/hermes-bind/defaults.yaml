@@ -34,6 +34,7 @@ container:
   command: gateway run --profile owner
   env_keys:
     - DEEPSEEK_API_KEY
+    - DASHSCOPE_API_KEY
     - GLM_API_KEY
     - FEISHU_APP_ID
     - FEISHU_APP_SECRET

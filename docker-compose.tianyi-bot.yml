@@ -22,6 +22,10 @@ services:
       TIANYI_BOT_FEISHU_STREAMING: ${TIANYI_BOT_FEISHU_STREAMING:-false}
       TIANYI_BOT_MODEL_ID: ${TIANYI_BOT_MODEL_ID:-deepseek-flash}
       TIANYI_BOT_MODEL_BASE_URL: ${TIANYI_BOT_MODEL_BASE_URL:-https://api.deepseek.com}
+      # 能力元数据由 config/models.toml 经 modelctl 写进 .env.tianyi-bot；
+      # 缺省值保持与参数化前一致，避免旧部署因缺变量起不来。
+      TIANYI_BOT_MODEL_CONTEXT_WINDOW: ${TIANYI_BOT_MODEL_CONTEXT_WINDOW:-128000}
+      TIANYI_BOT_MODEL_MAX_TOKENS: ${TIANYI_BOT_MODEL_MAX_TOKENS:-8192}
       # GLM 兜底模型（可选）：主模型不可用时自动切换（fallbacks = zhipu/glm-5.3-flash）
       TIANYI_BOT_GLM_API_KEY: ${TIANYI_BOT_GLM_API_KEY:-}
       TIANYI_BOT_GITHUB_TOKEN: ${TIANYI_BOT_GITHUB_TOKEN:-}

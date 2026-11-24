@@ -1,0 +1,149 @@
+# =============================================================
+# 模型源注册表 —— 全仓模型配置的**唯一事实来源**
+#
+# 谁读它：scripts/modelctl.py（status / apply / check / probe）。
+# 谁写它：人。日常换源只改 [bindings] 与 [providers]，然后
+#         python3 scripts/modelctl.py apply
+#
+# 硬规则：
+#   1. 这里**不放密钥**，只放密钥的 env 变量名（key_env）。密钥住在
+#      仓库根 .env（gitignored），modelctl 只读不打印。
+#   2. 一个 agent 的模型 = binding → role → model → provider。换源改
+#      binding 或 role 一行即可，具体写哪些文件由 modelctl 的适配器决定。
+#   3. 模型 id / 上下文 / 最大输出必须写真实值：这些数字会被渲染进
+#      OpenClaw 的 provider 元数据，抄错的表现是**静默截断**而不是报错。
+#
+# 为什么是 TOML 而不是 YAML：宿主 python3 没有 PyYAML（本仓 ensure_*.py
+# 全部刻意避开它），而 tomllib 是 3.11+ 标准库 —— 这个脚本因此零依赖、
+# 能在宿主直接跑。语义与 YAML 等价，注释也保留。
+# =============================================================
+version = 1
+
+# ── 供应商 ───────────────────────────────────────────────────
+# key_env   : 密钥在 .env 里的变量名（Hermes/OpenClaw 都按这个约定取）
+# hermes_provider : Hermes 镜像内建的 provider 名（plugins/model-providers/）
+# openclaw_provider: 本仓 openclaw.json 里用的 provider 段名
+[providers.aliyun]
+label = "阿里云百炼（业务空间 · 华北2 北京）"
+key_env = "DASHSCOPE_API_KEY"
+hermes_provider = "alibaba-cn"
+openclaw_provider = "alibaba"
+
+[providers.aliyun.protocols]
+# ⚠️ 业务空间专属域名（llm-xxxx.cn-beijing.maas.aliyuncs.com）**不写在这里**：
+# 它是这次采购的部署专属值，跟密钥一样住在仓库根 .env 的 ALIYUN_MAAS_BASE_URL，
+# 换业务空间 / 换地域只改 .env。注册表只描述路径形状，${VAR} 由 modelctl 展开；
+# 变量缺失时 apply 直接拒绝，不会把半截 URL 渲进下游配置。
+# OpenAI 兼容：Hermes / OpenClaw / 两个 bot 都用这条
+openai = "${ALIYUN_MAAS_BASE_URL}/compatible-mode/v1"
+# Anthropic 兼容（Claude Code）：文档明确 x-api-key 与 Bearer 二者其一均可
+anthropic = "${ALIYUN_MAAS_BASE_URL}/apps/anthropic"
+
+[providers.deepseek]
+label = "DeepSeek 官方（备用源）"
+key_env = "DEEPSEEK_API_KEY"
+hermes_provider = "deepseek"
+openclaw_provider = "deepseek"
+
+[providers.deepseek.protocols]
+openai = "https://api.deepseek.com/v1"
+anthropic = "https://api.deepseek.com/anthropic"
+
+# ── 模型 ─────────────────────────────────────────────────────
+# provider / id 分开写：同一个模型在不同家叫法不同时，改 id 不动 provider。
+# ⚠️ 用**带日期**的 id，不用未带日期的 ``deepseek-v4.1-flash``：
+# 百炼的版本约定里，系列名（无日期）理论上滚动指向最新版，但对这个模型**没有文档
+# 保证** —— 发布说明里 ``deepseek-v4.1-flash`` 是 2026-09-11 首次上架的那一条
+# （9 月 10 日 checkpoint），``-1017`` 是 10-17 的迭代版（更短输出、Terminal-Bench
+# +11.1）。要最新的就写明日期；代价是快照会被下线，届时改这一行 + apply。
+[models."deepseek-v4.1-flash-1017"]
+label = "DeepSeek V4.1 Flash 1017"
+provider = "aliyun"
+id = "deepseek-v4.1-flash-1017"
+context = 1000000
+max_output = 393216
+# Claude Code 不认识非 Anthropic 的模型 id，默认按 200K 算（实测 warning：
+# "doesn't recognize the model ... assumes a context window of 200k tokens"）。
+# 这个值会渲染成 CLAUDE_CODE_MAX_CONTEXT_TOKENS。取百炼文档示例的 983616
+# （1M 输入窗口的保守值）。不带 [1M] 后缀，避免再叠一层 Anthropic beta 头。
+claude_max_context = 983616
+input = ["text", "image"]
+reasoning = true
+# 百炼的 reasoning_effort 只认 low/high/max，默认 high
+effort = ["low", "high", "max"]
+
+[models."deepseek-flash"]
+label = "DeepSeek V4.1 Flash（官方直连）"
+provider = "deepseek"
+id = "deepseek-flash"
+context = 1000000
+max_output = 384000
+input = ["text", "image"]
+reasoning = true
+# 回滚时保持与切换前完全一致：DeepSeek 的 Anthropic 端点靠这个后缀开 1M 上下文。
+# 百炼的端点是原生 1M，不能再带这个 beta 后缀（未验证其是否接受）。
+claude_suffix = "[1M]"
+
+# ── 角色（"切换"真正发生的地方）──────────────────────────────
+# fallback 写模型名，不写 provider：跨厂商兜底是刻意的 —— 主源挂了
+# 还有一条独立的路。
+[roles.primary]
+model = "deepseek-v4.1-flash-1017"
+fallback = "deepseek-flash"
+
+[roles.coding]
+model = "deepseek-v4.1-flash-1017"
+fallback = "deepseek-flash"
+
+[roles.aux]
+model = "deepseek-v4.1-flash-1017"
+fallback = "deepseek-flash"
+
+# 官方直连车道：不经百炼。给「必须留在官方源」的消费方用。
+# 它同时是备用通道的活体探针 —— 主源整体不可用时这条道仍然工作。
+[roles.official]
+model = "deepseek-flash"
+
+# ── 消费方绑定 ───────────────────────────────────────────────
+# 键名 = 适配器认识的名字。四个 hermes profile 分开写，是为了以后能
+# 给爱码士单独挂编码模型而不动其余三个。
+#
+# 一律用 role：车道（"走哪条"）定义在 [roles]，消费方只声明"我走哪条"。
+# 临时给单个消费方钉死某个模型时才用 `model = "..."` 覆盖（逃生口，别当常规写法）。
+[bindings."hermes.default"]
+role = "primary"
+
+[bindings."hermes.coder"]
+role = "coding"
+
+[bindings."hermes.finance"]
+role = "primary"
+
+[bindings."hermes.daoyuan"]
+role = "primary"
+
+[bindings."claude-code"]
+role = "coding"
+
+[bindings."openclaw.main"]
+role = "primary"
+
+[bindings."bot.zhixun"]
+role = "primary"
+
+[bindings."bot.tianyi"]
+role = "primary"
+
+# 后台记忆抽取：走 roles.official（官方直连），不跟随主源。
+# 想让它跟主源一起切，把 role 改成 "primary" 即可。
+[bindings."tdai-memory"]
+role = "official"
+
+# ── 不参与切换的消费方（显式钉住，免得被"统一"误伤）──────────
+[pinned.voice]
+model = "deepseek-flash"
+reason = "TTS/STT 走 DeepSeek 专用接口（docker/hermes/voice/ds_voice.py），不是 OpenAI/Anthropic 兼容协议；换源不影响它，也不能把它切到百炼。"
+
+[pinned."hermes-bind"]
+model = "deepseek-flash"
+reason = "扫码新增的助手容器在创建时固化了自己的 compose（env_keys 不含 DASHSCOPE_API_KEY），改配置会让它们拿不到钥匙。要收编需先用 bind 工具重建容器，见 docs/model-sources.md。"

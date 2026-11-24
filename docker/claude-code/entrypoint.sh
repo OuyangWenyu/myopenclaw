@@ -72,9 +72,21 @@ for skill_dir in /opt/dailyinfo-skills/*/; do
     ln -sf "$skill_dir" "$target"
 done
 
-# ── API key mapping: DeepSeek → Anthropic ─────────────────────
-# Claude Code reads ANTHROPIC_API_KEY; map DEEPSEEK_API_KEY → ANTHROPIC_API_KEY
-export ANTHROPIC_API_KEY="${DEEPSEEK_API_KEY:-${ANTHROPIC_API_KEY:-}}"
+# ── API key mapping: 模型源 → Anthropic 协议 ─────────────────
+# Claude Code 只认 ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN，而不同模型源各有
+# 自己的密钥变量名（DEEPSEEK_API_KEY / DASHSCOPE_API_KEY / …）。由
+# scripts/modelctl.py 把「当前源用哪把钥匙」写进仓库根 .env 的
+# CLAUDE_MODEL_KEY_ENV，这里按名字间接取，不写死 DEEPSEEK_*。
+#
+# 写死 DEEPSEEK_* 的后果不是报错而是 401 + 误判：换到百炼后端点变了、钥匙还是
+# 旧的，而 settings.json 里残留的 ANTHROPIC_AUTH_TOKEN 优先级更高，等于拿
+# A 家的钥匙打 B 家的端点。显式传入的 ANTHROPIC_API_KEY 仍然优先（手工兜底）。
+_MODEL_KEY_ENV="${CLAUDE_MODEL_KEY_ENV:-DEEPSEEK_API_KEY}"
+_MODEL_KEY=""
+if [ -n "${_MODEL_KEY_ENV}" ]; then
+  _MODEL_KEY="${!_MODEL_KEY_ENV:-}"
+fi
+export ANTHROPIC_API_KEY="${ANTHROPIC_API_KEY:-${_MODEL_KEY:-${DEEPSEEK_API_KEY:-}}}"
 export ANTHROPIC_BASE_URL="${ANTHROPIC_BASE_URL:-https://api.deepseek.com/anthropic}"
 
 # ── Git credential helpers for private repos ─────────────────
@@ -235,7 +247,11 @@ function shouldSetModel(current) {
     if (!current) return true;                                  // 未设置
     const s = String(current);
     if (s.includes("glm")) return true;                         // 早期默认值
-    return /^deepseek-v\d/.test(s.replace(/\[1M\]$/i, ""));      // 非 canonical 的 V 系列
+    // 非 canonical 的 **DeepSeek V 系列**（deepseek-v4-… 这类带版本段的旧 id）。
+    // 必须带连字符边界：deepseek-v4.1-flash-1017 是百炼侧的 canonical id，
+    // 旧写法 /^deepseek-v\d/ 会把它误判成待迁移值，每次启动都改写成
+    // deepseek-flash[1M] —— 配上百炼的端点就是 404，且看起来"配置没生效"。
+    return /^deepseek-v\d+(-|$)/.test(s.replace(/\[1M\]$/i, ""));
 }
 const TIER_MODELS = {
     ANTHROPIC_MODEL: "deepseek-flash[1M]",
