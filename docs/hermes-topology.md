@@ -78,13 +78,14 @@ docker compose exec hermes sh -lc 'v=某变量名; \
 |---|---|---|---|---|
 | 真邮箱配置 / ortie token | ✅ | ❌ 空卷遮蔽 | ❌ | ❌ |
 | OneDrive（`/opt/onedrive`） | ✅ | ❌ | ❌ | ❌ |
-| `GITCODE_TOKEN` | ✅ | ✅ | ❌ | ❌ |
-| gitcode 配置目录 | ❌ | ✅ | ❌ | ❌ |
+| `GITCODE_TOKEN` | ✅ | ✅ | ❌ | ✅ |
+| gitcode 配置目录 | ❌ | ✅ | ❌ | ✅ |
 | `SERVER_MONITORING_MCP_URL` | ✅ | ✅ | ❌ | ❌ |
 | `ZOTERO_API_KEY`（写） | ✅ | ✅ | ✅ | ❌ |
 | `PAPER_QUEUE_DAOYUAN_TOKEN` | ❌ | ❌ | ❌ | ✅ |
 | `DAILYINFO_MCP_KEY` | ❌ | ❌ | ❌ | ✅ |
 | `GH_TOKEN` | ✅ | ✅ | ✅ | ✅ |
+| `GH_CONFIG_DIR`（terminal 里 gh 可用） | ❌ | ❌ | ❌ | ✅ |
 | zotero-mcp / paper-queue-mcp（网络服务） | ✅ | ✅ | ✅ | ✅ |
 
 **没有任何一个容器是超集。** 这就是"派发落在哪个容器"会决定任务能不能跑通的原因。

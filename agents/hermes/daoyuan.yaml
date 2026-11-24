@@ -1,10 +1,18 @@
-# Daoyuan profile, literature only. Feishu is an allowlist: an empty
+# Daoyuan profile, literature + repo intake. Feishu is an allowlist: an empty
 # FEISHU_ALLOWED_USERS is pairing mode, not deny-all. Group chats reply only
 # when a listed user mentions the bot; open and disabled are the other
 # policies. This agent reads the paper queue and dailyinfo and has no Zotero
 # write key. It shares the TDAI gateway with the other profiles as of
 # 2026-11-11, after Feishu access was narrowed to the owner.
 # Kanban dispatch is off; hermes-coder is the only dispatcher.
+#
+# Since 2026-11-24 it can file issues into our own repos via gh/gc
+# (skill repo-issue-intake). GH_CONFIG_DIR is the authorization: Hermes strips
+# GH_TOKEN/GITHUB_TOKEN from terminal children (Tier-1 secrets), so gh can only
+# read hosts.yml. Pointing gh at the mounted /opt/gh-config grants this
+# container alone; the terminal HOME is the shared /opt/data, so a
+# $HOME/.config/gh link would also authorize finance/default.
+# GITCODE_TOKEN is not on that blocklist, so gc reads it from the env directly.
 
 service: hermes-daoyuan
 profile: daoyuan
@@ -12,6 +20,7 @@ feishu_env_prefix: DAOYUAN_FEISHU
 port: "${HERMES_DAOYUAN_PORT:-8645}:8642"
 bundles:
   - kanban-off
+  - gitcode
   - shared-rclone
   - dws-off
 mcp:
@@ -20,11 +29,14 @@ mcp:
 env:
   FEISHU_GROUP_POLICY: "${DAOYUAN_FEISHU_GROUP_POLICY:-allowlist}"
   FEISHU_ALLOWED_USERS: "${DAOYUAN_FEISHU_ALLOWED_USERS:-}"
+  GH_CONFIG_DIR: /opt/gh-config
 mounts:
   - data
   - gh
   - opencode
   - lark
+  - gitcode
   - zotero-data
   - paper-queue
+  - repo-issue-intake
   - email-mask

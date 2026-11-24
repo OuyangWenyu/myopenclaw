@@ -1,0 +1,240 @@
+{
+  "generated_from": "git-contribution-stats/configs/repos.toml",
+  "count": 39,
+  "repositories": [
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "flood_data_augmentation_frontend",
+      "repo": "dlut-water/flood_data_augmentation_frontend"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "flooddataaugmentation",
+      "repo": "dlut-water/flooddataaugmentation"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "git-contribution-stats",
+      "repo": "dlut-water/git-contribution-stats"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "hydroutils",
+      "repo": "dlut-water/hydroutils"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "hydroweacast",
+      "repo": "dlut-water/hydroweacast"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "mghydro",
+      "repo": "dlut-water/mghydro"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "minio-backup",
+      "repo": "dlut-water/minio-backup"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "model_deployment",
+      "repo": "dlut-water/model_deployment"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "myopenclaw",
+      "repo": "dlut-water/myopenclaw"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "pdf_to_markdown",
+      "repo": "dlut-water/pdf_to_markdown"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "rainfall-oa-data",
+      "repo": "dlut-water/rainfall-oa-data"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "RealTimeForecast",
+      "repo": "dlut-water/RealTimeForecast"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "server-monitoring",
+      "repo": "dlut-water/server-monitoring"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "server-ops",
+      "repo": "dlut-water/server-ops"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "ServersCI",
+      "repo": "dlut-water/ServersCI"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "songliao-datax",
+      "repo": "dlut-water/songliao-datax"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "songliaodb_analysis",
+      "repo": "dlut-water/songliaodb_analysis"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "stac",
+      "repo": "dlut-water/stac"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "torchhydro",
+      "repo": "dlut-water/torchhydro"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "web_spider_ocr",
+      "repo": "dlut-water/web_spider_ocr"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "yuque_mcp_server",
+      "repo": "dlut-water/yuque_mcp_server"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "zhixun-agent",
+      "repo": "dlut-water/zhixun-agent"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "zhixun-core",
+      "repo": "dlut-water/zhixun-core"
+    },
+    {
+      "platform": "gitcode",
+      "owner": "dlut-water",
+      "name": "zhixun-vue",
+      "repo": "dlut-water/zhixun-vue"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "aisecretary",
+      "repo": "iHeadWater/aisecretary"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "dailyinfo",
+      "repo": "iHeadWater/dailyinfo"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "dailyinfo-web",
+      "repo": "iHeadWater/dailyinfo-web"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "digital_twin_basin",
+      "repo": "iHeadWater/digital_twin_basin"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "HydroAgent",
+      "repo": "iHeadWater/HydroAgent"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "HydroDataCompiler",
+      "repo": "iHeadWater/HydroDataCompiler"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "hydrodatasource",
+      "repo": "iHeadWater/hydrodatasource"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "hydrotopo",
+      "repo": "iHeadWater/hydrotopo"
+    },
+    {
+      "platform": "github",
+      "owner": "iHeadWater",
+      "name": "mylibrary",
+      "repo": "iHeadWater/mylibrary"
+    },
+    {
+      "platform": "github",
+      "owner": "OuyangWenyu",
+      "name": "aqualord",
+      "repo": "OuyangWenyu/aqualord"
+    },
+    {
+      "platform": "github",
+      "owner": "OuyangWenyu",
+      "name": "hydrodataset",
+      "repo": "OuyangWenyu/hydrodataset"
+    },
+    {
+      "platform": "github",
+      "owner": "OuyangWenyu",
+      "name": "hydromodel",
+      "repo": "OuyangWenyu/hydromodel"
+    },
+    {
+      "platform": "github",
+      "owner": "OuyangWenyu",
+      "name": "hydroutils",
+      "repo": "OuyangWenyu/hydroutils"
+    },
+    {
+      "platform": "github",
+      "owner": "OuyangWenyu",
+      "name": "myopenclaw",
+      "repo": "OuyangWenyu/myopenclaw"
+    },
+    {
+      "platform": "github",
+      "owner": "OuyangWenyu",
+      "name": "torchhydro",
+      "repo": "OuyangWenyu/torchhydro"
+    }
+  ]
+}

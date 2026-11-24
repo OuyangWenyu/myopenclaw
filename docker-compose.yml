@@ -240,8 +240,10 @@ services:
       - ${HOME}/.config/gh:/opt/gh-config
       - ${HOME}/.config/opencode:/opt/opencode-config
       - ${HOME}/.lark-cli:/opt/lark-config
+      - ${HOME}/.gitcode:/opt/gitcode-config
       - ${HOME}/Zotero:/opt/zotero-data:ro
       - ./skills/paper-queue:/opt/hermes-skills/paper-queue:ro
+      - ./skills/repo-issue-intake:/opt/hermes-skills/repo-issue-intake:ro
       - email-config-none:/opt/data/.config/himalaya
       - email-tokens-none:/opt/data/.config/ortie
     environment:
@@ -269,6 +271,7 @@ services:
       - FEISHU_LATEX_IMAGE=${FEISHU_LATEX_IMAGE:-1}
       - FEISHU_LATEX_INLINE_IMAGE=${FEISHU_LATEX_INLINE_IMAGE:-0}
       - HERMES_KANBAN_DISPATCH_IN_GATEWAY=0
+      - GITCODE_TOKEN=${GITCODE_TOKEN:-}
       - RCLONE_CONFIG=/opt/data/rclone/rclone.conf
       - DWS_CONFIG_DIR=/tmp/dws/config
       - DWS_KEYCHAIN_DIR=/tmp/dws/keychain
@@ -281,6 +284,7 @@ services:
       - FEISHU_APP_SECRET=${DAOYUAN_FEISHU_APP_SECRET:-}
       - FEISHU_GROUP_POLICY=${DAOYUAN_FEISHU_GROUP_POLICY:-allowlist}
       - FEISHU_ALLOWED_USERS=${DAOYUAN_FEISHU_ALLOWED_USERS:-}
+      - GH_CONFIG_DIR=/opt/gh-config
     shm_size: "1g"
     deploy:
       resources:

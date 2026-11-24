@@ -89,7 +89,9 @@ nav:
       - 语雀知识库（本机）: yuque-mcp-hermes.md
       - Zotero 文献 (mylibrary): zotero-cli-cc.md
       - 论文清单 (paper-queue): paper-queue.md
+      - 仓库 issue 入口（道元）: repo-issue-intake.md
       - 事务追踪 (aisecretary): aisecretary.md
+      - PPT 单页截图调研: pptx-slide-preview-research.md
       - 依赖服务容器化: dependency-services.md
       - dailyinfo 调度: dailyinfo.md
       - 研发日报: daily-dev-report.md

@@ -474,6 +474,12 @@ if [[ "${_pq_skill_before}" != "${_pq_skill_after}" ]]; then
   PQ_SKILL_CHANGED=true
 fi
 
+# 仓库 issue 入口 skill：唯一源码在 skills/repo-issue-intake，道元通过 symlink 复用。
+# gh/gc 的凭据由 compose env 提供（GH_CONFIG_DIR + GITCODE_TOKEN），skill 只负责
+# 判断与流程；写入门槛由 scripts/file_issue.py 的白名单/查重/凭据扫描兜底。
+ensure_skill_symlink "${HOME}/.hermes/profiles/daoyuan/skills/repo-issue-intake" \
+  "/opt/hermes-skills/repo-issue-intake" "repo-issue-intake"
+
 # ── 确保 mylibrary skills 在 external_dirs 中 ────────────────────
 # aisecretary 模式：宿主机源码 → 只读挂载 → external_dirs 发现。
 if [[ -f "${HERMES_DEFAULT_CONFIG}" ]]; then

@@ -23,6 +23,19 @@
 - 若真实目录已存在，`start.sh` 跳过并警告（不覆盖 agent 自维护副本）；
   排查：`ls -ld ~/.hermes/profiles/daoyuan/skills/paper-queue*`
 
+## 道元 profile 的 repo-issue-intake skill（2026-11-24）
+
+- **唯一源码**：`skills/repo-issue-intake/`（SKILL.md + `references/repos.md` +
+  `references/issue-template.md` + `scripts/{file_issue,refresh_allowlist}.py` + `scripts/repos.json`）
+- `hermes-daoyuan` 挂载 `./skills/repo-issue-intake:/opt/hermes-skills/repo-issue-intake:ro`
+- `start.sh` 建 symlink：
+  `~/.hermes/profiles/daoyuan/skills/repo-issue-intake` → `/opt/hermes-skills/repo-issue-intake`
+- 与 paper-queue 的差别：skill 只给流程与仓库定位；**写入门槛在脚本里**
+  （39 仓白名单、`## 来源`、凭据扫描、查重、回读），不依赖模型自觉
+- 排查：`ls -ld ~/.hermes/profiles/daoyuan/skills/repo-issue-intake*`，
+  `hermes -p daoyuan skills list | grep repo-issue-intake`
+- 详见 [repo-issue-intake.md](repo-issue-intake.md)
+
 ## 2026-10-13 同步：晨间简报「日期误判成周末」修复
 
 当日 07:30（北京）那期晨间简报被代理**凭直觉**断言「今天是周末」吞掉（零工具调用，7 秒收工；旧 cron 表达式 `0-5` 还让它在周六也跑，session 里躺着上一期合法的周末话术）。修复已落地 live，并**同步回仓库**作为版本源：

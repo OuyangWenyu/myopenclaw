@@ -106,6 +106,9 @@ mounts:
   server-monitoring-digest: ./skills/server-monitoring-digest:/opt/hermes-skills/server-monitoring-digest:ro
   # Shared with the future OpenClaw path. start.sh links this into the profile.
   paper-queue: ./skills/paper-queue:/opt/hermes-skills/paper-queue:ro
+  # Issue intake (gh/gc) — only daoyuan lists this. Kept out of team-skills so
+  # the other profiles cannot file issues by accident.
+  repo-issue-intake: ./skills/repo-issue-intake:/opt/hermes-skills/repo-issue-intake:ro
   myagentdata: "${HOME}/.myagentdata:/opt/myagentdata:ro"
   docker-sock: /var/run/docker.sock:/var/run/docker.sock:ro
   # Hides the shared mail config and tokens. Mail is authorized only for the

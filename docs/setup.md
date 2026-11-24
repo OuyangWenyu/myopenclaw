@@ -88,6 +88,7 @@ git clone https://gitcode.com/dlut-water/zhixun-agent.git ../zhixun-agent
 | 创建 OpenClaw 配置 | `~/.openclaw/openclaw.json` |
 | 安装 paper-fetch skill | `~/.openclaw/skills/paper-fetch`、`~/.hermes/skills/paper-fetch` |
 | 接入 paper-queue（道元） | `~/.hermes/profiles/daoyuan/config.yaml`（MCP 条目）、`~/.hermes/profiles/daoyuan/skills/paper-queue`（symlink）；并清理旧虾酱残留 |
+| 接入 repo-issue-intake（道元） | `~/.hermes/profiles/daoyuan/skills/repo-issue-intake`（symlink）；gh/gc 凭据由 compose env 注入（`GH_CONFIG_DIR`、`GITCODE_TOKEN`） |
 | 注册 Uptime Kuma 监控项 | `~/.uptime-kuma/kuma.db`（容器已 Up 时才执行） |
 | 物化黑名单 API Key | 容器内 `/opt/data/secrets/` |
 | 生成 himalaya 邮件配置 | `~/.hermes/.config/himalaya/config.toml` |
