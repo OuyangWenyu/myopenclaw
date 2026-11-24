@@ -37,8 +37,8 @@ binding（哪个消费方用哪个 role；也可以直接钉某个 model）
 
 | 文件 | 作用 |
 |---|---|
-| [`config/models.toml`](../config/models.toml) | 唯一事实来源。**不含密钥**，只写 `key_env`（变量名） |
-| [`scripts/modelctl.py`](../scripts/modelctl.py) | 唯一写者：`status` / `apply` / `check` / `probe` |
+| `config/models.toml`（仓库根） | 唯一事实来源。**不含密钥**，只写 `key_env`（变量名） |
+| `scripts/modelctl.py`（仓库根） | 唯一写者：`status` / `apply` / `check` / `probe` |
 | `.env` | **部署专属值**：模型密钥 + 业务空间端点（`ALIYUN_MAAS_BASE_URL`）；另有一段 `# BEGIN MODELCTL` 托管块（Claude Code 的端点与钥匙变量名） |
 | `tests/test_model_registry.py` | 渲染形状与跨文件约定的守卫 |
 
