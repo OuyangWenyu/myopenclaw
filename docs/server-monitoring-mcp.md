@@ -152,7 +152,7 @@ TLS 判定为**双模式**：系统信任库能验通 = 公网证书（域名入
 ## 验证清单（改动后按序跑）
 
 ```bash
-uv run --with pytest --with pyyaml pytest tests/ -q          # 含 test_server_monitoring_mcp.py
+uv run --group dev pytest tests/ -q                          # 含 test_server_monitoring_mcp.py
 for t in tests/test-*.sh; do bash "$t"; done                 # 含 rendered-config（需要本机 node + docker + 目标镜像）
 # 开关两态（⚠️ 别贴完整 config 输出 —— 会渲染 token）：
 docker compose --env-file .env.tianyi-bot -f docker-compose.tianyi-bot.yml config --quiet
