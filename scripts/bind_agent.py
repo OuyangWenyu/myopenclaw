@@ -26,6 +26,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 DEFAULTS_PATH = REPO_ROOT / "agents" / "hermes-bind" / "defaults.yaml"
 
 PROFILE_CONFIG = """\
+# v0.23 起「一个 profile 一个网关」变成 opt-in：不加 gateway.standalone，
+# `gateway run --profile owner` 会以 exit 78 拒绝启动（见 #96）。
+# 扫码助手是独立数据目录、独立飞书应用，必须 standalone。
+gateway:
+  standalone: true
+# v0.23 的当前配置版本。缺这一行时 Hermes 会把配置判成"两年前的旧格式"并拒绝迁移，
+# 同样以 exit 78 退出。升级 base 镜像时这里要跟着调（`hermes config get _config_version`）。
+_config_version: 52
 model:
   default: deepseek-flash
   provider: deepseek
@@ -38,9 +46,16 @@ fallback_model:
 agent:
   reasoning_overrides:
     glm-5.3-flash: low
+platforms:
+  api_server:
+    # 容器里 root 网关已经占了 8642；owner 再绑会 conflict（api_server 对聊天无用）。
+    enabled: false
 memory:
   memory_enabled: true
-  provider: local
+  # v0.23 只有 `builtin` 这个内置实现；写 `local` 会报
+  # "Memory provider 'local' is configured but not installed and not in the plugin catalog"。
+  # builtin = 记忆只落在本 profile 的数据目录，不进 TDAI 共享记忆。
+  provider: builtin
 """
 
 
@@ -268,8 +283,22 @@ def _write_env(
             raise BindError(f"{key} contains a newline")
         lines.append(f"{key}={value}")
     env_path = home / ".env"
-    env_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    # 飞书平台凭据写进 **profile 目录**，不是容器级 .env。
+    # 容器级 env 对所有 profile 可见，root/default 网关会拿它去连同一个飞书应用，
+    # 把 owner 的独立网关挤掉（feishu_app_lock，见 #96）。放到 profiles/owner/.env
+    # 之后，Hermes 只给 owner 这个 profile 加载，root 网关看不到凭据也就不会去连。
+    platform_prefixes = ("FEISHU_",)
+    platform_lines = [line for line in lines if line.split("=", 1)[0].startswith(platform_prefixes)]
+    shared_lines = [line for line in lines if line not in platform_lines]
+
+    env_path.write_text("\n".join(shared_lines) + "\n", encoding="utf-8")
     env_path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+
+    if platform_lines:
+        profile_env = home / "profiles" / "owner" / ".env"
+        profile_env.parent.mkdir(parents=True, exist_ok=True)
+        profile_env.write_text("\n".join(platform_lines) + "\n", encoding="utf-8")
+        profile_env.chmod(stat.S_IRUSR | stat.S_IWUSR)
 
 
 def _find_client(root: Path, client_id: str) -> tuple[Path, dict] | None:
