@@ -108,10 +108,12 @@ declare -a MONITORS=(
     # Bearer middleware is not installed (fail-open), which must turn red.
     "Repo Scanner MCP|http|http://repo-scanner-mcp:8001/mcp||[\"401\"]"
     "FreshRSS|http|http://host.docker.internal:8081||[\"200-399\"]"
-    # 不带 token 探 /sse 得到 401 —— "活着 + key 已配置"的双重信号。只接受 401：
+    # 仅自建模式（--profile embedded-yuque）存在该容器；外部接入（默认，#102）下这
+    # 两个监控项应手动指向团队端点或停用。路径 /mcp（上游 383552a 起已移除 /sse）。
+    # 不带 token 探 /mcp 得到 401 —— "活着 + key 已配置"的双重信号。只接受 401：
     # key 意外为空时上游是无认证直通（200），接受 2xx 会让这个 fail-open 状态
     # 永远显示绿 —— 恰好瞎掉最该报警的故障模式
-    "Yuque MCP|http|http://yuque-mcp:18001/sse||[\"401\"]"
+    "Yuque MCP|http|http://yuque-mcp:18001/mcp||[\"401\"]"
 
     # ── Docker 容器监控 ────────────────────────────────────
     "Docker: hermes|docker||hermes|"

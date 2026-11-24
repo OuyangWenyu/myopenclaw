@@ -23,7 +23,7 @@ START_SH = (REPO_ROOT / "scripts" / "start.sh").read_text()
 # 上游 gitcode.com/dlut-water/yuque_mcp_server 没有 tag，只能固定 commit。
 # 升级流程：cd ~/code/yuque_mcp_server && git fetch && 审查 diff → 改这里 + 重建镜像。
 SIBLING_REPO = REPO_ROOT.parent / "yuque_mcp_server"
-PINNED_SHA = "543f6fe5698c429f7e375e577e7e074c2c4400a3"
+PINNED_SHA = "6cb21df1c6291685b7f5845119186058ca6ee70b"
 
 
 def compose_service_block(name: str) -> str:
@@ -46,6 +46,11 @@ class TestComposeYuqueService:
         assert "image: myopenclaw/yuque-mcp:latest" in block
         assert "container_name: yuque-mcp" in block
         assert "restart: unless-stopped" in block
+
+    def test_embedded_mode_is_opt_in(self):
+        """默认不启动：团队服务器已有实例，自建降级为 profile 开关（#102）。"""
+        block = compose_service_block("yuque-mcp")
+        assert 'profiles: ["embedded-yuque"]' in block
 
     def test_sse_cloud_mode_on_18001(self):
         block = compose_service_block("yuque-mcp")
@@ -111,6 +116,11 @@ class TestStartShWiring:
         assert "^MCP_YUQUE_MCP_API_KEY=" in START_SH
         assert "MCP_YUQUE_MCP_API_KEY 未设置" in START_SH
 
+    def test_embedded_checks_are_gated(self):
+        """默认外部接入时不应再要求 YUQUE_TOKEN / MCP key（#102）。"""
+        assert "YUQUE_EMBEDDED" in START_SH
+        assert "embedded-yuque" in START_SH
+
 
 class TestUptimeKumaMonitors:
     """监控注册脚本的 MONITORS 数组是手工清单（不从 compose 动态读）—— 漏了就瞎着。"""
@@ -120,13 +130,13 @@ class TestUptimeKumaMonitors:
         return (REPO_ROOT / "scripts" / "setup-uptime-kuma.sh").read_text()
 
     def test_http_monitor_accepts_only_401(self):
-        """不带 token 探 /sse 得到 401 —— 这是"活着 + key 已配置"的双重信号。
+        """不带 token 探 /mcp 得到 401 —— 这是"活着 + key 已配置"的双重信号。
 
         只接受 401：key 意外为空时上游是**无认证直通**（200 长流），接受 2xx 会让
         这个 fail-open 状态永远显示绿 —— 恰好瞎掉最该报警的故障模式。
         """
         script = self._script()
-        assert '"Yuque MCP|http|http://yuque-mcp:18001/sse||[\\"401\\"]"' in script
+        assert '"Yuque MCP|http|http://yuque-mcp:18001/mcp||[\\"401\\"]"' in script
 
     def test_docker_container_monitor(self):
         assert '"Docker: yuque-mcp|docker||yuque-mcp|"' in self._script()
@@ -139,22 +149,23 @@ class TestEnvExampleShape:
     def _example() -> str:
         return (REPO_ROOT / ".env.example").read_text()
 
-    def test_points_at_local_service(self):
+    def test_points_at_team_service(self):
+        """默认外部接入：指向团队服务器的 Streamable HTTP 端点（#102）。"""
         example = self._example()
-        assert "YUQUE_MCP_URL=http://yuque-mcp:18001/sse" in example
+        assert "YUQUE_MCP_URL=https://jupyterhub.waterism.com:18001/mcp" in example
+        assert "18001/sse" not in example
         assert not re.search(r"\b10\.\d+\.\d+\.\d+\b", example), "模板不得残留校内 10.x 地址"
 
     def test_documents_token_and_repos(self):
         example = self._example()
-        assert "YUQUE_TOKEN=" in example, "服务端自持 token 是新拓扑的核心变化，模板必须交代"
-        # 三库 JSON 必须以**生效行**写进模板 —— 注释行照模板克隆后不生效，新部署会
-        # 静默回退到内置两库、丢掉「建设方案」（这正是要防的故障）。
-        assert "\nYUQUE_CHANGE_REPOS_JSON=[" in example
+        # token / 变更库配置只在自建模式（--profile embedded-yuque）下生效，模板保留说明
+        assert "YUQUE_TOKEN=" in example, "自建模式仍需 token，模板必须交代"
+        assert "# YUQUE_CHANGE_REPOS_JSON=[" in example, "三库 JSON 以注释形式给出（仅自建模式生效）"
         assert "kgo8gd/tnld77" in example and "kgo8gd/xnedwc" in example and "kgo8gd/owoc3p" in example
 
-    def test_tianyi_example_points_at_local_service(self):
+    def test_tianyi_example_points_at_team_service(self):
         example = (REPO_ROOT / ".env.tianyi-bot.example").read_text()
-        assert "TIANYI_BOT_YUQUE_MCP_URL=http://yuque-mcp:18001/sse" in example
+        assert "TIANYI_BOT_YUQUE_MCP_URL=https://jupyterhub.waterism.com:18001/mcp" in example
         # 公开模板不得残留任何真实内网地址。2026-10-13 前 server-monitoring 行曾用
         # 真实 IP 并把这句放宽到「只查 YUQUE 行」；改为 <MCP_HOST> 占位符后恢复全量
         # 断言（真实地址以 docs/server-monitoring-mcp.md 为准）。
@@ -178,12 +189,14 @@ class TestLiveEnvSwitched:
             pairs[key.strip()] = value.strip()
         return pairs
 
-    def test_main_env_switched_to_local_service(self):
+    def test_main_env_switched_to_streamable_http(self):
         env_path = REPO_ROOT / ".env"
         if not env_path.exists():
             pytest.skip(".env 不存在（未部署）")
         env = self._read_env(env_path)
-        assert env.get("YUQUE_MCP_URL") == "http://yuque-mcp:18001/sse", "Hermes 注册源必须已切本机"
+        url = env.get("YUQUE_MCP_URL", "")
+        assert url.endswith("/mcp"), "必须走 Streamable HTTP（上游 383552a 起移除 /sse）"
+        assert "/sse" not in url
 
     def test_tianyi_env_switched_and_key_matches(self):
         main_path = REPO_ROOT / ".env"
@@ -192,7 +205,7 @@ class TestLiveEnvSwitched:
             pytest.skip(".env / .env.tianyi-bot 不齐（未部署）")
         main_key = self._read_env(main_path).get("MCP_YUQUE_MCP_API_KEY", "")
         tianyi = self._read_env(tianyi_path)
-        assert tianyi.get("TIANYI_BOT_YUQUE_MCP_URL") == "http://yuque-mcp:18001/sse"
+        assert tianyi.get("TIANYI_BOT_YUQUE_MCP_URL", "").endswith("/mcp")
         # 比较结果先布尔化 —— 直接 assert 相等会在失败输出里渲染两侧 key 字面值
         keys_match = bool(main_key) and tianyi.get("TIANYI_BOT_MCP_YUQUE_MCP_API_KEY") == main_key
         assert keys_match, (
